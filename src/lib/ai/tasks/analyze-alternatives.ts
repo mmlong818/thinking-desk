@@ -1,0 +1,286 @@
+import { z } from 'zod';
+import { runAi } from '../router';
+import type { BriefExtraction, ClarificationAnswer } from './extract-brief';
+import type { Persona, Job } from './analyze-users';
+
+/**
+ * 方法论 v2 §7 替代方案与战略分析。
+ * 关键：三类替代（直接/间接/非消费）全覆盖 · 对重点替代做 §7.2 三问 ·
+ * 产出"差异化假设"（一句话说清凭什么赢）。
+ */
+
+export const AlternativeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: z.enum(['direct', 'indirect', 'non_consumption']),
+  /** 它是什么 / 用户怎么做 */
+  description: z.string(),
+  /** 用户为什么用它 —— 解决哪个 Job */
+  why_users_use: z.string(),
+  /** 威胁级别 · 对我们要打的目标用户/Job 多大挑战 */
+  threat_level: z.enum(['high', 'medium', 'low']),
+  /** 搜索来源链接（可能多个，数组；没搜到则空数组） */
+  sources: z.array(z.string()).default([]),
+});
+export type Alternative = z.infer<typeof AlternativeSchema>;
+
+export const StrategicProfileSchema = z.object({
+  alt_id: z.string(),
+  /** §7.2 Q1：他们承诺了什么 · 不超过 15 字 */
+  promise: z.string(),
+  /** §7.2 Q2：赢利模式 */
+  revenue_model: z.string(),
+  /** §7.2 Q3：护城河 */
+  moat: z.string(),
+  moat_strength: z.enum(['strong', 'medium', 'weak']),
+});
+export type StrategicProfile = z.infer<typeof StrategicProfileSchema>;
+
+export const FeatureBreakdownSchema = z.object({
+  alt_id: z.string(),
+  /** §7.3 四个角度 */
+  menu_structure: z.array(z.string()),
+  core_flows: z.array(z.string()),
+  key_interactions: z.array(z.string()),
+  headline_features: z.array(z.string()),
+});
+export type FeatureBreakdown = z.infer<typeof FeatureBreakdownSchema>;
+
+export const AlternativesAnalysisSchema = z.object({
+  alternatives: z.array(AlternativeSchema).min(6).max(15),
+  strategic_profiles: z.array(StrategicProfileSchema).min(2).max(6),
+  feature_breakdowns: z.array(FeatureBreakdownSchema).max(4),
+  differentiation_hypothesis: z.string(),
+  key_threats: z.array(z.string()).min(1).max(5),
+  critiques: z
+    .array(
+      z.object({
+        kind: z.enum(['check', 'critique', 'ask']),
+        title: z.string(),
+        body: z.string(),
+      }),
+    )
+    .max(5),
+});
+export type AlternativesAnalysis = z.infer<typeof AlternativesAnalysisSchema>;
+
+const JSON_SCHEMA = {
+  type: 'object',
+  required: [
+    'alternatives',
+    'strategic_profiles',
+    'feature_breakdowns',
+    'differentiation_hypothesis',
+    'key_threats',
+    'critiques',
+  ],
+  properties: {
+    alternatives: {
+      type: 'array',
+      minItems: 6,
+      maxItems: 15,
+      items: altItemSchema(),
+    },
+    strategic_profiles: {
+      type: 'array',
+      minItems: 2,
+      maxItems: 6,
+      items: profileItemSchema(),
+    },
+    feature_breakdowns: {
+      type: 'array',
+      maxItems: 4,
+      items: breakdownItemSchema(),
+    },
+    differentiation_hypothesis: { type: 'string' },
+    key_threats: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 5,
+      items: { type: 'string' },
+    },
+    critiques: {
+      type: 'array',
+      maxItems: 5,
+      items: {
+        type: 'object',
+        required: ['kind', 'title', 'body'],
+        properties: {
+          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
+          title: { type: 'string' },
+          body: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+function altItemSchema() {
+  return {
+    type: 'object',
+    required: ['id', 'name', 'category', 'description', 'why_users_use', 'threat_level', 'sources'],
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      category: { type: 'string', enum: ['direct', 'indirect', 'non_consumption'] },
+      description: { type: 'string' },
+      why_users_use: { type: 'string' },
+      threat_level: { type: 'string', enum: ['high', 'medium', 'low'] },
+      sources: { type: 'array', items: { type: 'string' } },
+    },
+  };
+}
+function profileItemSchema() {
+  return {
+    type: 'object',
+    required: ['alt_id', 'promise', 'revenue_model', 'moat', 'moat_strength'],
+    properties: {
+      alt_id: { type: 'string' },
+      promise: { type: 'string', maxLength: 30 },
+      revenue_model: { type: 'string' },
+      moat: { type: 'string' },
+      moat_strength: { type: 'string', enum: ['strong', 'medium', 'weak'] },
+    },
+  };
+}
+function breakdownItemSchema() {
+  return {
+    type: 'object',
+    required: ['alt_id', 'menu_structure', 'core_flows', 'key_interactions', 'headline_features'],
+    properties: {
+      alt_id: { type: 'string' },
+      menu_structure: { type: 'array', items: { type: 'string' } },
+      core_flows: { type: 'array', items: { type: 'string' } },
+      key_interactions: { type: 'array', items: { type: 'string' } },
+      headline_features: { type: 'array', items: { type: 'string' } },
+    },
+  };
+}
+
+const SYSTEM_PROMPT = `你是「思考工作台」第 04 节点"替代方案与战略分析"的 AI 副驾驶。
+
+# 方法论 v2 §7 的三条硬性要求
+
+## 1. 三类替代必须全覆盖（§7.1）
+- **direct（直接替代）**：同品类、同目标用户。是"表面对手"。
+- **indirect（间接替代）**：不同品类但完成相同 Job。例：外卖的间接替代是预制菜、方便面。
+- **non_consumption（非消费替代）**：用户干脆不解决这个问题、或用原始方式凑合。
+  **★ 这是最关键的一类**，大部分产品死于用户"懒得用 / 懒得换"。
+  示例：记账应用的真正对手是"用户懒得记账"；Netflix 的对手是"用户睡觉"。
+
+每类至少 2 条，总数 6-12 条。
+
+## 2. §7.2 战略三问（对 3-5 个重点替代做深度画像）
+每个 strategic_profiles 条目必须回答：
+- **promise（承诺）**：用不超过 15 字说清它的价值主张。
+  例："一拍就知道答案"（作业帮）、"省时的方便面"、"不花钱的免费替代"
+- **revenue_model（赢利模式）**：它靠什么赚钱？这决定了它**必然会做什么、必然不会做什么**。
+  例：靠广告赚钱的内容平台不可能真的帮用户节省时间；靠交易抽成的平台不可能帮用户绕过平台
+- **moat（护城河）**：它为什么难被替代？规模 / 网络效应 / 转换成本 / 品牌 / 数据 / 监管许可 / 独家资源
+- **moat_strength**：strong（几乎不可逾越） / medium（可逾越但难） / weak（容易被撼动）
+
+## 3. §7.3 功能与体验拆解（对 2-3 个最直接的竞品做）
+feature_breakdowns 每条覆盖：
+- **menu_structure**：菜单结构有哪些大类
+- **core_flows**：核心流程跑一遍是哪几步
+- **key_interactions**：关键交互动作（长按、滑动、摇一摇等特色操作）
+- **headline_features**：官网 / 帮助文档强调的亮点
+
+非消费替代不需要做功能拆解（它没功能）。
+
+# 写作规范
+
+- name：**具体到可识别的产品或行为**。不要写"某 AI 搜题 App"，写"作业帮"、"猿辅导小状元"、"作业交给 ChatGPT"。如果是非消费替代，名字就是行为本身，如"放弃问问题、自己瞎做"、"抄同学作业"。
+- description：这个替代是什么 / 用户如何使用它
+- why_users_use：它满足了用户的哪个 Job（对齐我们的 Jobs 清单）
+- sources：**如果你用了联网搜索**，把真实搜到的 URL 放进来；没搜到就空数组。绝不编造 URL。
+
+# 差异化假设
+最后给 differentiation_hypothesis —— 一句话说清"我们凭什么赢"。
+必须基于以上分析推出，**不能是空口号**。
+格式参考："我们凭 [某个具体优势 / 结构] 解决 [某个对手没解决的 Job]，用户会因为 [某个情感或功能理由] 选我们。"
+
+# key_threats 前 3
+列出你分析后认为对我们威胁最大的 3 条。可能是某个具体对手，也可能是"非消费"的总威胁。
+
+# critiques 最多 5 条
+- check：中性提醒（例"非消费替代只列了 2 条，偏少"）
+- critique：有力挑战（例"你的差异化假设里'更懂学生'这种话经不起三问"）
+- ask：追问用户决策（例"要不要把作业帮家长端作为直接替代单独列出？"）
+
+# 输出
+严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
+
+function formatContext(
+  brief: BriefExtraction,
+  personas: Persona[],
+  jobs: Job[],
+  rawText?: string,
+  answers?: ClarificationAnswer[],
+): string {
+  const fields = Object.entries(brief.fields)
+    .map(([k, v]) => {
+      const val = Array.isArray(v) ? v.join(' · ') : v ?? '（未定义）';
+      return `- ${k}: ${val}`;
+    })
+    .join('\n');
+  const personaBlock = personas.length
+    ? personas
+        .map(
+          (p) => `[${p.id}] ${p.name} · ${p.one_liner}\n  pain: ${p.pain}`,
+        )
+        .join('\n\n')
+    : '（尚无锁定 persona · 请从 Brief 推断典型用户）';
+  const jobsBlock = jobs.length
+    ? jobs.map((j) => `- [${j.id}] ${j.title}`).join('\n')
+    : '（尚无锁定 Job · 请从 Brief 推断典型任务）';
+  const answersBlock =
+    answers && answers.length > 0
+      ? `\n\n## Brief 澄清回答\n${answers
+          .map((a) => `- ${a.question}：${Array.isArray(a.answer) ? a.answer.join(' / ') : a.answer}`)
+          .join('\n')}`
+      : '';
+  const rawBlock = rawText ? `\n\n## Brief 原始文字\n${rawText.slice(0, 600)}` : '';
+  return (
+    `## Brief 结构化字段\n${fields}\n\n` +
+    `## 已锁定 personas（${personas.length}）\n${personaBlock}\n\n` +
+    `## 已锁定 Jobs（${jobs.length}）\n${jobsBlock}` +
+    `${answersBlock}${rawBlock}`
+  );
+}
+
+export async function analyzeAlternatives(args: {
+  brief: BriefExtraction;
+  rawText?: string;
+  answers?: ClarificationAnswer[];
+  personas: Persona[];
+  lockedJobs: Job[];
+  override?: string;
+}): Promise<AlternativesAnalysis> {
+  const context = formatContext(
+    args.brief,
+    args.personas,
+    args.lockedJobs,
+    args.rawText,
+    args.answers,
+  );
+  const res = await runAi({
+    task: 'ALT_SCAN',
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content:
+          `请基于以下上下文完成替代方案与战略分析。\n\n${context}\n\n` +
+          `**请使用联网搜索** —— 查找真实的直接/间接替代产品（官网、价位、用户量、评价），` +
+          `把搜到的 URL 填入对应 alternative.sources。非消费替代不需要搜索。`,
+      },
+    ],
+    schema: JSON_SCHEMA,
+    webSearch: true, // ← 触发 provider 的联网搜索能力
+    maxTokens: 12000,
+    temperature: 0.4,
+    override: args.override,
+  });
+  return AlternativesAnalysisSchema.parse(res.data);
+}

@@ -1,0 +1,180 @@
+import { z } from 'zod';
+import { runAi } from '../router';
+
+export const QuestionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  subtitle: z.string().optional().default(''),
+  type: z.enum(['single', 'multi']),
+  options: z.array(z.string().min(1)).min(3).max(6),
+});
+export type BriefQuestion = z.infer<typeof QuestionSchema>;
+
+export const ClarifyResultSchema = z.union([
+  z.object({
+    action: z.literal('proceed'),
+    reason: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal('ask'),
+    need_type: z.enum(['design', 'product', 'mixed', 'other']),
+    /** v2 方法论：两种澄清模式。
+     *  - questionnaire：一次抛 7-9 道选择题，适合信息密度高、只缺局部细节的情况
+     *  - interview：一问一答追问，适合原文很模糊、需要通过 §5.3 访谈法还原真实场景 */
+    suggested_mode: z.enum(['questionnaire', 'interview']).default('questionnaire'),
+    mode_reason: z.string().default(''),
+    reasoning: z.string().min(1),
+    questions: z.array(QuestionSchema).min(1).max(12),
+  }),
+]);
+export type ClarifyResult = z.infer<typeof ClarifyResultSchema>;
+
+const JSON_SCHEMA = {
+  type: 'object',
+  oneOf: [
+    {
+      type: 'object',
+      required: ['action', 'reason'],
+      properties: {
+        action: { const: 'proceed' },
+        reason: { type: 'string' },
+      },
+    },
+    {
+      type: 'object',
+      required: ['action', 'need_type', 'reasoning', 'questions', 'suggested_mode', 'mode_reason'],
+      properties: {
+        action: { const: 'ask' },
+        need_type: { type: 'string', enum: ['design', 'product', 'mixed', 'other'] },
+        suggested_mode: { type: 'string', enum: ['questionnaire', 'interview'] },
+        mode_reason: { type: 'string' },
+        reasoning: { type: 'string' },
+        questions: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 12,
+          items: {
+            type: 'object',
+            required: ['id', 'title', 'type', 'options'],
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              subtitle: { type: 'string' },
+              type: { type: 'string', enum: ['single', 'multi'] },
+              options: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 6 },
+            },
+          },
+        },
+      },
+    },
+  ],
+};
+
+const SYSTEM_PROMPT = `# ROLE
+你是"需求澄清助手"。当用户描述一个设计或产品需求时，你的任务不是立刻动手，而是判断：是否需要先问几个关键问题，才能产出高质量结果？
+
+────────────────────────────────────────
+# 第一步：判断是否需要问问题（跳过规则）
+
+如果满足以下任一条件，【直接跳过问卷】，输出
+{"action": "proceed", "reason": "..."}
+
+  1. 需求已经非常具体清晰（包含：目标、受众、范围、风格偏好中至少 3 项）
+  2. 用户明确说"别问了 / 直接做 / just do it"类似表达
+  3. 这是对已有产出的小修小改（改文案、换颜色、调间距等）
+  4. 这是对上一轮结果的追加迭代，且上下文已经明确
+
+否则进入第二步。
+
+────────────────────────────────────────
+# 第二步：判断需求类型
+
+把需求归类到以下之一：
+  • design   —— UI / 视觉 / 原型 / 交互
+  • product  —— PRD / 功能规划 / 产品策略
+  • mixed    —— 同时包含设计和产品
+  • other    —— 其他（按通用模板问）
+
+────────────────────────────────────────
+# 第三步：生成问题列表
+
+规则：
+  • 总数 7–9 题（最多不超过 12 题）
+  • 前 6 题来自【核心问题库】，按需求类型挑最相关的
+  • 后 1–3 题由你根据具体需求现场生成（【场景专属问题】）
+  • 每题必须是【单选】或【多选】（type: "single" | "multi"）
+  • 每个选项不超过 20 字，选项数量 3–6 个
+  • 每道选择题都必须包含兜底选项："让我来决定"
+  • 多数题还应包含："其他（请补充）"
+
+## 【核心问题库】（从中挑选最相关的 6 个）
+  1. 目标受众 / 使用场景 —— "这个东西给谁用？在什么场景下？"
+  2. 已有参考资料 / 上下文 —— "有没有可以参考的东西？"
+  3. 期望的变体数量 —— "想看几个方案？"
+  4. 创新程度 —— "偏保守还是大胆？"
+  5. 交付优先级 / 时间压力 —— "紧不紧？"
+  6. 禁区 / 不要什么 —— "有什么明确不想要的？"
+
+## 【场景专属问题】（现场生成 1–3 个）
+  举例：
+    • "做登录页"   → 补问"需要哪些登录方式？"
+    • "写 PRD"     → 补问"给谁看？工程师/高管/设计？"
+    • "做仪表盘"   → 补问"最核心的 3 个指标？"
+
+生成时自检：
+  ✅ 这个问题的答案会显著改变最终产出吗？
+  ✅ 用户很可能没在原始需求里说清楚吗？
+  ❌ 是不是在"问废话凑数"？
+
+────────────────────────────────────────
+# 第四步：推荐澄清模式（suggested_mode）
+
+方法论 v2 允许两种澄清方式，你要给一个**建议**（用户还可以手动切换）：
+
+- **questionnaire**（问卷模式） —— 一次抛 7-9 道选择题，用户几分钟答完。适合：
+  * 原文信息密度较高（>150 字），已经覆盖 4-5 个 Brief 字段
+  * 主要缺失的是"细节颗粒"（deadline / 预算 / 付费方 / 成功标准）
+  * 用户需要快速推进
+
+- **interview**（对话追问模式） —— 一问一答，每次一道开放题，AI 按答案动态推进。适合：
+  * 原文很短（<100 字）或很模糊（"做个好用的 App"这类）
+  * 需要按 §5.3 访谈法还原用户的"上一次真实任务过程"
+  * 项目明显属于高风险领域（医疗 / 金融 / K12 / 未成年）—— 需要深挖情景和道德红线
+  * 目标用户身份、情景都不清楚
+
+mode_reason：一句话说明你为什么建议这个模式（让用户判断要不要切换）。
+
+────────────────────────────────────────
+# 第五步：输出结构化 JSON
+
+严格按以下格式输出，不要任何额外文字、不要 Markdown 代码块。
+每个 question 的 id 用英文小写 + 下划线，例如 audience / scenario / reference / variation / risk_tolerance / deadline / no_go / login_methods / target_reader / key_metrics 等。
+**注意**：即便你建议 interview 模式，questions 字段也必须填（用户选择切换到 questionnaire 时作为候补）。
+
+────────────────────────────────────────
+# 原则
+  • 宁可不问，不要问废话。每道题必须对最终产出有实质影响。
+  • 核心 6 维度不是硬清单，是"最常缺失的 6 类信息"——缺什么问什么。
+  • 场景专属问题是区分"好助手"和"模板机器人"的关键。
+  • 选项里永远要留给用户"让我来决定"的出口。
+
+────────────────────────────────────────
+# 当前上下文
+这是"思考工作台"Brief 节点的第一步。用户刚粘贴了一段原始需求文字（通常来自老板口头、会议纪要、或用户本人描述）。
+本轮的目标是把需求澄清到能进入下一步「结构化抽取」。
+因此你的问题应该偏产品 / 设计方向，为后续的 Job 分析、情景、功能列表打好基础。`;
+
+export async function clarifyBrief(rawText: string, override?: string): Promise<ClarifyResult> {
+  const res = await runAi({
+    task: 'BRIEF_CLARIFY',
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `请判断下列原始需求是否需要澄清。\n\n原始文字：\n${rawText}` },
+    ],
+    schema: JSON_SCHEMA,
+    maxTokens: 8000,
+    temperature: 0.3,
+    override,
+  });
+  return ClarifyResultSchema.parse(res.data);
+}

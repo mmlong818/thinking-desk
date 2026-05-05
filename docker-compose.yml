@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: desk
+      POSTGRES_PASSWORD: desk
+      POSTGRES_DB: thinking_desk
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./src/lib/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U desk -d thinking_desk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://desk:desk@db:5432/thinking_desk
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY}
+      ZHIPU_BASE_URL: ${ZHIPU_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+      AI_MODEL_DEFAULT: ${AI_MODEL_DEFAULT:-claude:claude-sonnet-4-5}
+      AI_MODEL_BRIEF_EXTRACT: ${AI_MODEL_BRIEF_EXTRACT:-claude:claude-sonnet-4-5}
+      AI_MODEL_ALT_SCAN: ${AI_MODEL_ALT_SCAN:-gemini:gemini-2.5-pro}
+      AI_MODEL_HISTORY_SEARCH: ${AI_MODEL_HISTORY_SEARCH:-zhipu:glm-4-plus}
+    ports:
+      - "3000:3000"
+
+volumes:
+  db-data:

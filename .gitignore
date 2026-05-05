@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+
+# Environment variables ¡ª NEVER commit these
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+.env.development
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+.DS_Store
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account.json
+.secrets/
+sessions/
