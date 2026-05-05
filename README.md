@@ -66,22 +66,22 @@ Thinking Desk routes different AI tasks to different models. Here is what works 
 ```env
 # Main reasoning tasks — Claude is the best choice for structured thinking
 # 主推理任务 —— Claude 是结构化思考的最佳选择
-AI_MODEL_DEFAULT=claude:claude-sonnet-4-5
-AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-4-5
-AI_MODEL_USERS_JTBD=claude:claude-sonnet-4-5
-AI_MODEL_STAKE_MATRIX=claude:claude-sonnet-4-5
-AI_MODEL_SCEN_FEED=claude:claude-sonnet-4-5
-AI_MODEL_FEAT_DRAFT=claude:claude-sonnet-4-5
-AI_MODEL_FEAT_THREE_Q=claude:claude-sonnet-4-5
-AI_MODEL_LEAP_FIRST_PRINCIPLES=claude:claude-sonnet-4-5
+AI_MODEL_DEFAULT=claude:claude-sonnet-4-6
+AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-4-6
+AI_MODEL_USERS_JTBD=claude:claude-sonnet-4-6
+AI_MODEL_STAKE_MATRIX=claude:claude-sonnet-4-6
+AI_MODEL_SCEN_FEED=claude:claude-sonnet-4-6
+AI_MODEL_FEAT_DRAFT=claude:claude-sonnet-4-6
+AI_MODEL_FEAT_THREE_Q=claude:claude-sonnet-4-6
+AI_MODEL_LEAP_FIRST_PRINCIPLES=claude:claude-sonnet-4-6
 
 # Web search task — Gemini has grounding/search built in
 # 联网搜索任务 —— Gemini 内置搜索能力
-AI_MODEL_ALT_SCAN=gemini:gemini-2.5-pro
+AI_MODEL_ALT_SCAN=gemini:gemini-3
 
 # Chinese long-context / history retrieval — Zhipu excels here
 # 中文长上下文 / 历史项目检索 —— 智谱在此表现突出
-AI_MODEL_HISTORY_SEARCH=zhipu:glm-4-plus
+AI_MODEL_HISTORY_SEARCH=zhipu:glm-5
 ```
 
 ### Why these models? · 为什么选这些模型？
@@ -90,7 +90,7 @@ AI_MODEL_HISTORY_SEARCH=zhipu:glm-4-plus
 Claude produces tight, structured JSON output with strong reasoning. It follows complex prompts faithfully and rarely hallucinates structured data. `claude-sonnet-4-5` balances capability and cost well; upgrade to `claude-opus-4-5` for deeper reasoning on hard problems.
 
 **Claude（Anthropic）—— 大多数任务的默认选择**
-Claude 能生成紧凑的结构化 JSON 输出，推理能力强，忠实遵循复杂提示词，结构化数据幻觉率低。`claude-sonnet-4-5` 在能力和成本之间取得良好平衡；复杂问题可升级到 `claude-opus-4-5`。
+Claude 能生成紧凑的结构化 JSON 输出，推理能力强，忠实遵循复杂提示词，结构化数据幻觉率低。`claude-sonnet-4-5` 在能力和成本之间取得良好平衡；复杂问题可升级到 `claude-opus-4-7`。
 
 **Gemini (Google) — web search tasks only**
 The `ALT_SCAN` task needs real-time competitive intelligence. Gemini's native search grounding makes it the right tool for this specific job. For all other tasks, Claude or OpenAI is preferred.
@@ -108,12 +108,12 @@ The `ALT_SCAN` task needs real-time competitive intelligence. Gemini's native se
 
 If you only have an OpenAI key, set:
 ```env
-AI_MODEL_DEFAULT=openai:gpt-4o
-AI_MODEL_ALT_SCAN=openai:gpt-4o-search-preview
+AI_MODEL_DEFAULT=openai:gpt-5
+AI_MODEL_ALT_SCAN=openai:gpt-5-search-preview
 ```
-OpenAI works well across all tasks. The `gpt-4o-search-preview` variant handles web search for `ALT_SCAN`.
+OpenAI works well across all tasks. The `gpt-5-search-preview` variant handles web search for `ALT_SCAN`.
 
-如果你只有 OpenAI 的 key，将以上配置替换为 `openai:gpt-4o` 即可。搜索任务可使用 `gpt-4o-search-preview`。
+如果你只有 OpenAI 的 key，将以上配置替换为 `openai:gpt-5` 即可。搜索任务可使用 `gpt-5-search-preview`。
 
 ---
 
