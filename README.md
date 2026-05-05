@@ -226,4 +226,4 @@ src/
 
 ## License
 
-MIT
+[AGPL-3.0](LICENSE) — free to use and modify with attribution; commercial use requires the full source to remain open under the same license.
