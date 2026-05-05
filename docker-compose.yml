@@ -3,16 +3,16 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: desk
-      POSTGRES_PASSWORD: desk
-      POSTGRES_DB: thinking_desk
+      POSTGRES_USER: ${POSTGRES_USER:-desk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-desk}
+      POSTGRES_DB: ${POSTGRES_DB:-thinking_desk}
     ports:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./src/lib/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U desk -d thinking_desk"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-desk} -d ${POSTGRES_DB:-thinking_desk}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -24,8 +24,10 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://desk:desk@db:5432/thinking_desk
+      DATABASE_URL: postgres://${POSTGRES_USER:-desk}:${POSTGRES_PASSWORD:-desk}@db:5432/${POSTGRES_DB:-thinking_desk}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}
