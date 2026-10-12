@@ -6,7 +6,7 @@ import type { NodeKind } from '@/data/nodes';
 import { FollowUpItemSchema, type FollowUpItem } from '@/lib/ai/follow-ups';
 import { inputsOf } from '@/lib/model/context';
 import type { Item } from '@/lib/model/item-types';
-import { readUi, writeUi } from '@/lib/store/ui-cache';
+import { readUi, UI_KEY, writeUi } from '@/lib/store/ui-cache';
 import { useProject } from '@/components/project/ProjectStore';
 import { useAiAction } from '@/components/project/useAiAction';
 import { NodeFollowUpsRunner } from './NodeFollowUpsRunner';
@@ -27,7 +27,7 @@ function contentOf(items: readonly Item[]) {
 export function FollowUpsPanel({ node, items }: { node: NodeKind; items: readonly Item[] }) {
   const { store } = useProject();
   const ai = useAiAction();
-  const key = `followups:${node}`;
+  const key = UI_KEY.followUps(node);
   const [state, setState] = useState<FollowUps | null>(null);
   const triedRef = useRef(false);
   const hasContent = items.length > 0;

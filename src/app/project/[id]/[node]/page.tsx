@@ -80,7 +80,7 @@ async function loadCompleted(slug: string, graph: Graph | null): Promise<NodeKin
 
 // Nodes still on the legacy sessionStorage cache get their old (empty) props until migrated.
 const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
-  brief: (slug) => <BriefNode projectSlug={slug} />,
+  brief: () => <BriefNode />,
   users: () => <UsersNode />,
   stake: () => <StakeholdersNode />,
   alt: () => <AlternativesNode />,

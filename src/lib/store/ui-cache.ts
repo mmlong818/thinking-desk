@@ -7,6 +7,16 @@ import type { z } from 'zod';
 
 const PREFIX = 'td:ui:';
 
+/** The UI cache entries in use. */
+export const UI_KEY = {
+  /** Raw brief text typed before the first analysis (string). */
+  briefDraft: 'brief-draft',
+  /** One-shot notice an import leaves for the brief page (string). */
+  importNotice: 'import-warning',
+  /** Derived copilot follow-ups and their answers for one node. */
+  followUps: (node: string) => `followups:${node}`,
+} as const;
+
 const keyOf = (projectId: string, key: string) => `${PREFIX}${projectId}:${key}`;
 
 function storage(): Storage | null {

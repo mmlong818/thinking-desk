@@ -1546,3 +1546,9 @@ html, body {
 .job-row-title .ai-stance { margin-left: 6px; }
 .persona-tile-top .ai-stance { flex-shrink: 0; }
 .alt-card-judge { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.brief-row:has(> .item-decision) { grid-template-columns: 140px 1fr auto; }
+.editable-list-item .ai-stance { flex-shrink: 0; }
+.editable-list-item .item-decision { flex-shrink: 0; }
+.import-notice { margin: 12px 0; padding: 10px 14px; background: var(--warn-soft); border: 1px solid var(--warn); color: var(--ink-2); border-radius: 5px; font-size: 13px; line-height: 1.6; display: flex; align-items: flex-start; gap: 10px; }
+.import-notice-tag { font-family: var(--mono); font-size: 11px; color: var(--warn); white-space: nowrap; margin-top: 2px; }
+.import-notice-close { background: none; border: none; cursor: pointer; color: var(--ink-4); font-size: 16px; line-height: 1; padding: 0; }
