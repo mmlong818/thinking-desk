@@ -185,6 +185,16 @@ ZHIPU_API_KEY=
 DATABASE_URL=postgres://desk:desk@localhost:5432/thinking_desk
 ```
 
+### Behind an HTTP(S) proxy · 代理环境
+
+Node's built-in `fetch`, which the provider adapters use, ignores `HTTPS_PROXY` / `HTTP_PROXY` unless Node starts with `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21 or 24). Without it, AI calls through a proxy fail with `fetch failed` (`UND_ERR_CONNECT_TIMEOUT`). Set it in the environment that starts Node — no proxy package is needed:
+
+Node 内置的 `fetch`（各 provider 适配器都用它）默认忽略 `HTTPS_PROXY` / `HTTP_PROXY`，除非 Node 启动时带上 `NODE_USE_ENV_PROXY=1`（Node ≥ 22.21 或 24）。不加的话，经代理的 AI 请求会报 `fetch failed`（`UND_ERR_CONNECT_TIMEOUT`）。在启动 Node 的环境里设置即可，无需安装代理依赖：
+
+```bash
+NODE_USE_ENV_PROXY=1 pnpm dev        # or: NODE_USE_ENV_PROXY=1 pnpm start
+```
+
 ### Security (for public deployments) · 安全（公开部署时建议开启）
 
 ```env
