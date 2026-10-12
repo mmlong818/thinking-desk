@@ -44,16 +44,16 @@ Tests live next to the code as `*.test.ts`. When you add or change a Zod respons
 
 1. Add a new `NodeKind` literal to the union in `src/data/nodes.ts`.
 2. Add a `NodeDef` entry to the `NODES` array — set `deps` to enforce ordering and `completion` to say which accepted item types complete the node (see `docs/data-model.md`).
-3. Create `src/components/nodes/YourNode.tsx` following the pattern of an existing node (e.g. `BriefNode.tsx`).
-4. Register the component in `src/app/project/[id]/[node]/page.tsx`.
+3. Create `src/components/nodes/YourNode.tsx` (+ a folder for its parts) following an existing node (e.g. `StakeholdersNode.tsx`): read items with `useNodeData`, run AI with `useAiAction`, judge with `JudgeBar` / `ItemDecision`.
+4. Register the component in `NODE_COMPONENTS` in `src/app/project/[id]/[node]/page.tsx`.
 5. Add any new AI tasks (see below) and wire them through the Copilot panel.
 
 ## How to Add a New AI Task
 
-1. Add a literal to the `AiTask` union in `src/lib/ai/types.ts`.
+1. Add a literal to `AI_TASKS` in `src/lib/ai/types.ts`.
 2. Create `src/lib/ai/schemas/your-task.ts` (Zod response schema, client-safe) and `src/lib/ai/tasks/your-task.ts` (prompt builder that calls `runTask()`; wrap request data in `dataBlock()`).
 3. Create `src/app/api/ai/your-task/route.ts` — `export const POST = aiRoute({ name, body, handle })` (`src/lib/ai/route.ts`): it validates the body, runs your task and returns `{ ok, data, run }`. Providers return one full response; there is no streaming.
-4. Call the route from your node component via `fetch`.
+4. Add an output adapter in `src/lib/model/adapters/` (task output → `ItemDraft[]` + replace scope, with a test on the fixtures) and call the route from your node with `useAiAction().run(…, { route, body, node, inputs, adapt })` — it saves the run and its items.
 5. Document the new `AI_MODEL_YOUR_TASK` variable in `.env.example`.
 
 ## How to Add a New AI Provider

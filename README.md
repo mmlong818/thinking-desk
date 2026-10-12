@@ -72,8 +72,8 @@ Thinking Desk routes different AI tasks to different models. Here is what works 
 # 所有任务的默认模型 —— Claude 是结构化 JSON 输出的最佳选择
 AI_MODEL_DEFAULT=claude:claude-sonnet-5-5
 
-# Optional per-task pins (any task in the AiTask union, see .env.example)
-# 可选的按任务指定（AiTask 中的任意任务，完整列表见 .env.example）
+# Optional per-task pins (any task in AI_TASKS, see .env.example)
+# 可选的按任务指定（AI_TASKS 中的任意任务，完整列表见 .env.example）
 AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-5-5
 AI_MODEL_USERS_JTBD=claude:claude-sonnet-5-5
 AI_MODEL_STAKE_MATRIX=claude:claude-sonnet-5-5
@@ -133,9 +133,9 @@ pnpm install
 pnpm dev                       # http://localhost:3000
 ```
 
-Postgres is optional. Without `DATABASE_URL` the app runs in pure-local mode (browser sessionStorage + a completion cookie). To add Postgres:
+Postgres is optional. Without `DATABASE_URL` the app runs in pure-local mode: each project lives in the browser's localStorage (items, links, runs, decisions), plus a completion cookie for the lock screen. To add Postgres:
 
-Postgres 是可选的。未设置 `DATABASE_URL` 时应用以纯本地模式运行（浏览器 sessionStorage + 完成状态 cookie）。如需接入 Postgres：
+Postgres 是可选的。未设置 `DATABASE_URL` 时应用以纯本地模式运行：每个项目保存在浏览器 localStorage 里（条目、链接、运行记录与裁决），另有一个完成状态 cookie 供锁定页使用。如需接入 Postgres：
 
 ```bash
 docker compose up -d db        # local Postgres; schema.sql is applied on first boot
@@ -220,11 +220,13 @@ src/
 │   ├── project/[id]/[node]/page.tsx
 │   └── api/
 │       ├── ai/                  # one route per AI task
-│       ├── projects/            # project list / create
+│       ├── projects/            # project list / create; [id]/… items, runs, fork (Postgres mode)
 │       └── providers/           # configured providers + models
 ├── middleware.ts                # optional bearer auth + per-IP rate limit for /api
 ├── components/
 │   ├── shell/                   # TopBar · NavRail · Copilot · ModelPicker · ExportButton
+│   ├── project/                 # project store provider + hooks (items, AI actions, decisions)
+│   ├── shared/                  # node kit: decision controls, judge bar, upstream context …
 │   └── nodes/                   # Per-node workspace UI
 ├── lib/
 │   ├── ai/
@@ -232,10 +234,12 @@ src/
 │   │   ├── router.ts            # task → provider:model routing
 │   │   ├── tasks/               # prompt + schema per AI task
 │   │   └── types.ts
-│   ├── client-cache.ts          # sessionStorage + completion cookie (pure-local mode)
+│   ├── model/                   # items / links / runs / decisions, planners, LocalRepository, task adapters
+│   ├── store/                   # browser side: repository over HTTP, AI actions, completion cookie
 │   └── db/
 │       ├── schema.sql
 │       ├── client.ts            # lazy pg Pool
+│       ├── pg-repository.ts     # Repository over Postgres
 │       └── projects.ts
 └── data/
     └── nodes.ts                 # 9-node definitions
@@ -245,10 +249,10 @@ src/
 
 ## Adding a new AI task · 新增 AI 任务
 
-1. Add a literal to `AiTask` in `src/lib/ai/types.ts`
+1. Add a literal to `AI_TASKS` in `src/lib/ai/types.ts`
 2. Write the Zod schema in `src/lib/ai/schemas/xxx.ts` and the prompt in `src/lib/ai/tasks/xxx.ts` (calls `runTask()`)
 3. Expose a server route at `src/app/api/ai/xxx/route.ts` with `aiRoute()`
-4. Call it from the node component
+4. Write an output adapter in `src/lib/model/adapters/` (task output → items) and call the route from the node with `useAiAction()`
 5. Optionally pin a model: `AI_MODEL_XXX=provider:model` in `.env` (and document it in `.env.example`)
 
 ---

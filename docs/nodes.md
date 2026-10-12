@@ -96,4 +96,4 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 
 ## Lock Mechanics
 
-`isNodeLocked(kind, completedSet)` in `data/nodes.ts` returns `true` if any dep is missing from `completedSet`. The SSR page builds `completedSet` from the Postgres DB (if reachable) and the `td-done:<slug>` cookie (`td-done-h:<hash>` for long slugs). `LockedNode.tsx` renders in place of the real component when locked.
+`isNodeLocked(kind, completedSet)` in `data/nodes.ts` returns `true` if any dep is missing from `completedSet`. A node is complete when its `completion` rule holds on accepted items (`completedNodes(items)`, see [data-model.md](data-model.md#node-completion)). The SSR page derives `completedSet` from the project's items in Postgres mode and reads it from the `td-done:<slug>` cookie (`td-done-h:<hash>` for long slugs) in pure-local mode, where the browser rewrites the cookie from the items after every change. `LockedNode.tsx` renders in place of the real component when locked.

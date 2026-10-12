@@ -4,7 +4,7 @@ Thinking Desk is AI-led and human-judged: the AI produces the breadth (options, 
 
 Code: `src/lib/model/` (pure domain + `LocalRepository`), `src/lib/db/pg-repository.ts` (`PgRepository`), `src/lib/db/schema.sql`. Completion rules: `src/data/nodes.ts`.
 
-Status: this milestone adds the model and both repositories. Node components, node pages and `/api/ai/*` routes still use the old `td:<slug>:<kind>` sessionStorage payloads; they move to the repositories in the next milestones (see [Migration status](#migration-status)).
+Status: every node reads and writes items through the repositories (milestone 3a, see [Migration status](#migration-status)); how the UI uses the model is in [UI on the model](#ui-on-the-model).
 
 ## Entities
 
@@ -138,7 +138,7 @@ Completion is derived from items: a node is complete when every clause of its `c
 | final | ≥1 `module` **and** ≥1 `design_section` |
 | split | ≥1 `subtask` |
 
-The `td-done:<slug>` cookie stays, but only as a cache for SSR lock decisions: it is overwritten with `completionCookieValue(completedNodes(items))` after each write (wired in the node-migration milestone).
+The `td-done:<slug>` cookie stays, but only as a cache for SSR lock decisions in pure-local mode: after every write the browser overwrites it with `completionCookieValue(completedNodes(items))` (`writeCompletionCookie`, `src/lib/store/completion-cookie.ts`) — so un-accepting the last item of a node relocks what depends on it — and refreshes the page when the set changed. In Postgres mode the page derives completion from the items it loads.
 
 The rules stay deliberately minimal. What a good node *should* also have is reported separately as **hints** that never block completion or locking: `nodeHints(kind, items)` / `projectHints(items)` in `src/lib/model/hints.ts`, judged on live accepted items and silent for a node that has no items yet.
 
@@ -151,11 +151,11 @@ The rules stay deliberately minimal. What a good node *should* also have is repo
 | scen | no `hostile` scenario (`scen.no_hostile`) |
 | feat | no `not_doing` (`feat.no_not_doing`) |
 
-AI items are created `pending`. `acceptRecommended(projectId, node)` accepts, atomically, every live pending item on the node whose `aiStance.verdict` is `recommend` (one `accepted` event each, actor human); the one-click UI arrives with the node migration.
+AI items are created `pending`. `acceptRecommended(projectId, node)` accepts, atomically, every live pending item on the node whose `aiStance.verdict` is `recommend` (one `accepted` event each, actor human) — the "✓ 采纳全部推荐（N）" button of every node's judge bar, disabled when N = 0. Hints are shown under it as non-blocking notices.
 
 ## AI temp ids → permanent ids and Links
 
-AI output keeps using short temporary ids (`p1`, `j3`, `sc-1`) and cross-refs between them (`persona_ids`, `job_ids`, `scenario_id`, `element_ids`, `alt_id`, `feature_ids`, `source_id`, …). Prompts present existing items by their permanent id. A task adapter (next milestone, with `runTask()`) turns each output entity into an `ItemDraft { ref, type, node?, body, aiStance?, evidence?, links? }` where `body` is the raw entity; the registry knows which fields are refs. At save time, inside the same transaction:
+AI output keeps using short temporary ids (`p1`, `j3`, `sc-1`) and cross-refs between them (`persona_ids`, `job_ids`, `scenario_id`, `element_ids`, `alt_id`, `feature_ids`, `source_id`, …). Prompts present existing items by their permanent id. A task adapter (`src/lib/model/adapters/`, one per task output, client-safe) turns each output entity into an `ItemDraft { ref, type, node?, body, aiStance?, evidence?, links? }` where `body` is the raw entity; the registry knows which fields are refs. At save time, inside the same transaction:
 
 1. **Classify each draft** (validate node + body first; invalid drafts are skipped and reported):
    - singleton type with a live item on the node → **update** that item in place;
@@ -179,7 +179,7 @@ AI output keeps using short temporary ids (`p1`, `j3`, `sc-1`) and cross-refs be
 - **Empty scope**: when a run does yield items but one of its replace scopes got no valid draft, that scope's pending items are kept (not retired) and an `empty_scope` issue is reported; the other scopes regenerate normally.
 - **Singletons** (`brief`, `engagement_plan`, `diff_hypothesis`) are rewritten in place, even when judged: version+1, back to `pending`, `edited` + `reset` events. Links into them therefore go stale instead of dangling. The previous body is kept on the `edited` event (`prevBody`); the UI should still confirm before re-running over a judged singleton.
 
-Feedback into the next prompt (implemented with `runTask()`; shape fixed now):
+Feedback into the next prompt — `buildFeedback(items, scopes)` in `src/lib/model/feedback.ts`, sent as the optional `feedback` field of every regenerating `/api/ai/*` request and rendered into the prompt as a `regeneration_feedback` data block (`src/lib/ai/feedback-prompt.ts`):
 
 ```ts
 interface RegenerationFeedback {
@@ -190,7 +190,7 @@ interface RegenerationFeedback {
 }
 ```
 
-`summary` is a per-type one-liner (persona name + one-liner, job title, …). This replaces today's ad-hoc `userLockedJobIds`, `locked_ids` and `rejected_ids` prompt blocks, and keeps rejected leaps as data instead of dropping them.
+`summary` is a per-type one-liner (`itemSummary`: persona name + one-liner, job title, …). It replaced the ad-hoc `userLockedJobIds` (refine-jobs now derives its locked list from `feedback.keep`), `locked_ids` and `rejected_ids` request fields, and keeps rejected leaps as data instead of dropping them.
 
 ## Staleness
 
@@ -218,9 +218,22 @@ interface Repository {
 
 Both implementations delegate every decision to the same pure planners (`planRunOutput`, `planItemUpdate`, `planCreateItem`, `planRefreshLinks`) and only apply the resulting plan, so they behave identically — an integration test runs the same write sequence against both and compares the results.
 
-**LocalRepository** (pure-local mode, browser): one `localStorage` value per project, `td:v2:<projectId>` → `{ v: 1, items, links, runs, events }`. In pure-local mode the projectId is the **decoded URL slug** — `localProjectId(slug)` applies the same `decodeURIComponent` normalisation as `client-cache`, so encoded and decoded URLs of one project share a key. Each method is a synchronous read-modify-write ending in a single `setItem`, so a failed write (quota) leaves the stored value untouched. Reads validate every record with Zod; invalid records and dangling links are dropped, the original value is copied once to `td:v2-corrupt:<projectId>` and `onCorrupt` is called. A value written by a newer format version is refused rather than overwritten. Storage, clock and id source are injectable. Two tabs writing the same project: last write wins.
+**LocalRepository** (pure-local mode, browser): one `localStorage` value per project, `td:v2:<projectId>` → `{ v: 1, items, links, runs, events }`. In pure-local mode the projectId is the **decoded URL slug** — `localProjectId(slug)` applies the same `decodeURIComponent` normalisation as the completion cookie, so encoded and decoded URLs of one project share a key. Each method is a synchronous read-modify-write ending in a single `setItem`, so a failed write (quota) leaves the stored value untouched. Reads validate every record with Zod; invalid records and dangling links are dropped, the original value is copied once to `td:v2-corrupt:<projectId>` and `onCorrupt` is called. A value written by a newer format version is refused rather than overwritten. Storage, clock and id source are injectable. Two tabs writing the same project: last write wins.
 
-**PgRepository** (server): every write runs in one transaction that first locks the project row (`SELECT … FOR UPDATE`), loads the project's items and links, plans, then applies the plan with bulk `jsonb_array_elements` statements in FK-safe order (run → items → links → events). Project ids must be UUIDs. Like every `src/lib/db` caller it rejects (catchably) without `DATABASE_URL`, so pure-local mode and `pnpm build` are unaffected. The `/api/projects/[id]/graph` routes that expose it to the browser come with the node migration.
+**PgRepository** (server): every write runs in one transaction that first locks the project row (`SELECT … FOR UPDATE`), loads the project's items and links, plans, then applies the plan with bulk `jsonb_array_elements` statements in FK-safe order (run → items → links → events). Project ids must be UUIDs. Like every `src/lib/db` caller it rejects (catchably) without `DATABASE_URL`, so pure-local mode and `pnpm build` are unaffected.
+
+**Over HTTP** (Postgres mode): the browser's `HttpRepository` (`src/lib/store/http-repository.ts`) implements the part of the interface the UI uses against these routes; handlers live in `src/lib/api/project-api.ts`, validate bodies with Zod and attribute every write to the human (AI output only arrives as a run):
+
+| Route | Repository call |
+|---|---|
+| `GET /api/projects/[id]/graph` | `getGraph` |
+| `GET /api/projects/[id]/runs?node=` · `POST …/runs` `{ run, drafts, replace }` | `listRuns` · `saveRunOutput` |
+| `POST /api/projects/[id]/items` | `createItem` |
+| `PATCH /api/projects/[id]/items/[itemId]` `{ patch, note? }` | `updateItem` (actor human) |
+| `POST /api/projects/[id]/accept-recommended` `{ node }` | `acceptRecommended` |
+| `POST /api/projects/[id]/fork` `{ name, summary? }` | new project + copies of runs, items, links, events (`forkProject`) |
+
+`RepositoryError` maps to 404 / 400 / 409 / 503; a database failure answers `503 db_unavailable`.
 
 ## Postgres DDL
 
@@ -277,7 +290,16 @@ CREATE TABLE decision_events (
 
 Ids are unique per project (composite keys), so forking a project can copy rows without rewriting ids or links. `seq` keeps AI output order and event order stable (it is not part of the model). Item `node`/`type` are free text validated by the app, so new item types need no migration; the enum `CHECK`s and the singleton list are kept in sync with the code by `schema.test.ts`.
 
-## Mapping today's sessionStorage payloads
+## UI on the model
+
+- **Store choice** — the node page uses Postgres when the project row exists (projectId = UUID), else `LocalRepository` (projectId = decoded slug); see architecture.md.
+- **AI actions** — `runAiAction()` (`src/lib/store/ai-action.ts`): POST the route, run the task's adapter, `saveRunOutput` with `toRunInput(run, { node, inputs })`. `inputs` are the items the prompt was built from. Process steps (clarify, probe, follow-ups, free-ask) save the run without drafts; a failed call saves a failed run. A run whose output yields no valid item is reported to the person ("AI 输出没有可用条目") and changes nothing.
+- **Upstream context** — what a prompt receives for (node, type): the accepted items once the person has accepted any, otherwise every item they have not rejected (`contextItems`, `src/lib/model/context.ts`). Rejected items never travel downstream; the brief snapshot is rebuilt from the brief, red-line and assumption items (`briefRequestContext`).
+- **Old default selections → recommendations** — what the old UI pre-selected is now `aiStance: recommend` with a reason, so "采纳全部推荐" reproduces the old default in one click: every persona (primary = "最典型的主用户"), priority jobs, baseline and manage-quadrant stakeholders, high/medium-threat and non-consumption alternatives plus the differentiation hypothesis, high-relevance scenario elements, deep-analysis extremes / hostiles / pain points / insights, priority features (a red-line risk is a `caution`), leap top picks, every design section and module, every subtask, and the brief once its completeness reaches 70 % (below: `caution`).
+- **Decisions** — every judgeable item has accept / reject-with-note / undo (and an editor for its free-text fields); the note goes into the next regeneration's feedback. Baseline stakeholders cannot be rejected (they were "必选不可删" before). The leap 🔒 lock is gone: "再补 3 条" is additive, so nothing needs protecting.
+- **Not items** — derived copilot follow-ups and their answers, the brief draft and the import notice are browser UI state (`td:ui:<projectId>:<key>`, `src/lib/store/ui-cache.ts`).
+
+## How the pre-3a sessionStorage payloads map onto items (historical)
 
 | Key `td:<slug>:…` | Field | Becomes |
 |---|---|---|
@@ -315,4 +337,6 @@ Done in this milestone: Zod 4; the model, planners and both repositories; `schem
 
 Done in milestone 2: the decisions above (`prevBody`, failed runs on empty output, empty-scope protection, hints, `acceptRecommended`, pure-local projectId); every `/api/ai/*` route goes through `runTask()`, which returns run metadata shaped for `Run` (`toRunInput()`), and routes no longer touch the database (the legacy `upsertNode` / `logAiExchange` helpers are gone).
 
-Not yet wired (next milestone): node components and pages still read and write `td:<slug>:<kind>`, and the node page still calls the `@deprecated` `getNode` reader of the dropped `nodes` table (it catches the error), so with `DATABASE_URL` set the app behaves like pure-local mode (content in sessionStorage, locks from the cookie) until pages move to the repositories. Still to build: persisting runs from routes, task adapters (`TaskOutput → ItemDraft[]`) and `RegenerationFeedback` in prompts, `/api/projects/[id]/graph` routes, writing the cookie from derived completion, and project fork (copy `td:v2:<id>` / rows).
+Done in milestone 3a: every node runs on items (`ProjectStoreProvider`, `useNodeData`, `useAiAction`, `useItemActions`); the Postgres mode over `/api/projects/[id]/*`; task adapters and `RegenerationFeedback` in prompts; runs (also failed ones) saved after each AI call; completion cookie written from derived completion; project fork in both modes; export / import of the graph. The `td:<slug>:<kind>` sessionStorage cache, `forkCache` and the legacy `nodes` reader are gone (old values in a browser are simply ignored).
+
+Still to build: streaming and prompt evaluation (milestone 3b); staleness UI, consistency checks, PRD / issue exports (phase 3); editing Links by hand (subtask dependencies and module features are shown read-only).
