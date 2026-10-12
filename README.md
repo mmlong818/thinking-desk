@@ -236,8 +236,8 @@ src/
 ## Adding a new AI task · 新增 AI 任务
 
 1. Add a literal to `AiTask` in `src/lib/ai/types.ts`
-2. Write prompt + Zod schema in `src/lib/ai/tasks/xxx.ts`
-3. Expose a server route at `src/app/api/ai/xxx/route.ts`
+2. Write the Zod schema in `src/lib/ai/schemas/xxx.ts` and the prompt in `src/lib/ai/tasks/xxx.ts` (calls `runTask()`)
+3. Expose a server route at `src/app/api/ai/xxx/route.ts` with `aiRoute()`
 4. Call it from the node component
 5. Optionally pin a model: `AI_MODEL_XXX=provider:model` in `.env` (and document it in `.env.example`)
 

@@ -89,7 +89,7 @@ A no-op patch writes nothing.
 
 ## Item types
 
-Bodies are derived from the task response schemas in `src/lib/ai/tasks/`: `id` and cross-reference fields are omitted (Zod strips them; Links replace them).
+Bodies are derived from the task response schemas in `src/lib/ai/schemas/`: `id` and cross-reference fields are omitted (Zod strips them; Links replace them).
 
 | Node | Type (prefix) | Body source | Cross-refs → Links |
 |---|---|---|---|
