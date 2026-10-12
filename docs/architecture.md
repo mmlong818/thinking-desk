@@ -28,8 +28,8 @@ Two independent persistence strategies; the app uses whichever is available.
 
 ### Postgres (optional)
 
-- Node output and AI conversation logs stored server-side (`projects`, `nodes`, `ai_exchanges`).
-- `src/lib/db/client.ts` — a lazily created singleton `pg.Pool` (created on the first query, 3 s connection timeout). Importing the module never throws.
+- Tables: `users`, `projects` and the Phase 1 data model `items`, `links`, `runs`, `decision_events`, accessed through `PgRepository` (`src/lib/db/pg-repository.ts`; see [data-model.md](data-model.md)). Node pages and AI routes are not migrated yet: their legacy `nodes` / `ai_exchanges` helpers now fail softly, so until then DB mode behaves like pure-local mode for node content.
+- `src/lib/db/client.ts` — a lazily created singleton `pg.Pool` (created on the first query, 3 s connection timeout) plus `withTransaction()`. Importing the module never throws.
 - `query()` **throws** when `DATABASE_URL` is unset or the database is unreachable; the functions in `src/lib/db/projects.ts` propagate that error. Callers (route handlers, SSR pages) wrap DB calls in try/catch and fall through to the local layer, for example `listProjects()` failures return an empty list plus `db_error`.
 - Schema is auto-applied on `docker compose up` via the init script mount.
 

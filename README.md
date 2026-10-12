@@ -247,7 +247,7 @@ src/
 
 - **Next.js 15** (App Router + Turbopack) · React 19 · TypeScript 5
 - **Tailwind CSS 3**
-- **Postgres 16** (optional) — projects, nodes, AI exchange log; `schema.sql` also defines `assumptions` and `comments` tables that the app does not use yet
+- **Postgres 16** (optional) — projects plus the Phase 1 data model (items, links, runs, decision events; see `docs/data-model.md`)
 - **@anthropic-ai/sdk** for Claude; OpenAI, Gemini and Zhipu are called with plain `fetch`
 - **Vitest** for unit tests · **ESLint** (`next/core-web-vitals`) · GitHub Actions CI
 

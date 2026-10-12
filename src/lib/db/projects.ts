@@ -27,11 +27,11 @@ export async function listProjects(ownerId: string = DEMO_OWNER_ID): Promise<Pro
        n.last_at   AS last_node_at
      FROM projects p
      LEFT JOIN LATERAL (
-       SELECT COUNT(*) AS cnt,
-              (array_agg(kind ORDER BY updated_at DESC))[1] AS last_kind,
+       SELECT COUNT(DISTINCT node) AS cnt,
+              (array_agg(node ORDER BY updated_at DESC))[1] AS last_kind,
               MAX(updated_at) AS last_at
-       FROM nodes
-       WHERE project_id = p.id
+       FROM items
+       WHERE project_id = p.id AND deleted_at IS NULL
      ) n ON true
      WHERE p.owner_id = $1
      ORDER BY p.updated_at DESC`,
@@ -83,6 +83,11 @@ export async function findProjectBySlug(slug: string): Promise<ProjectRow | null
   return rows[0] ?? null;
 }
 
+// Legacy node-blob helpers below target the `nodes` / `ai_exchanges` tables,
+// which schema.sql dropped in Phase 1. Every caller already catches DB errors,
+// so they fail softly until node pages and AI routes move to PgRepository.
+
+/** @deprecated `nodes` table dropped; use PgRepository. */
 export async function getNode<T = Record<string, unknown>>(
   projectId: string,
   kind: string,
@@ -94,6 +99,7 @@ export async function getNode<T = Record<string, unknown>>(
   return rows[0] ?? null;
 }
 
+/** @deprecated `nodes` table dropped; use PgRepository. */
 export async function upsertNode(
   projectId: string,
   kind: string,
@@ -111,6 +117,7 @@ export async function upsertNode(
   );
 }
 
+/** @deprecated `ai_exchanges` table dropped; runs are recorded by Repository.saveRunOutput. */
 export async function logAiExchange(args: {
   projectId: string;
   nodeKind: string;

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   poolOptions: [] as Record<string, unknown>[],
   poolQuery: vi.fn(),
+  clientQuery: vi.fn(),
+  release: vi.fn(),
 }));
 
 vi.mock('pg', () => ({
@@ -11,6 +13,7 @@ vi.mock('pg', () => ({
       mocks.poolOptions.push(opts);
     }
     query = mocks.poolQuery;
+    connect = async () => ({ query: mocks.clientQuery, release: mocks.release });
   },
 }));
 
@@ -18,6 +21,8 @@ beforeEach(() => {
   vi.resetModules();
   mocks.poolOptions.length = 0;
   mocks.poolQuery.mockReset().mockResolvedValue({ rows: [{ ok: 1 }] });
+  mocks.clientQuery.mockReset().mockResolvedValue({ rows: [{ ok: 1 }] });
+  mocks.release.mockReset();
   delete (globalThis as { __pgPool?: unknown }).__pgPool;
 });
 
@@ -70,5 +75,30 @@ describe('db/client with DATABASE_URL', () => {
     await query('select 2', [1]);
     expect(mocks.poolOptions).toHaveLength(1);
     expect(mocks.poolQuery).toHaveBeenCalledWith('select 2', [1]);
+  });
+});
+
+describe('db/client withTransaction', () => {
+  it('rejects (catchably) without DATABASE_URL', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    const { withTransaction } = await import('./client');
+    await expect(withTransaction(async () => 1)).rejects.toThrow('DATABASE_URL not configured');
+  });
+
+  it('wraps the callback in BEGIN / COMMIT on one connection and releases it', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://u:p@localhost:5432/db');
+    const { withTransaction } = await import('./client');
+    const result = await withTransaction(async (tx) => tx.query('select 1'));
+    expect(result).toEqual([{ ok: 1 }]);
+    expect(mocks.clientQuery.mock.calls.map((c) => c[0])).toEqual(['BEGIN', 'select 1', 'COMMIT']);
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back and rethrows when the callback fails', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://u:p@localhost:5432/db');
+    const { withTransaction } = await import('./client');
+    await expect(withTransaction(async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    expect(mocks.clientQuery.mock.calls.map((c) => c[0])).toEqual(['BEGIN', 'ROLLBACK']);
+    expect(mocks.release).toHaveBeenCalledTimes(1);
   });
 });

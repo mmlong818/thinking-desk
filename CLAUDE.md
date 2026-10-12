@@ -29,17 +29,20 @@ src/
 ├── components/
 │   ├── nodes/               # BriefNode, UsersNode, … SplitNode (one per kind)
 │   └── shell/               # TopBar, NavRail, Copilot, ModelPicker, ExportButton
-├── data/nodes.ts            # Source of truth: NODES array, deps, formatNodeNum()
+├── data/nodes.ts            # Source of truth: NODES array, deps, completion rules, formatNodeNum()
 └── lib/
     ├── ai/
     │   ├── router.ts        # env-var task→provider:model resolution
     │   ├── providers/       # claude.ts, openai.ts, gemini.ts, zhipu.ts (complete() returns one full response)
     │   ├── tasks/           # prompt + Zod schema per task
     │   └── types.ts         # AiTask union — add new tasks here first
+    ├── model/               # Item/Link/Run/DecisionEvent, item-type registry, pure planners, LocalRepository (docs/data-model.md)
     ├── client-cache.ts      # sessionStorage R/W + cookie completion flags
     ├── client-model.ts      # client-side model picker helpers
-    └── db/                  # lazy Postgres pool + schema.sql (optional; query() throws, callers catch)
+    └── db/                  # lazy Postgres pool, withTransaction, PgRepository, schema.sql (optional; query() throws, callers catch)
 ```
+
+Phase 1 data model: `src/lib/model/` + `src/lib/db/pg-repository.ts` are in place but not yet wired into node pages / AI routes, which still use the sessionStorage payloads below. See `docs/data-model.md`.
 
 ## Pure-Local Mode (no Postgres)
 
@@ -68,7 +71,7 @@ final → split
 ## Adding a Node
 
 1. Add `NodeKind` literal to `src/data/nodes.ts` union.
-2. Push a `NodeDef` to `NODES` with correct `deps`.
+2. Push a `NodeDef` to `NODES` with correct `deps` and `completion` rules (item types that must be accepted; register new item types in `src/lib/model/item-types.ts`).
 3. Create `src/components/nodes/YourNode.tsx` — copy `BriefNode.tsx` as template.
 4. Map the new kind in `src/app/project/[id]/[node]/page.tsx`.
 
