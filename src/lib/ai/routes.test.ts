@@ -108,10 +108,13 @@ describe('AI routes · { ok, data } contract', () => {
     expect(features.every((f) => f.rice_score !== 9999)).toBe(true);
   });
 
-  it('free-ask keeps its { text, provider, model } data shape', async () => {
+  it('free-ask keeps its { text, provider, model } data shape and reads the cross-node context', async () => {
     canned.set('FREE_ASK', '先想清楚谁付费？');
-    const { json } = await call('free-ask', { projectSlug: 'demo', nodeKind: 'brief', question: '怎么定价？', history: [] });
+    const { json } = await call('free-ask', {
+      projectSlug: 'demo', nodeKind: 'brief', question: '怎么定价？', history: [], context: '## 01 Brief · [brief·已采纳] 做 AI 陪练',
+    });
     expect(json.data).toEqual({ text: '先想清楚谁付费？', provider: 'claude', model: 'claude-sonnet-5-5' });
+    expect(specs[0].messages[0].content).toContain('做 AI 陪练');
   });
 
   it('add-personas keeps ids unique against the existing pool', async () => {

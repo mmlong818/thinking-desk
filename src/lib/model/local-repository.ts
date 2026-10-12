@@ -48,7 +48,7 @@ export const localBackupKey = (projectId: string): string => `td:v2-corrupt:${pr
 
 /**
  * Pure-local projectId = the decoded URL slug, so `/project/%E9%A1%B9%E7%9B%AE/…` and
- * `/project/项目/…` share one storage key (same normalisation as client-cache).
+ * `/project/项目/…` share one storage key (same normalisation as the completion cookie).
  */
 export function localProjectId(slug: string): string {
   try {

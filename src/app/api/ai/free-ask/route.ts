@@ -15,6 +15,8 @@ const Body = z.object({
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string() }))
     .max(20)
     .default([]),
+  /** Cross-node summary of what the person kept (built in the browser from the items). */
+  context: z.string().max(8000).optional(),
   model: ModelOverrideSchema,
 });
 
@@ -25,9 +27,11 @@ export const POST = aiRoute({
   async handle(body, opts) {
     const meta = getNodeMeta(body.nodeKind);
     if (!meta) throw new RouteError(400, 'invalid node kind');
-    // Cross-node context comes with the node migration (repositories); until then it is empty.
     const res = await freeAsk(
-      { nodeKind: body.nodeKind, nodeLabel: meta.label, contextSummary: '', question: body.question, history: body.history },
+      {
+        nodeKind: body.nodeKind, nodeLabel: meta.label, contextSummary: body.context ?? '',
+        question: body.question, history: body.history,
+      },
       opts,
     );
     return { ...res, data: { text: res.data, provider: res.run.provider, model: res.run.model } };

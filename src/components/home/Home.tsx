@@ -84,7 +84,6 @@ function formatWhen(iso: string): string {
 
 export function Home({ initialProjects, dbError }: Props) {
   const router = useRouter();
-  const [localProjects, setLocalProjects] = useState<LocalProject[]>([]);
   const [projects, setProjects] = useState<UnifiedProject[]>(unify(initialProjects, []));
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -94,7 +93,6 @@ export function Home({ initialProjects, dbError }: Props) {
 
   useEffect(() => {
     const local = listLocalProjects();
-    setLocalProjects(local);
     setProjects(unify(initialProjects, local));
   }, [initialProjects]);
 
@@ -280,7 +278,6 @@ export function Home({ initialProjects, dbError }: Props) {
                   purgeProjectClientData(p.slug);
                   // 本地状态立即移除并刷新
                   setProjects((cur) => cur.filter((x) => x.slug !== p.slug));
-                  setLocalProjects((cur) => cur.filter((x) => x.slug !== p.slug));
                   router.refresh();
                 }}
               />

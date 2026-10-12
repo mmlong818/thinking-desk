@@ -114,6 +114,7 @@ export default async function NodePage({ params }: { params: Promise<{ id: strin
         currentLocked={currentLocked}
         currentMissing={currentMissing}
         nextLockedReason={nextMissing.length ? nextMissing : null}
+        store={project.store}
       />
       <div className="main">
         <NavRail
@@ -122,6 +123,7 @@ export default async function NodePage({ params }: { params: Promise<{ id: strin
           active={def.kind}
           completed={completed}
           lockedKinds={lockedKinds}
+          store={project.store}
         />
         {/* The provider also wraps the lock screen: in pure-local mode it re-derives completion
             from localStorage and refreshes the page when the cookie was stale or missing. */}

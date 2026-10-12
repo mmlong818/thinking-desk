@@ -12,9 +12,9 @@ const eslintConfig = [
     rules: {
       // JSX copy contains many literal quotes that render correctly; escaping them would rewrite UI source text.
       'react/no-unescaped-entities': 'off',
-      // Pre-existing unused imports/vars: reported as warnings instead of blocking CI.
+      // Unused imports/vars fail lint; a leading underscore marks an intentionally unused binding.
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
     },
