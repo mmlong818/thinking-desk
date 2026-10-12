@@ -118,6 +118,7 @@ export async function runTask(spec: RunTaskSpec, deps: RunTaskDeps = DEFAULT_DEP
   const deadline = new Deadline(spec.options?.timeoutMs ?? DEFAULT_TIMEOUT_MS, spec.options?.signal);
   try {
     const target = await resolveTarget(spec, deps, deadline, meta);
+    assertStructuredCapable(spec, target, meta);
     return await attempt(spec, { system, schema }, target, deadline, meta);
   } catch (e) {
     throw failure(e, meta);
@@ -137,6 +138,16 @@ async function resolveTarget(spec: RunTaskSpec, deps: RunTaskDeps, deadline: Dea
     if (e instanceof DeadlineError) throw e;
     throw new RunTaskError('config', e instanceof Error ? e.message : String(e), meta, [], { cause: e });
   }
+}
+
+/** A model the adapter cannot drive with a schema (e.g. GLM-5.3: thinking cannot be disabled) fails fast, unpaid. */
+function assertStructuredCapable(spec: RunTaskSpec, target: ResolvedTarget, meta: RunMeta): void {
+  if (!spec.schema || target.provider.canDrive?.(target.model) !== false) return;
+  throw new RunTaskError(
+    'config',
+    `${target.provider.name}:${target.model} cannot run structured (JSON) tasks; pick another model`,
+    meta,
+  );
 }
 
 interface Prepared {

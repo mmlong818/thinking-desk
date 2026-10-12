@@ -122,6 +122,17 @@ describe('runTask · failures', () => {
     expect(f.requests).toHaveLength(1);
   });
 
+  it('refuses a structured task on a model the adapter cannot drive, before any provider call', async () => {
+    const f = fake({});
+    f.provider.canDrive = (id) => id !== 'm-1';
+    const e = await failure(runTask(spec(), f.deps));
+    expect(e.code).toBe('config');
+    expect(e.message).toMatch(/cannot run structured/);
+    expect(f.requests).toHaveLength(0);
+    const free = await runTask({ task: 'FREE_ASK', system: 's', messages: [] }, f.deps);
+    expect(free.data).toBe(VALID);
+  });
+
   it('classifies routing errors as config', async () => {
     const deps: RunTaskDeps = { resolve: async () => { throw new Error('No AI provider configured.'); }, now: () => 0 };
     const e = await failure(runTask(spec(), deps));

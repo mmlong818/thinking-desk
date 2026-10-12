@@ -41,6 +41,8 @@ Auto-pick (`AI_MODEL_<TASK>=<provider>`) takes the first curated id the provider
 
 A per-call `provider:model` override is never silently replaced. It is rejected (a `config` error) only when the provider's real model list does not contain it; when the list is unavailable — empty, a listing error, or the adapter's offline fallback list (entries marked `fallback: true`) — the requested id is sent as is.
 
+`canDrive(modelId) === false` means the adapter cannot drive that model on structured (schema) tasks — today Zhipu `glm-5.3*`, whose thinking cannot be disabled. `runTask()` refuses such a model for a schema task with a `config` error before any provider call, `/api/providers` reports it as `structured: false`, and the model picker shows it as unavailable (every node task is structured).
+
 ## Request Parameters
 
 | Provider | Structured output | Sampling / effort | Output budget |

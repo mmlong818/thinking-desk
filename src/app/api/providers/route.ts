@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { configuredProviders, listModels } from '@/lib/ai/router';
+import { configuredProviders, listModels, supportsStructured } from '@/lib/ai/router';
 import type { AiProviderName } from '@/lib/ai/types';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,11 @@ export async function GET() {
   const providers = await Promise.all(
     names.map(async (name: AiProviderName) => {
       try {
-        const models = await listModels(name);
+        const models = (await listModels(name)).map((m) => ({
+          ...m,
+          // Every node task is structured; the picker marks the others as unusable for them.
+          structured: supportsStructured(name, m.id),
+        }));
         return { name, configured: true, models };
       } catch (e) {
         return {

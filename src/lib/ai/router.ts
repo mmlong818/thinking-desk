@@ -59,6 +59,11 @@ function sortLatestFirst(models: ModelInfo[]): ModelInfo[] {
   return [...models].sort((a, b) => score(b.id) - score(a.id));
 }
 
+/** False when the adapter cannot drive this model on structured (schema) tasks. */
+export function supportsStructured(name: AiProviderName, modelId: string): boolean {
+  return PROVIDERS[name].canDrive?.(modelId) !== false;
+}
+
 export function configuredProviders(): AiProviderName[] {
   return (Object.keys(PROVIDERS) as AiProviderName[]).filter((n) => PROVIDERS[n].isConfigured());
 }
