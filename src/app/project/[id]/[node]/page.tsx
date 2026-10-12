@@ -78,8 +78,7 @@ async function loadCompleted(slug: string, graph: Graph | null): Promise<NodeKin
   return [];
 }
 
-// Nodes still on the legacy sessionStorage cache get their old (empty) props until migrated.
-const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
+const NODE_COMPONENTS: Record<NodeKind, () => React.ReactNode> = {
   brief: () => <BriefNode />,
   users: () => <UsersNode />,
   stake: () => <StakeholdersNode />,
@@ -88,7 +87,7 @@ const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
   feat: () => <FeaturesNode />,
   leap: () => <LeapNode />,
   final: () => <FinalFeaturesNode />,
-  split: (slug) => <SplitNode projectSlug={slug} />,
+  split: () => <SplitNode />,
 };
 
 export default async function NodePage({ params }: { params: Promise<{ id: string; node: string }> }) {
@@ -130,7 +129,7 @@ export default async function NodePage({ params }: { params: Promise<{ id: strin
           {currentLocked ? (
             <LockedNode projectSlug={project.slug} current={def.kind} missing={currentMissing} />
           ) : (
-            NODE_COMPONENTS[def.kind](project.slug)
+            NODE_COMPONENTS[def.kind]()
           )}
         </ProjectStoreProvider>
       </div>
