@@ -72,11 +72,13 @@ async function post(deps: AiActionDeps, spec: AiActionSpec<unknown>): Promise<{ 
   return { res, json: (await res.json().catch(() => ({}))) as RouteAnswer };
 }
 
-async function recordFailure(deps: AiActionDeps, spec: AiActionSpec<unknown>, run: RunMetaRecord | null) {
+/** Production answers strip the run's error text; the error code still says what went wrong. */
+async function recordFailure(deps: AiActionDeps, spec: AiActionSpec<unknown>, run: RunMetaRecord | null, json: RouteAnswer) {
   if (!run) return;
+  const error = run.error ?? ([json.code, json.error].filter(Boolean).join(': ') || undefined);
   try {
     await deps.repo.saveRunOutput(deps.projectId, {
-      run: toRunInput(run, { node: spec.node, inputs: spec.inputs }), drafts: [], replace: [],
+      run: toRunInput({ ...run, ...(error ? { error } : {}) }, { node: spec.node, inputs: spec.inputs }), drafts: [], replace: [],
     });
   } catch {
     // Recording the failure is best effort; the error the person sees is the AI one.
@@ -99,7 +101,7 @@ export async function runAiAction<T>(deps: AiActionDeps, spec: AiActionSpec<T>):
   const { res, json } = answer;
   const run = parseRun(json.run);
   if (!res.ok || !json.ok || json.data === undefined || !run) {
-    await recordFailure(deps, s, run);
+    await recordFailure(deps, s, run, json);
     return { ok: false, aborted: false, message: failureMessage(json, res.status) };
   }
   const data = json.data as T;

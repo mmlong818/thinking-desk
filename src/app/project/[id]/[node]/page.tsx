@@ -36,7 +36,8 @@ interface ProjectInfo {
  */
 async function loadProject(slug: string): Promise<ProjectInfo> {
   try {
-    const p = await findProjectBySlug(slug);
+    // Route params arrive percent-encoded for non-ASCII slugs (e.g. 冒烟分支-6e50); rows hold the decoded slug.
+    const p = await findProjectBySlug(localProjectId(slug));
     if (p) return { name: p.name, slug: p.slug, store: { mode: 'pg', projectId: p.id } };
   } catch {
     // DB unavailable — fall through.

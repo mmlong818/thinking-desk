@@ -44,7 +44,7 @@ describe('runAiAction', () => {
     const t = deps({ status: 504, body: { error: 'ai_failed', code: 'timeout', run: { ...run, status: 'failed' } } });
     const out = await runAiAction(t.d, spec);
     expect(out).toEqual({ ok: false, aborted: false, message: 'AI 响应超时，请稍后重试' });
-    expect((await t.repo.listRuns(PID)).map((r) => r.status)).toEqual(['failed']);
+    expect((await t.repo.listRuns(PID)).map((r) => [r.status, r.error])).toEqual([['failed', 'timeout: ai_failed']]);
     expect((await t.repo.getGraph(PID)).items).toEqual([]);
   });
 
