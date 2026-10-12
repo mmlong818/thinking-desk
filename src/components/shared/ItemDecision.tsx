@@ -52,12 +52,14 @@ interface DecisionProps {
   variant?: 'compact' | 'full';
   /** Return a message to block accepting (e.g. "最多深入 3 个情景"). */
   guardAccept?: () => string | null;
+  /** Set to explain why this item cannot be rejected (e.g. baseline stakeholders). */
+  rejectBlocked?: string;
   /** Shows a ✎ toggle when given. */
   onToggleEdit?: () => void;
   editing?: boolean;
 }
 
-export function ItemDecision({ item, variant = 'compact', guardAccept, onToggleEdit, editing }: DecisionProps) {
+export function ItemDecision({ item, variant = 'compact', guardAccept, rejectBlocked, onToggleEdit, editing }: DecisionProps) {
   const actions = useItemActions();
   const [noting, setNoting] = useState(false);
   const [guardError, setGuardError] = useState<string | null>(null);
@@ -77,7 +79,10 @@ export function ItemDecision({ item, variant = 'compact', guardAccept, onToggleE
       <div className="idc-row">
         {full ? <DecisionBadge item={item} /> : null}
         <DecisionButton kind="accept" on={item.decision === 'accepted'} full={full} disabled={busy} onClick={onAccept} />
-        <DecisionButton kind="reject" on={item.decision === 'rejected'} full={full} disabled={busy} onClick={onReject} />
+        <DecisionButton
+          kind="reject" on={item.decision === 'rejected'} full={full} disabled={busy || (!!rejectBlocked && item.decision !== 'rejected')}
+          onClick={onReject} titleOverride={rejectBlocked}
+        />
         {onToggleEdit ? (
           <button type="button" className={`idc-btn edit ${editing ? 'on' : ''}`} onClick={onToggleEdit} title="编辑这一条" aria-pressed={editing}>
             ✎{full ? ' 编辑' : ''}
@@ -100,15 +105,17 @@ export function ItemDecision({ item, variant = 'compact', guardAccept, onToggleE
   );
 }
 
-function DecisionButton({ kind, on, full, disabled, onClick }: {
+function DecisionButton({ kind, on, full, disabled, onClick, titleOverride }: {
   kind: 'accept' | 'reject';
   on: boolean;
   full: boolean;
   disabled: boolean;
   onClick: () => void;
+  titleOverride?: string;
 }) {
   const accept = kind === 'accept';
-  const title = accept ? (on ? '撤销采纳（回到待定）' : '采纳这一条') : on ? '撤销否决（回到待定）' : '否决这一条（可写理由，AI 下次会避开）';
+  const title = titleOverride
+    ?? (accept ? (on ? '撤销采纳（回到待定）' : '采纳这一条') : on ? '撤销否决（回到待定）' : '否决这一条（可写理由，AI 下次会避开）');
   return (
     <button type="button" className={`idc-btn ${kind} ${on ? 'on' : ''}`} onClick={onClick} disabled={disabled} title={title} aria-pressed={on}>
       {accept ? '✓' : '✗'}

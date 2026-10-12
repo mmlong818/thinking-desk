@@ -82,7 +82,7 @@ async function loadCompleted(slug: string, graph: Graph | null): Promise<NodeKin
 const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
   brief: (slug) => <BriefNode projectSlug={slug} />,
   users: (slug) => <UsersNode projectSlug={slug} brief={null} />,
-  stake: (slug) => <StakeholdersNode projectSlug={slug} brief={null} usersContent={null} />,
+  stake: () => <StakeholdersNode />,
   alt: (slug) => <AlternativesNode projectSlug={slug} brief={null} usersContent={null} />,
   scen: (slug) => <ScenariosNode projectSlug={slug} brief={null} usersContent={null} />,
   feat: (slug) => (

@@ -1539,3 +1539,6 @@ html, body {
 .item-fields { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin-top: 10px; padding: 10px 12px; background: var(--paper); border: 1px dashed var(--rule); border-radius: 5px; font-size: 13px; }
 .item-field { display: contents; }
 .item-field-label { font-size: 11.5px; color: var(--ink-4); padding-top: 3px; }
+.stake-row { grid-template-columns: 24px 1fr auto; }
+.stake-row-mark { font-size: 16px; color: var(--ink-4); padding-top: 2px; text-align: center; }
+.stake-row.selected .stake-row-mark { color: var(--accent); }

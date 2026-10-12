@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { formatNodeNum, type NodeKind } from '@/data/nodes';
+import type { Item } from '@/lib/model/item-types';
 
 // Small building blocks every node page shares.
 
@@ -71,4 +72,14 @@ export function CenteredAction({ label, onClick, disabled }: { label: ReactNode;
       </button>
     </div>
   );
+}
+
+/**
+ * Re-running a task rewrites its singleton (brief, engagement plan, differentiation hypothesis)
+ * in place. When the person already judged or edited it, ask first; the old body stays in the
+ * item's history (DecisionEvent.prevBody).
+ */
+export function confirmSingletonOverwrite(item: Item | undefined, label: string): boolean {
+  if (!item || (item.decision === 'pending' && item.origin === 'ai')) return true;
+  return window.confirm(`重新生成会改写你已裁决或修改过的「${label}」（旧内容保留在历史记录里），改写后需要重新采纳。继续？`);
 }

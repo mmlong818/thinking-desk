@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readPreferredModel } from '@/lib/client-model';
-import { runAiAction, type AiActionSpec } from '@/lib/store/ai-action';
-import type { SaveRunResult } from '@/lib/model/repository';
+import { runAiAction, type AiActionOutcome, type AiActionSpec } from '@/lib/store/ai-action';
 import { useProject } from './ProjectStore';
 
 // One AI action at a time per hook: calls the route with the picked model, saves the run and
@@ -15,7 +14,8 @@ export interface AiActionState {
   running: string | null;
   error: string | null;
   setError: (message: string | null) => void;
-  run: <T>(key: string, spec: AiActionSpec<T>) => Promise<{ data: T; result: SaveRunResult } | null>;
+  /** Resolves with the outcome; failures also land in `error` (aborts do not). */
+  run: <T>(key: string, spec: AiActionSpec<T>) => Promise<AiActionOutcome<T>>;
 }
 
 export function useAiAction(): AiActionState {
@@ -37,10 +37,11 @@ export function useAiAction(): AiActionState {
     try {
       const out = await runAiAction(deps, { ...spec, body: { ...spec.body, ...(model ? { model } : {}) } });
       if (!out.ok && !out.aborted) setError(out.message);
-      return out.ok ? { data: out.data, result: out.result } : null;
+      return out;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      return null;
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      return { ok: false as const, aborted: false, message };
     } finally {
       if (ctrlRef.current === ctrl) {
         ctrlRef.current = null;

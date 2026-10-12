@@ -40,7 +40,7 @@ export function FollowUpsPanel({ node, items }: { node: NodeKind; items: readonl
     void ai.run<{ follow_ups: FollowUpItem[] }>('derive', {
       route: '/api/ai/derive-follow-ups', body: { nodeKind: node, content: contentOf(items) }, node, inputs: inputsOf(items),
     }).then((res) => {
-      if (!res) return;
+      if (!res.ok) return;
       const next = { items: res.data.follow_ups, answers: {} };
       writeUi(store.projectId, key, next);
       setState(next);
