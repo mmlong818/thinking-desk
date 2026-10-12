@@ -46,7 +46,9 @@ if (!IS_DEV) {
 }
 
 const config: NextConfig = {
-  output: 'standalone',
+  // Docker/CI opt in. On Windows, standalone output symlinks into pnpm node_modules
+  // and the next build's .next cleanup deletes through those links.
+  output: process.env.NEXT_OUTPUT_STANDALONE === 'true' ? 'standalone' : undefined,
   async headers() {
     return [
       {
