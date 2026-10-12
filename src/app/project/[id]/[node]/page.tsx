@@ -84,7 +84,7 @@ const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
   users: () => <UsersNode />,
   stake: () => <StakeholdersNode />,
   alt: () => <AlternativesNode />,
-  scen: (slug) => <ScenariosNode projectSlug={slug} brief={null} usersContent={null} />,
+  scen: () => <ScenariosNode />,
   feat: (slug) => (
     <FeaturesNode projectSlug={slug} brief={null} usersContent={null} scenContent={null} altContent={null} />
   ),
