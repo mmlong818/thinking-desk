@@ -1,20 +1,20 @@
 # Thinking Desk · 思考工作台
 
-> A structured design-thinking workbench with AI as a thinking partner — not an answer machine.
+> A structured design-thinking workbench where the AI does the heavy lifting — and you make the calls.
 
-> AI 陪伴下的结构化设计思考工作台——AI 是思考伙伴，不是答题机。
+> AI 主导产出的结构化设计思考工作台——AI 给出分析、方案与理由，由你来判断与裁决。
 
 ---
 
 ## What is this? · 这是什么？
 
-Thinking Desk guides you through a **9-node design methodology** — from a raw brief all the way to a validated feature list — with AI that challenges assumptions, surfaces blind spots, and helps you think more rigorously.
+Thinking Desk guides you through a **9-node design methodology** — from a raw brief all the way to an executable task breakdown. At each step the AI draws on knowledge far wider than any one person holds: it produces the analysis, proposes options and explains its reasons. You judge and decide.
 
-思考工作台通过**九节点设计方法论**，带你从一份粗糙的项目简报，走到经过验证的功能列表。AI 的角色是质疑假设、暴露盲点、推动更严谨的思考。
+思考工作台通过**九节点设计方法论**，带你从一份粗糙的项目简报，走到可执行的任务拆分。每一步由 AI 发挥知识面广的优势：给出分析、提出选项并说明理由；由你来判断与裁决。
 
-Each node is a structured workspace. You write, the AI questions. You refine, the AI pushes further. The output is a chain of thinking you can trace back and export.
+Each node is a structured workspace. The AI drafts the first version — analysis, options and the reasoning behind them. You review it, edit, keep or reject items, and ask for another pass. The output is a chain of decisions you can trace back and export.
 
-每个节点都是一个结构化工作区：你写，AI 追问；你完善，AI 继续挑战。最终产出是一条可追溯、可导出的完整思考链。
+每个节点都是一个结构化工作区：AI 先给出初稿——分析、选项以及背后的理由；你审阅、修改、取舍，并可要求再来一轮。最终产出是一条可追溯、可导出的决策链。
 
 ---
 
@@ -28,9 +28,9 @@ Each node is a structured workspace. You write, the AI questions. You refine, th
 | **Researchers · 研究者** | Systematically map stakeholders, scenarios, and alternatives / 系统化地梳理干系人、情景与替代方案 |
 | **Teams · 团队** | A shared thinking record anyone can pick up mid-stream / 可随时接手的共享思考记录 |
 
-**Not for:** pure content generation, coding assistance, or quick Q&A. This tool rewards slow, deliberate thinking.
+**Not for:** pure content generation, coding assistance, or quick Q&A. Thinking Desk is built for product-thinking work: the AI proposes, but the output only counts once a person has judged and decided.
 
-**不适合：** 纯内容生成、编程辅助或快问快答。这个工具奖励的是缓慢而刻意的思考。
+**不适合：** 纯内容生成、编程辅助或快问快答。思考工作台面向产品思考：AI 负责提案，只有经过人的判断与裁决，产出才算数。
 
 ---
 
@@ -38,7 +38,7 @@ Each node is a structured workspace. You write, the AI questions. You refine, th
 
 ```
 Brief → Users & Jobs → Stakeholders → Alternatives
-  → Scenarios → Feature List → Creative Leap → Final Features → Export
+  → Scenarios → Feature List → Creative Leap → Design Proposal → Subfeature Split
 ```
 
 | # | Node · 节点 | Purpose · 目的 |
@@ -48,10 +48,14 @@ Brief → Users & Jobs → Stakeholders → Alternatives
 | 03 | Stakeholders | Surface hidden interests and tensions · 暴露隐藏的利益与张力 |
 | 04 | Alternatives | What already exists; what you're really up against · 现有方案；你真正面对的竞争 |
 | 05 | Scenarios | Concrete use moments — including pain points · 具体使用时刻，包括痛点 |
-| 06 | Feature List | Draft features grounded in scenarios · 基于情景的功能草稿 |
-| 07 | Creative Leap | First-principles reframe · 第一性原理重构 |
-| 08 | Final Features | Validated, prioritized feature set · 经验证、有优先级的功能集 |
-| 09 | Export | Full thinking chain as a shareable document · 完整思考链导出为可分享文档 |
+| 06 | Feature List | The conventional market feature set, scored with Kano and RICE · 基于情景的功能草稿 |
+| 07 | Creative Leap | Reframe via first principles, analogies and constraint flips · 用第一性原理、类比迁移与约束反转重构 |
+| 08 | Design Proposal | Turn features into a full design document · 把功能整合成完整设计案 |
+| 09 | Subfeature Split | Break the design into executable tasks · 把设计拆成可执行的子功能任务 |
+
+The whole chain can be exported as Markdown or JSON from the top bar.
+
+整条思考链可从顶栏导出为 Markdown 或 JSON。
 
 ---
 
@@ -121,14 +125,26 @@ AI_MODEL_DEFAULT=openai:gpt-6.1-sol
 Requires Node 22+ and pnpm.
 
 ```bash
-git clone https://github.com/totoroo/thinking-desk.git
+git clone https://github.com/mmlong818/thinking-desk.git
 cd thinking-desk
 cp .env.example .env
 # Edit .env — add at least one API key
 pnpm install
-docker compose up -d db        # local Postgres
-pnpm db:init                   # run schema
 pnpm dev                       # http://localhost:3000
+```
+
+Postgres is optional. Without `DATABASE_URL` the app runs in pure-local mode (browser sessionStorage + a completion cookie). To add Postgres:
+
+Postgres 是可选的。未设置 `DATABASE_URL` 时应用以纯本地模式运行（浏览器 sessionStorage + 完成状态 cookie）。如需接入 Postgres：
+
+```bash
+docker compose up -d db        # local Postgres; schema.sql is applied on first boot
+```
+
+Checks run by CI (and worth running before a PR) · CI 会执行的检查：
+
+```bash
+pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 
 ### Option B: Docker · Docker 部署
@@ -155,12 +171,18 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 ### Required · 必填
 
 ```env
-DATABASE_URL=postgres://desk:desk@localhost:5432/thinking_desk
 # At least one of: · 至少填一个：
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 GEMINI_API_KEY=
 ZHIPU_API_KEY=
+```
+
+### Optional · 可选
+
+```env
+# Omit for pure-local mode (no Postgres). · 不填则为纯本地模式（无需 Postgres）。
+DATABASE_URL=postgres://desk:desk@localhost:5432/thinking_desk
 ```
 
 ### Security (for public deployments) · 安全（公开部署时建议开启）
@@ -172,6 +194,10 @@ RATE_LIMIT_MAX=20                      # requests per window per IP
 RATE_LIMIT_WINDOW_MS=60000
 ```
 
+With Docker, add these variables to the `app` service `environment:` in `docker-compose.yml` — it only forwards the variables it lists explicitly (the same applies to `AI_MODEL_<TASK>` overrides beyond the defaults it declares).
+
+使用 Docker 时，需要把这些变量加到 `docker-compose.yml` 中 `app` 服务的 `environment:` 下——compose 只会透传显式列出的变量（除其默认声明的几个之外，`AI_MODEL_<TASK>` 覆盖项同理）。
+
 ---
 
 ## Project Structure · 目录结构
@@ -182,19 +208,24 @@ src/
 │   ├── layout.tsx
 │   ├── page.tsx
 │   ├── project/[id]/[node]/page.tsx
-│   └── api/ai/                  # AI server routes
+│   └── api/
+│       ├── ai/                  # one route per AI task
+│       ├── projects/            # project list / create
+│       └── providers/           # configured providers + models
+├── middleware.ts                # optional bearer auth + per-IP rate limit for /api
 ├── components/
-│   ├── shell/                   # TopBar · NavRail · Copilot
+│   ├── shell/                   # TopBar · NavRail · Copilot · ModelPicker · ExportButton
 │   └── nodes/                   # Per-node workspace UI
 ├── lib/
 │   ├── ai/
-│   │   ├── providers/           # claude / openai / gemini / zhipu adapters
+│   │   ├── providers/           # claude.ts / openai.ts / gemini.ts / zhipu.ts adapters
 │   │   ├── router.ts            # task → provider:model routing
 │   │   ├── tasks/               # prompt + schema per AI task
 │   │   └── types.ts
+│   ├── client-cache.ts          # sessionStorage + completion cookie (pure-local mode)
 │   └── db/
 │       ├── schema.sql
-│       ├── client.ts
+│       ├── client.ts            # lazy pg Pool
 │       └── projects.ts
 └── data/
     └── nodes.ts                 # 9-node definitions
@@ -208,7 +239,7 @@ src/
 2. Write prompt + Zod schema in `src/lib/ai/tasks/xxx.ts`
 3. Expose a server route at `src/app/api/ai/xxx/route.ts`
 4. Call it from the node component
-5. Optionally pin a model: `AI_MODEL_XXX=provider:model` in `.env`
+5. Optionally pin a model: `AI_MODEL_XXX=provider:model` in `.env` (and document it in `.env.example`)
 
 ---
 
@@ -216,8 +247,9 @@ src/
 
 - **Next.js 15** (App Router + Turbopack) · React 19 · TypeScript 5
 - **Tailwind CSS 3**
-- **Postgres 16** — projects, nodes, AI exchange log, assumption ledger
-- **@anthropic-ai/sdk** · OpenAI SDK · Gemini SDK · Zhipu SDK
+- **Postgres 16** (optional) — projects, nodes, AI exchange log; `schema.sql` also defines `assumptions` and `comments` tables that the app does not use yet
+- **@anthropic-ai/sdk** for Claude; OpenAI, Gemini and Zhipu are called with plain `fetch`
+- **Vitest** for unit tests · **ESLint** (`next/core-web-vitals`) · GitHub Actions CI
 
 ---
 

@@ -12,7 +12,9 @@ Alpha product-thinking tool. 9 sequential nodes walk a user through problem clar
 ./setup.sh              # install deps, create .env
 pnpm dev                # http://localhost:3000
 pnpm typecheck          # tsc --noEmit
-pnpm lint               # next lint
+pnpm lint               # next lint (ESLint 9 flat config, eslint.config.mjs)
+pnpm test               # vitest run (unit tests live next to the code as *.test.ts)
+pnpm build              # next build — must pass without DATABASE_URL / API keys
 docker compose up -d db # optional Postgres (auto-runs schema.sql)
 ```
 
@@ -21,7 +23,8 @@ docker compose up -d db # optional Postgres (auto-runs schema.sql)
 ```
 src/
 ├── app/
-│   ├── api/ai/              # Streaming AI route handlers (one dir per task)
+│   ├── api/ai/              # AI route handlers (one dir per task, JSON responses)
+│   ├── api/projects|providers/  # project list/create · configured providers + models
 │   └── project/[id]/[node]/ # SSR node pages; reads cookie for lock state
 ├── components/
 │   ├── nodes/               # BriefNode, UsersNode, … SplitNode (one per kind)
@@ -30,12 +33,12 @@ src/
 └── lib/
     ├── ai/
     │   ├── router.ts        # env-var task→provider:model resolution
-    │   ├── providers/       # anthropic.ts, openai.ts, gemini.ts, zhipu.ts
+    │   ├── providers/       # claude.ts, openai.ts, gemini.ts, zhipu.ts (complete() returns one full response)
     │   ├── tasks/           # prompt + Zod schema per task
     │   └── types.ts         # AiTask union — add new tasks here first
     ├── client-cache.ts      # sessionStorage R/W + cookie completion flags
     ├── client-model.ts      # client-side model picker helpers
-    └── db/                  # Postgres pool + schema.sql (gracefully optional)
+    └── db/                  # lazy Postgres pool + schema.sql (optional; query() throws, callers catch)
 ```
 
 ## Pure-Local Mode (no Postgres)
@@ -46,7 +49,7 @@ When `DATABASE_URL` is absent or the DB is unreachable the app falls back to:
 2. **Cookie** `td-done:<slug>` — comma-separated list of completed `NodeKind`s.
    - Written client-side by `writeCache()` in `client-cache.ts`.
    - Read server-side by `app/project/[id]/[node]/page.tsx` to skip the lock screen.
-   - Contains only kind names (no content) — stays well under 4 KB.
+   - Contains only kind names (no content) — stays well under 4 KB. Long slugs use the hashed name `td-done-h:<hash>`; use `cookieNameCandidates(slug)` to find it.
 
 Gotcha: `sessionStorage` is tab-scoped. Opening a second tab for the same project in pure-local mode will not show the other tab's data.
 
@@ -73,7 +76,7 @@ final → split
 
 1. Add literal to `AiTask` in `src/lib/ai/types.ts`.
 2. Create `src/lib/ai/tasks/your-task.ts` — prompt builder + Zod schema.
-3. Create `src/app/api/ai/your-task/route.ts` — streaming POST handler.
+3. Create `src/app/api/ai/your-task/route.ts` — POST handler that calls the task and returns JSON (no streaming; providers expose a single `complete()`).
 4. Document `AI_MODEL_YOUR_TASK` in `.env.example`.
 
 ## AI Model Routing
@@ -81,7 +84,7 @@ final → split
 `src/lib/ai/router.ts` reads `process.env.AI_MODEL_<TASK>`. Format:
 
 - `claude` — auto-pick a model from the Anthropic provider
-- `claude:claude-sonnet-4-5` — pin a specific model ID
+- `claude:claude-sonnet-4-6` — pin a specific model ID
 - Falls back to `AI_MODEL_DEFAULT`, then first configured provider.
 
 ## Common Gotchas
@@ -89,7 +92,7 @@ final → split
 - **`formatNodeNum(kind)`** in `data/nodes.ts` generates the `NODE · 08 / 09` header. Do not hardcode node numbers in components.
 - **`forkCache(fromSlug, toSlug)`** copies all sessionStorage entries when branching a project — call this before navigating to the new slug.
 - **Turbopack** (`pnpm dev --turbopack`) is the default dev server. If you hit a Turbopack-specific build error, try `pnpm dev` without `--turbopack` to isolate.
-- **`src/lib/db/`** — all DB calls must be graceful; wrap in try/catch and fall back to `null` so pure-local mode works.
+- **`src/lib/db/`** — `query()` throws when `DATABASE_URL` is unset or the DB is unreachable (the pool is created lazily on first query, 3 s connect timeout). Every caller must wrap DB calls in try/catch and degrade, so pure-local mode works.
 - **No `any`** — TypeScript strict mode. Use `unknown` + type guards or Zod parsing.
 
 ## Environment Variables
@@ -103,3 +106,6 @@ final → split
 | `ZHIPU_API_KEY` | At least one | Zhipu GLM provider |
 | `AI_MODEL_DEFAULT` | No | Fallback routing (`provider` or `provider:model`) |
 | `AI_MODEL_<TASK>` | No | Per-task override; task names from `AiTask` union |
+| `REQUIRE_AUTH` / `REQUIRE_AUTH_TOKEN` | No | `middleware.ts`: require `Authorization: Bearer <token>` on `/api/*` |
+| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | No | `middleware.ts`: per-IP in-memory limit on `/api/ai/*` (default 20 / 60 s) |
+| `*_BASE_URL`, `ALLOW_CUSTOM_AI_BASE_URL` | No | Provider endpoints; non-vendor hosts are rejected unless `ALLOW_CUSTOM_AI_BASE_URL=true` |
