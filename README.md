@@ -194,9 +194,9 @@ RATE_LIMIT_MAX=20                      # requests per window per IP
 RATE_LIMIT_WINDOW_MS=60000
 ```
 
-With Docker, add these variables to the `app` service `environment:` in `docker-compose.yml` — it only forwards the variables it lists explicitly (the same applies to `AI_MODEL_<TASK>` overrides beyond the defaults it declares).
+With Docker, set these in `.env` next to `docker-compose.yml`; the `app` service forwards them, along with every `AI_MODEL_<TASK>` override and `ALLOW_CUSTOM_AI_BASE_URL`.
 
-使用 Docker 时，需要把这些变量加到 `docker-compose.yml` 中 `app` 服务的 `environment:` 下——compose 只会透传显式列出的变量（除其默认声明的几个之外，`AI_MODEL_<TASK>` 覆盖项同理）。
+使用 Docker 时，在 `docker-compose.yml` 同目录的 `.env` 里设置即可；`app` 服务会透传这些变量，以及全部 `AI_MODEL_<TASK>` 覆盖项和 `ALLOW_CUSTOM_AI_BASE_URL`。
 
 ---
 
