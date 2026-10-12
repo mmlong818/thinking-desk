@@ -7,9 +7,8 @@ import { DIMENSION_KEYS } from '@/lib/ai/schemas/analyze-scenarios';
 import { adaptDeepAnalysis, adaptDimensions, adaptScenarioDrafts } from '@/lib/model/adapters';
 import { inputsOf, type BriefRequestContext } from '@/lib/model/context';
 import { buildFeedback } from '@/lib/model/feedback';
-import type { Link } from '@/lib/model/types';
-import { briefPayload, jobPayload, linkedIds, personaPayload } from '@/lib/store/request-context';
-import { accepted, MAX_DEEP, type ElementItem, type ScenarioItem } from './scen-meta';
+import { briefPayload, jobPayload, personaPayload, scenarioPayload } from '@/lib/store/request-context';
+import { accepted, MAX_DEEP, type ElementItem } from './scen-meta';
 
 interface Ctx {
   ai: AiActionState;
@@ -38,15 +37,6 @@ function dimensionsPayload(elements: ElementItem[]) {
       dim,
       live.filter((e) => e.body.dim === dim).map((e) => ({ id: e.id, text: e.body.text, relevance: e.body.relevance })),
     ])),
-  };
-}
-
-export function scenarioPayload(s: ScenarioItem, links: readonly Link[], jobIds: ReadonlySet<string>) {
-  const targets = (rel: 'derived_from' | 'serves') => linkedIds(links, s.id, rel);
-  return {
-    id: s.id, title: s.body.title, meta: s.body.meta, narrative: s.body.narrative, pain_hint: s.body.pain_hint,
-    element_ids: targets('derived_from'),
-    job_ids: targets('serves').filter((id) => jobIds.has(id)),
   };
 }
 

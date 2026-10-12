@@ -85,9 +85,7 @@ const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
   stake: () => <StakeholdersNode />,
   alt: () => <AlternativesNode />,
   scen: () => <ScenariosNode />,
-  feat: (slug) => (
-    <FeaturesNode projectSlug={slug} brief={null} usersContent={null} scenContent={null} altContent={null} />
-  ),
+  feat: () => <FeaturesNode />,
   leap: (slug) => (
     <LeapNode projectSlug={slug} brief={null} usersContent={null} featContent={null} altContent={null} />
   ),

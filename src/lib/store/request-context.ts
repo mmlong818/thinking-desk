@@ -42,3 +42,22 @@ export function jobsByDimension(jobs: readonly ItemOfType<'job'>[], links: reado
     jobs.filter((j) => j.body.dimension === d).map((j) => jobPayload(j, links));
   return { functional: pick('functional'), emotional: pick('emotional'), social: pick('social') };
 }
+
+/** A scenario for later prompts: element / job references come back from its Links. */
+export function scenarioPayload(s: ItemOfType<'scenario'>, links: readonly Link[], jobIds: ReadonlySet<string>) {
+  return {
+    id: s.id, title: s.body.title, meta: s.body.meta, narrative: s.body.narrative, pain_hint: s.body.pain_hint,
+    element_ids: linkedIds(links, s.id, 'derived_from'),
+    job_ids: linkedIds(links, s.id, 'serves').filter((id) => jobIds.has(id)),
+  };
+}
+
+/** An insight digest (features prompt): its scenario / job come from its Links. */
+export function insightPayload(i: ItemOfType<'insight'>, links: readonly Link[]) {
+  const [scenarioId] = linkedIds(links, i.id, 'derived_from');
+  const [jobId] = linkedIds(links, i.id, 'serves');
+  return {
+    id: i.id, insight_text: i.body.insight_text, action: i.body.action,
+    scenario_id: scenarioId ?? '', ...(jobId ? { job_id: jobId } : {}),
+  };
+}
