@@ -6,11 +6,10 @@ import { validateBaseUrl } from './validate-base-url';
 // Zhipu doesn't always expose /models reliably. We probe and fall back to a
 // curated list of currently-usable models if the endpoint is unreachable.
 const ZHIPU_FALLBACK = [
-  { id: 'glm-4-plus',    label: 'GLM-4 Plus · 旗舰' },
-  { id: 'glm-4-air',     label: 'GLM-4 Air · 性价比' },
-  { id: 'glm-4-long',    label: 'GLM-4 Long · 长上下文' },
-  { id: 'glm-4-flash',   label: 'GLM-4 Flash · 超快' },
-  { id: 'glm-zero-preview', label: 'GLM-Zero · 推理预览' },
+  { id: 'glm-5.2',       label: 'GLM-5.2 · 旗舰' },
+  { id: 'glm-5.1',       label: 'GLM-5.1 · 推理 / Agent' },
+  { id: 'glm-5-turbo',   label: 'GLM-5 Turbo · 快速' },
+  { id: 'glm-4.7-flash', label: 'GLM-4.7 Flash · 免费' },
 ];
 
 function safeParseJson(raw: string): unknown {

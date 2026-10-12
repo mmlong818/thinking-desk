@@ -57,63 +57,60 @@ Brief → Users & Jobs → Stakeholders → Alternatives
 
 ## Model Recommendations · 模型选择建议
 
-Thinking Desk routes different AI tasks to different models. Here is what works well:
+Thinking Desk routes different AI tasks to different models. Here is what works well (model IDs checked 2026-10-12):
 
-思考工作台对不同任务路由不同模型，以下是推荐配置：
+思考工作台对不同任务路由不同模型，以下是推荐配置（模型 ID 核对于 2026-10-12）：
 
 ### Recommended setup · 推荐配置
 
 ```env
-# Main reasoning tasks — Claude is the best choice for structured thinking
-# 主推理任务 —— Claude 是结构化思考的最佳选择
+# Default for every task — Claude is the best choice for structured JSON output
+# 所有任务的默认模型 —— Claude 是结构化 JSON 输出的最佳选择
 AI_MODEL_DEFAULT=claude:claude-sonnet-4-6
+
+# Optional per-task pins (any task in the AiTask union, see .env.example)
+# 可选的按任务指定（AiTask 中的任意任务，完整列表见 .env.example）
 AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-4-6
 AI_MODEL_USERS_JTBD=claude:claude-sonnet-4-6
 AI_MODEL_STAKE_MATRIX=claude:claude-sonnet-4-6
 AI_MODEL_SCEN_FEED=claude:claude-sonnet-4-6
 AI_MODEL_FEAT_DRAFT=claude:claude-sonnet-4-6
-AI_MODEL_FEAT_THREE_Q=claude:claude-sonnet-4-6
 AI_MODEL_LEAP_FIRST_PRINCIPLES=claude:claude-sonnet-4-6
 
-# Web search task — Gemini has grounding/search built in
-# 联网搜索任务 —— Gemini 内置搜索能力
-AI_MODEL_ALT_SCAN=gemini:gemini-3
-
-# Chinese long-context / history retrieval — Zhipu excels here
-# 中文长上下文 / 历史项目检索 —— 智谱在此表现突出
-AI_MODEL_HISTORY_SEARCH=zhipu:glm-5
+# Web search task — Gemini has Google Search grounding built in
+# 联网搜索任务 —— Gemini 内置 Google 搜索接地
+AI_MODEL_ALT_SCAN=gemini:gemini-3.8-flash
 ```
 
 ### Why these models? · 为什么选这些模型？
 
 **Claude (Anthropic) — default for most tasks**
-Claude produces tight, structured JSON output with strong reasoning. It follows complex prompts faithfully and rarely hallucinates structured data. `claude-sonnet-4-5` balances capability and cost well; upgrade to `claude-opus-4-5` for deeper reasoning on hard problems.
+Claude produces tight, structured JSON output with strong reasoning and follows complex prompts faithfully. `claude-sonnet-4-6` is the newest Claude generation compatible with the request parameters Thinking Desk sends (`temperature`, no `thinking` field): Sonnet 5.x and Opus 4.7+ reject non-default sampling parameters with HTTP 400. Upgrade to `claude-opus-4-6` for deeper reasoning on hard problems.
 
 **Claude（Anthropic）—— 大多数任务的默认选择**
-Claude 能生成紧凑的结构化 JSON 输出，推理能力强，忠实遵循复杂提示词，结构化数据幻觉率低。`claude-sonnet-4-5` 在能力和成本之间取得良好平衡；复杂问题可升级到 `claude-opus-4-7`。
+Claude 能生成紧凑的结构化 JSON 输出，推理能力强，忠实遵循复杂提示词。`claude-sonnet-4-6` 是与当前请求参数（`temperature`、不传 `thinking`）兼容的最新 Claude 代际：Sonnet 5.x 与 Opus 4.7+ 对非默认采样参数会返回 HTTP 400。复杂问题可升级到 `claude-opus-4-6`。
 
-**Gemini (Google) — web search tasks only**
-The `ALT_SCAN` task needs real-time competitive intelligence. Gemini's native search grounding makes it the right tool for this specific job. For all other tasks, Claude or OpenAI is preferred.
+**Gemini (Google) — web search task**
+The `ALT_SCAN` task needs real-time competitive intelligence. The Gemini adapter enables Google Search grounding for it, which makes Gemini the right tool for this specific job. `gemini-3.8-flash` is the current GA fast model. For all other tasks, Claude or OpenAI is preferred.
 
-**Gemini（Google）—— 仅用于联网搜索任务**
-`ALT_SCAN` 任务需要实时竞品情报。Gemini 的原生搜索接地能力让它成为这个特定任务的最佳选择。其他任务仍推荐 Claude 或 OpenAI。
+**Gemini（Google）—— 联网搜索任务**
+`ALT_SCAN` 任务需要实时竞品情报。Gemini 适配器会为它启用 Google 搜索接地，因此 Gemini 是这个任务的最佳选择。`gemini-3.8-flash` 是当前 GA 的快速模型。其他任务仍推荐 Claude 或 OpenAI。
 
-**Zhipu GLM (智谱) — Chinese long-context tasks**
-`HISTORY_SEARCH` retrieves and summarizes past project records in Chinese. GLM models are optimized for Chinese long-context comprehension and are cost-effective for retrieval workloads.
+**Zhipu GLM (智谱) — Chinese-language alternative**
+GLM models are optimized for Chinese and are cost-effective. Use `glm-5.2` (not `glm-5.3`: its thinking cannot be disabled, while the Zhipu adapter sends `thinking: disabled` for JSON tasks). The adapter also supports web search for `ALT_SCAN`.
 
-**智谱 GLM —— 中文长上下文任务**
-`HISTORY_SEARCH` 需要检索和总结中文历史项目记录。GLM 系列模型针对中文长上下文理解进行了优化，在检索任务上性价比突出。
+**智谱 GLM —— 中文场景备选**
+GLM 系列针对中文优化，性价比高。推荐 `glm-5.2`（不要用 `glm-5.3`：它的思考不可关闭，而智谱适配器在 JSON 任务里会传 `thinking: disabled`）。适配器同样支持 `ALT_SCAN` 的联网搜索。
 
 ### OpenAI as an alternative · OpenAI 作为替代
 
 If you only have an OpenAI key, set:
 ```env
-AI_MODEL_DEFAULT=openai:gpt-5
-AI_MODEL_ALT_SCAN=openai:gpt-5-search-preview
+AI_MODEL_DEFAULT=openai:gpt-6.1-sol
 ```
-OpenAI works well across all tasks. The `gpt-5-search-preview` variant handles web search for `ALT_SCAN`.
+`gpt-6.1-sol` is OpenAI's recommended sub-flagship ("near-Astra" quality at $2/$10 per 1M tokens). The OpenAI adapter does not request web search, so `ALT_SCAN` runs without live search; use Gemini or Zhipu for that task if you need it.
 
-如果你只有 OpenAI 的 key，将以上配置替换为 `openai:gpt-5` 即可。搜索任务可使用 `gpt-5-search-preview`。
+如果你只有 OpenAI 的 key，设置 `AI_MODEL_DEFAULT=openai:gpt-6.1-sol` 即可。`gpt-6.1-sol` 是 OpenAI 当前推荐的次旗舰（接近 Astra 的质量，$2/$10 每百万 token）。OpenAI 适配器不发起联网搜索，`ALT_SCAN` 会在无实时搜索的情况下运行；需要搜索请用 Gemini 或智谱。
 
 ---
 

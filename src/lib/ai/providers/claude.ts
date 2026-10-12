@@ -11,11 +11,11 @@ function getClient(): Anthropic {
 
 // Static fallback list — Anthropic does expose a models endpoint, but we keep a
 // curated short list so the UI surfaces only models we've validated for the
-// nine-node prompts.
+// nine-node prompts. 4.6 is the newest generation that still accepts the
+// non-default `temperature` we send; Sonnet 5.x / Opus 4.7+ reject it with a 400.
 const CLAUDE_FALLBACK = [
-  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-  { id: 'claude-opus-4-5', label: 'Claude Opus 4.5' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
 ];
 
 export const claudeProvider: AiProvider = {

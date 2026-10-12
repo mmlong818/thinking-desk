@@ -2,11 +2,9 @@ import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
 import { validateBaseUrl } from './validate-base-url';
 
 const OPENAI_FALLBACK = [
-  { id: 'gpt-5', label: 'GPT-5' },
-  { id: 'gpt-5-mini', label: 'GPT-5 mini' },
-  { id: 'gpt-4.1', label: 'GPT-4.1' },
-  { id: 'gpt-4o', label: 'GPT-4o' },
-  { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+  { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
+  { id: 'gpt-6-luna', label: 'GPT-6 Luna' },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
 ];
 
 function getBase(): string {
@@ -64,9 +62,9 @@ export const openaiProvider: AiProvider = {
         .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     ];
 
-    // GPT-5+ / o-series only accept `max_completion_tokens` and reject
+    // GPT-5+ / GPT-6 / o-series only accept `max_completion_tokens` and reject
     // `temperature`. Older 4.x families still use `max_tokens`.
-    const isNewFamily = /^(gpt-5|o\d|o-)/i.test(model);
+    const isNewFamily = /^(gpt-[5-9]|o\d|o-)/i.test(model);
     const body: Record<string, unknown> = { model, messages };
     if (isNewFamily) {
       body.max_completion_tokens = req.maxTokens ?? 4096;

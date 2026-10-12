@@ -78,14 +78,14 @@ async function pickModel(name: AiProviderName, hint?: string): Promise<string> {
   if (hint && models.some((m) => m.id === hint)) return hint;
   // Prefer known flagship ids when present (descending capability).
   const preferred = [
-    // Zhipu
-    'glm-4.6', 'glm-4.5', 'glm-5', 'glm-4-plus', 'glm-4.5-air', 'glm-5-turbo',
-    // Claude
-    'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5',
+    // Zhipu (glm-5.3 excluded: thinking cannot be disabled, but the zhipu adapter sends thinking:disabled for JSON tasks)
+    'glm-5.2', 'glm-5.1', 'glm-5', 'glm-5-turbo',
+    // Claude (newest generation that still accepts the adapter's non-default temperature)
+    'claude-sonnet-4-6', 'claude-opus-4-6',
     // OpenAI
-    'gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini',
+    'gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-terra', 'gpt-5.4',
     // Gemini
-    'gemini-2.5-pro', 'gemini-2.0-pro', 'gemini-2.0-flash',
+    'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash',
   ];
   for (const p of preferred) {
     if (models.some((m) => m.id === p)) return p;
