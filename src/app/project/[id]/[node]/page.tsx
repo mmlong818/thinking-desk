@@ -12,12 +12,11 @@ import { LeapNode } from '@/components/nodes/LeapNode';
 import { FinalFeaturesNode } from '@/components/nodes/FinalFeaturesNode';
 import { SplitNode } from '@/components/nodes/SplitNode';
 import { LockedNode } from '@/components/nodes/LockedNode';
-import { ProjectStoreProvider } from '@/components/project/ProjectStore';
+import { ProjectStoreProvider, type ProjectSnapshot } from '@/components/project/ProjectStore';
 import { NODES, getNode, isNodeLocked, missingDeps, type NodeKind } from '@/data/nodes';
 import { findProjectBySlug } from '@/lib/db/projects';
 import { PgRepository } from '@/lib/db/pg-repository';
 import { completedNodes } from '@/lib/model/completion';
-import type { Graph } from '@/lib/model/graph';
 import { localProjectId } from '@/lib/model/local-repository';
 import { cookieNameCandidates, parseCompletionCookie } from '@/lib/store/completion-cookie';
 import type { StoreRef } from '@/lib/store/store-ref';
@@ -56,17 +55,19 @@ function nameFromSlug(slug: string): string {
   return name || decoded;
 }
 
-async function loadGraph(store: StoreRef): Promise<Graph | null> {
+async function loadSnapshot(store: StoreRef): Promise<ProjectSnapshot | null> {
   if (store.mode !== 'pg') return null;
   try {
-    return await new PgRepository().getGraph(store.projectId);
+    const repo = new PgRepository();
+    const [graph, runs] = await Promise.all([repo.getGraph(store.projectId), repo.listRuns(store.projectId)]);
+    return { ...graph, runs };
   } catch {
     return null;
   }
 }
 
 /** Completion for the lock screen: derived from items in Postgres mode, the td-done cookie otherwise. */
-async function loadCompleted(slug: string, graph: Graph | null): Promise<NodeKind[]> {
+async function loadCompleted(slug: string, graph: ProjectSnapshot | null): Promise<NodeKind[]> {
   if (graph) {
     const done = completedNodes(graph.items);
     return NODES.filter((n) => done.has(n.kind)).map((n) => n.kind);
@@ -97,7 +98,7 @@ export default async function NodePage({ params }: { params: Promise<{ id: strin
   if (!def) notFound();
 
   const project = await loadProject(id);
-  const graph = await loadGraph(project.store);
+  const graph = await loadSnapshot(project.store);
   const completed = await loadCompleted(project.slug, graph);
   const completedSet = new Set<NodeKind>(completed);
   const lockedKinds = NODES.filter((n) => isNodeLocked(n.kind, completedSet)).map((n) => n.kind);
@@ -128,7 +129,7 @@ export default async function NodePage({ params }: { params: Promise<{ id: strin
         />
         {/* The provider also wraps the lock screen: in pure-local mode it re-derives completion
             from localStorage and refreshes the page when the cookie was stale or missing. */}
-        <ProjectStoreProvider store={project.store} slug={project.slug} initialGraph={graph} completed={completed}>
+        <ProjectStoreProvider store={project.store} slug={project.slug} initial={graph} completed={completed}>
           {currentLocked ? (
             <LockedNode projectSlug={project.slug} current={def.kind} missing={currentMissing} />
           ) : (

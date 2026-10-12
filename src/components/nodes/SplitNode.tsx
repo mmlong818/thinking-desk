@@ -12,7 +12,7 @@ import { EditableText } from '@/components/shared/Editable';
 import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { MissingUpstream, NodeLink } from '@/components/shared/Navigation';
-import { ErrorCard, NodeFrame, NodeHat } from '@/components/shared/NodeKit';
+import { ErrorCard, NodeFrame, NodeHat, StoreStatus } from '@/components/shared/NodeKit';
 import { adaptSubfeatureBreakdown } from '@/lib/model/adapters';
 import { inputsOf } from '@/lib/model/context';
 import { buildFeedback } from '@/lib/model/feedback';
@@ -97,6 +97,7 @@ export function SplitNode() {
       <NodeHat kind="split" chip={CHIP} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">把 08 设计案里的每个 feature → 立刻能开 ticket 的子任务。每条带 layer 标签、工作量估计、验收标准。</p>
+      <StoreStatus data={data} />
       {subtasks.length === 0 && design ? (
         <div className="para-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <div className="dim" style={{ fontSize: 13 }}>

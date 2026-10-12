@@ -9,7 +9,7 @@ import { useNodeData, type NodeData } from '@/components/project/useNodeData';
 import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
-import { ErrorCard, NodeFrame, NodeHat, ParaHead } from '@/components/shared/NodeKit';
+import { ErrorCard, NodeFrame, NodeHat, ParaHead, StoreStatus } from '@/components/shared/NodeKit';
 import type { DesignProposal } from '@/lib/ai/schemas/generate-design';
 import { adaptDesignProposal } from '@/lib/model/adapters';
 import { briefRequestContext, inputsOf, type BriefRequestContext } from '@/lib/model/context';
@@ -90,8 +90,9 @@ export function FinalFeaturesNode() {
         从 07 跃迁后的功能列表 → 一份<em>真正可执行的设计文档</em>。
         产出包含：信息架构、模块拆分、关键用户流、核心交互、数据模型、技术骨架、指标、风险、里程碑。
       </p>
-      <FinalFeatureList data={data} />
-      {hasDesign ? (
+      <StoreStatus data={data} />
+      {data.loading ? null : <FinalFeatureList data={data} />}
+      {data.loading ? null : hasDesign ? (
         <DesignView data={data} onRegenerate={generate} regenerating={generating} />
       ) : (
         <GenerateCta data={data} onGenerate={generate} generating={generating} />

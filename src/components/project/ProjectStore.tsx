@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import type { NodeKind } from '@/data/nodes';
 import type { ProjectRepository } from '@/lib/api/project-api';
 import { completedNodes, completionCookieValue } from '@/lib/model/completion';
-import type { Graph } from '@/lib/model/graph';
 import type { Item } from '@/lib/model/item-types';
 import type { Link, Run } from '@/lib/model/types';
 import { writeCompletionCookie } from '@/lib/store/completion-cookie';
@@ -39,8 +38,8 @@ const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
 interface Props {
   store: StoreRef;
   slug: string;
-  /** Postgres mode: the graph the server already loaded (first paint without a round trip). */
-  initialGraph?: Graph | null;
+  /** Postgres mode: the items, links and runs the server already loaded (first paint without a round trip). */
+  initial?: ProjectSnapshot | null;
   /** Completion the server rendered the nav / locks with. */
   completed: readonly NodeKind[];
   children: ReactNode;
@@ -59,10 +58,10 @@ function useCompletionSync(store: StoreRef, slug: string, completed: readonly No
   }, [store.mode, slug, router]);
 }
 
-export function ProjectStoreProvider({ store, slug, initialGraph, completed, children }: Props) {
+export function ProjectStoreProvider({ store, slug, initial, completed, children }: Props) {
   const { mode, projectId } = store;
   const repo = useMemo(() => createClientRepository({ mode, projectId }), [mode, projectId]);
-  const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(initialGraph ? { ...initialGraph, runs: [] } : null);
+  const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(initial ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const sync = useCompletionSync(store, slug, completed);
 

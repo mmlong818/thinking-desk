@@ -8,7 +8,9 @@ import { useNodeStage } from '@/components/project/useNodeStage';
 import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
-import { CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead } from '@/components/shared/NodeKit';
+import {
+  CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
+} from '@/components/shared/NodeKit';
 import { briefRequestContext } from '@/lib/model/context';
 import { DeepResults } from './scen/DeepResults';
 import { scenCopilotCards } from './scen/scen-copilot';
@@ -44,7 +46,7 @@ export function ScenariosNode() {
         以及固定格式的设计启发（"在 X 下，Y 想完成 Z，因此我们可以 D"）。
       </p>
       <Progress stage={stage} />
-      {data.loading ? <LoadingCard>正在读取项目数据…</LoadingCard> : null}
+      <StoreStatus data={data} />
       {stage === 'idle' && brief ? <CenteredAction label="第一步：穷举 7 维要素 →" onClick={actions.exhaust} /> : null}
       {stage === 'exhausting' ? <LoadingCard>穷举中 · 每维 8-12 个候选</LoadingCard> : null}
       <StageSections stage={stage} data={data} actions={actions} onBack={() => setView('dimensions')} />

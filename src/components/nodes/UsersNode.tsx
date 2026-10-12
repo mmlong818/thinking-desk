@@ -8,7 +8,9 @@ import { critiqueCards, summaryText } from '@/components/shared/copilot-cards';
 import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
-import { CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead } from '@/components/shared/NodeKit';
+import {
+  CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
+} from '@/components/shared/NodeKit';
 import { briefRequestContext } from '@/lib/model/context';
 import { BriefContextCard } from './users/BriefContextCard';
 import { JobGroup, JobsRefreshBar, LockedSummary } from './users/JobsSection';
@@ -82,7 +84,7 @@ export function UsersNode() {
         一个产品通常要<em>同时服务多个典型用户</em> —— 我先给你 3 个差异化 persona，
         默认全部选中作为产品覆盖对象，你可以取消不相关的，也可以让我再生成新的（上限 10 个）。
       </p>
-      {data.loading ? <LoadingCard>正在读取项目数据…</LoadingCard> : null}
+      <StoreStatus data={data} />
       {ctx && brief ? <BriefContextCard ctx={ctx} brief={brief} /> : null}
       {stage === 'idle' && ctx ? <CenteredAction label="基于 Brief 开始分析 →" onClick={actions.analyze} /> : null}
       {stage === 'analyzing' ? <LoadingCard>正在拆解 3 个 persona + 三类 Job，通常 20–60 秒……</LoadingCard> : null}

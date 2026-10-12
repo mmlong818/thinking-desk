@@ -9,7 +9,9 @@ import { critiqueCards, summaryItem, summaryText } from '@/components/shared/cop
 import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { MissingUpstream, NodeLink } from '@/components/shared/Navigation';
-import { CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat } from '@/components/shared/NodeKit';
+import {
+  CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, StoreStatus,
+} from '@/components/shared/NodeKit';
 import { briefRequestContext } from '@/lib/model/context';
 import { ApplyLeapsSection, type RevisionView } from './leap/ApplyLeaps';
 import { CategorySection } from './leap/LeapCards';
@@ -94,7 +96,7 @@ export function LeapNode() {
         <b>✓ 采纳</b>：决定哪些跃迁会被应用到功能列表。
         <b>✗ 否决</b>：下次再补时避开该方向（可以写下理由）。
       </p>
-      {data.loading ? <LoadingCard>正在读取项目数据…</LoadingCard> : null}
+      <StoreStatus data={data} />
       {stage === 'idle' && brief ? <CenteredAction label="生成跃迁候选 →" onClick={actions.run} /> : null}
       {stage === 'analyzing' ? <LoadingCard>同时从三角度思考 · 通常 90-180 秒……</LoadingCard> : null}
       <ErrorCard message={actions.error} />

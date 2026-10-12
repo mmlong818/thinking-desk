@@ -6,7 +6,7 @@ import { BriefClarifier } from '@/components/nodes/BriefClarifier';
 import { BriefInterview } from '@/components/nodes/BriefInterview';
 import { useProject } from '@/components/project/ProjectStore';
 import { useNodeData } from '@/components/project/useNodeData';
-import { LoadingCard, NodeFrame, NodeHat, ParaHead } from '@/components/shared/NodeKit';
+import { LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus } from '@/components/shared/NodeKit';
 import { briefRequestContext } from '@/lib/model/context';
 import { briefCopilotCards } from './brief/brief-copilot';
 import { stageChip, type Stage } from './brief/brief-meta';
@@ -47,9 +47,8 @@ export function BriefNode() {
         我会先判断是否需要澄清，<em>缺信息就先问你几个选择题</em>，然后再做结构化抽取。
       </p>
       <ImportNotice projectId={store.projectId} />
-      {data.loading ? (
-        <LoadingCard>正在读取项目数据…</LoadingCard>
-      ) : (
+      <StoreStatus data={data} />
+      {data.loading ? null : (
         <PasteSection stage={stage} rawText={rawText} onChange={setRawText} onStart={flow.start} highlights={highlights} error={flow.error} />
       )}
       <FlowSections stage={stage} flow={flow} />

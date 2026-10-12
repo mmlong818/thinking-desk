@@ -10,7 +10,7 @@ import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
 import {
-  CenteredAction, confirmSingletonOverwrite, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead,
+  CenteredAction, confirmSingletonOverwrite, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
 } from '@/components/shared/NodeKit';
 import { PersonaContextList, UpstreamContext } from '@/components/shared/UpstreamContext';
 import { adaptStakeholders } from '@/lib/model/adapters';
@@ -115,7 +115,7 @@ export function StakeholdersNode() {
         其中<em>基线角色</em>（发起人、设计团队、你背后的业务方、合规、用户）<em>始终必选不可删</em>，
         项目专属的干系人你可以自由调整。
       </p>
-      {data.loading ? <LoadingCard>正在读取项目数据…</LoadingCard> : null}
+      <StoreStatus data={data} />
       {brief ? <StakeUpstream data={data} brief={brief} /> : null}
       {stage === 'idle' && brief ? <CenteredAction label="基于 Brief + 用户节点开始分析 →" onClick={analyze} /> : null}
       {stage === 'analyzing' ? <LoadingCard>正在拆解 Mendelow 矩阵，通常 30–60 秒……</LoadingCard> : null}

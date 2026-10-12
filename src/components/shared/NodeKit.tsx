@@ -52,6 +52,12 @@ export function LoadingCard({ children }: { children: ReactNode }) {
   );
 }
 
+/** The project is being read (or could not be read). */
+export function StoreStatus({ data }: { data: { loading: boolean; loadError: string | null } }) {
+  if (data.loadError) return <ErrorCard title="读取项目数据失败" message={data.loadError} />;
+  return data.loading ? <LoadingCard>正在读取项目数据…</LoadingCard> : null;
+}
+
 /** Section heading used throughout the nodes. */
 export function ParaHead({ title, hint, num }: { title: string; hint?: ReactNode; num?: string }) {
   return (

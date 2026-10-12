@@ -9,7 +9,9 @@ import { critiqueCards, summaryText } from '@/components/shared/copilot-cards';
 import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
-import { CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead } from '@/components/shared/NodeKit';
+import {
+  CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
+} from '@/components/shared/NodeKit';
 import { adaptFeatureList } from '@/lib/model/adapters';
 import { briefRequestContext, inputsOf, type BriefRequestContext } from '@/lib/model/context';
 import { buildFeedback } from '@/lib/model/feedback';
@@ -126,7 +128,8 @@ export function FeaturesNode() {
         我会产出<em>金字塔结构</em>、<em>Kano 五分类</em>、<em>RICE 评分</em>、
         <em>五问法</em>、<em>功能卡片即假设</em>、以及<em>不做什么清单</em>。每个功能都带来源追溯。
       </p>
-      {data.loading ? <LoadingCard>正在读取项目数据…</LoadingCard> : <UpstreamStatus data={data} />}
+      <StoreStatus data={data} />
+      {data.loading ? null : <UpstreamStatus data={data} />}
       {stage === 'idle' && brief ? <CenteredAction label="基于上游产出起草功能列表 →" onClick={draft} /> : null}
       {stage === 'drafting' ? <LoadingCard>收口中 · 同时计算 Kano/RICE/五问法/功能卡片，通常 90-180 秒……</LoadingCard> : null}
       <ErrorCard message={error} />

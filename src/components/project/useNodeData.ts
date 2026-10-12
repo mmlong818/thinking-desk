@@ -13,6 +13,8 @@ import { useProject } from './ProjectStore';
 export interface NodeData {
   /** True until the project's items have been read once. */
   loading: boolean;
+  /** Why reading the project failed (storage unavailable, database down), else null. */
+  loadError: string | null;
   /** Every live item of the project (upstream nodes included). */
   all: Item[];
   /** Live items of this node. */
@@ -31,11 +33,12 @@ export interface NodeData {
 }
 
 export function useNodeData(node: NodeKind): NodeData {
-  const { snapshot } = useProject();
+  const { snapshot, loadError } = useProject();
   return useMemo(() => {
     const all = (snapshot?.items ?? []).filter((i) => !i.deletedAt);
     return {
       loading: snapshot === null,
+      loadError,
       all,
       items: all.filter((i) => i.node === node),
       links: snapshot?.links ?? [],
@@ -47,5 +50,5 @@ export function useNodeData(node: NodeKind): NodeData {
       completed: completedNodes(all),
       recommended: recommendedPending(all, node),
     };
-  }, [snapshot, node]);
+  }, [snapshot, loadError, node]);
 }

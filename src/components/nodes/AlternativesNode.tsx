@@ -10,7 +10,7 @@ import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
 import {
-  CenteredAction, confirmSingletonOverwrite, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead,
+  CenteredAction, confirmSingletonOverwrite, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
 } from '@/components/shared/NodeKit';
 import { UpstreamContext } from '@/components/shared/UpstreamContext';
 import { adaptAlternatives } from '@/lib/model/adapters';
@@ -127,7 +127,7 @@ export function AlternativesNode() {
         用户干脆不解决这个问题、或用原始方式凑合（"懒得用"、"抄答案"、"问家长"）。
         我会联网扫描真实对手，并按 §7.2 战略三问（<em>承诺 / 赢利模式 / 护城河</em>）画像。
       </p>
-      {data.loading ? <LoadingCard>正在读取项目数据…</LoadingCard> : null}
+      <StoreStatus data={data} />
       {brief ? <AltUpstream data={data} brief={brief} /> : null}
       {stage === 'idle' && brief ? <CenteredAction label="开始联网扫描 →" onClick={analyze} /> : null}
       {stage === 'analyzing' ? <LoadingCard>正在联网扫描真实替代品（会读多个网页）· 通常 60-120 秒……</LoadingCard> : null}
