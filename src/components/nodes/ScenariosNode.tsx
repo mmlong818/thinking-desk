@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Copilot, type CopilotCard } from '@/components/shell/Copilot';
 import { NodeFollowUpsSection } from '@/components/shared/NodeFollowUpsSection';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
-import type { Persona, Job, UsersAnalysis } from '@/lib/ai/tasks/analyze-users';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
+import type { Persona, Job, UsersAnalysis } from '@/lib/ai/schemas/analyze-users';
 import {
   DIMENSION_KEYS,
   DIMENSION_META,
@@ -15,7 +15,7 @@ import {
   type ScenarioDraft,
   type ScenarioDeepAnalysis,
   type ScenarioElement,
-} from '@/lib/ai/tasks/analyze-scenarios';
+} from '@/lib/ai/schemas/analyze-scenarios';
 import { readCache, writeCache } from '@/lib/client-cache';
 import { readPreferredModel } from '@/lib/client-model';
 import { nextNodeKind, getNode, formatNodeNum } from '@/data/nodes';

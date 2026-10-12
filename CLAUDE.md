@@ -34,7 +34,8 @@ src/
     ├── ai/
     │   ├── router.ts        # env-var task→provider:model resolution
     │   ├── providers/       # claude.ts, openai.ts, gemini.ts, zhipu.ts (complete() returns one full response)
-    │   ├── tasks/           # prompt + Zod schema per task
+    │   ├── schemas/         # client-safe Zod output schemas, types, UI constants (no router/provider imports)
+    │   ├── tasks/           # server-only prompt builders that call the AI (import their schema from schemas/)
     │   └── types.ts         # AiTask union — add new tasks here first
     ├── model/               # Item/Link/Run/DecisionEvent, item-type registry, pure planners, LocalRepository (docs/data-model.md)
     ├── client-cache.ts      # sessionStorage R/W + cookie completion flags
@@ -78,7 +79,7 @@ final → split
 ## Adding an AI Task
 
 1. Add literal to `AiTask` in `src/lib/ai/types.ts`.
-2. Create `src/lib/ai/tasks/your-task.ts` — prompt builder + Zod schema.
+2. Create `src/lib/ai/schemas/your-task.ts` (Zod output schema + types, client-safe) and `src/lib/ai/tasks/your-task.ts` (prompt builder). Components import from `schemas/` only — `schemas/client-safety.test.ts` fails if client code reaches the router or a provider SDK.
 3. Create `src/app/api/ai/your-task/route.ts` — POST handler that calls the task and returns JSON (no streaming; providers expose a single `complete()`).
 4. Document `AI_MODEL_YOUR_TASK` in `.env.example`.
 

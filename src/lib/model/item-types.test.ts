@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { NODES } from '../../data/nodes';
-import { validAlternatives } from '../ai/tasks/__fixtures__/alternatives';
-import { validBrief } from '../ai/tasks/__fixtures__/extract-brief';
-import { validDeepAnalysis, validDimensions, validScenarioDrafts } from '../ai/tasks/__fixtures__/scenarios';
-import { validFeature, validPillars } from '../ai/tasks/__fixtures__/draft-features';
-import { validLeap } from '../ai/tasks/__fixtures__/creative-leap';
-import { validDesign } from '../ai/tasks/__fixtures__/generate-design';
-import { validBreakdown } from '../ai/tasks/__fixtures__/split-subfeatures';
-import { validStakeholders } from '../ai/tasks/__fixtures__/stakeholders';
-import { validUsers } from '../ai/tasks/__fixtures__/users';
+import { validAlternatives } from '../ai/schemas/__fixtures__/alternatives';
+import { validBrief } from '../ai/schemas/__fixtures__/extract-brief';
+import { validDeepAnalysis, validDimensions, validScenarioDrafts } from '../ai/schemas/__fixtures__/scenarios';
+import { validFeature, validPillars } from '../ai/schemas/__fixtures__/draft-features';
+import { validLeap } from '../ai/schemas/__fixtures__/creative-leap';
+import { validDesign } from '../ai/schemas/__fixtures__/generate-design';
+import { validBreakdown } from '../ai/schemas/__fixtures__/split-subfeatures';
+import { validStakeholders } from '../ai/schemas/__fixtures__/stakeholders';
+import { validUsers } from '../ai/schemas/__fixtures__/users';
 import { ITEM_TYPE_DEFS, parseBody, readRefValues, typeAllowedOn } from './item-types';
 import { ITEM_TYPES, type ItemType } from './types';
 

@@ -1,39 +1,5 @@
-import { z } from 'zod';
 import { runAi } from '../router';
-
-export const BriefExtractionSchema = z.object({
-  highlights: z.array(
-    z.object({
-      text: z.string(),
-      kind: z.enum(['fact', 'assumption', 'missing']),
-      reason: z.string().optional(),
-    }),
-  ),
-  fields: z.object({
-    problem_statement: z.string().nullable(),
-    target_user: z.string().nullable(),
-    scenario: z.string().nullable(),
-    value_prop: z.string().nullable(),
-    success_criteria: z.string().nullable(),
-    time_constraint: z.string().nullable(),
-    boundaries: z.array(z.string()),
-    /** 方法论 v2 §4.1 必含字段：道德红线（明确不得采用的手段）。 */
-    red_lines: z.array(z.string()).default([]),
-  }),
-  follow_ups: z
-    .array(
-      z.object({
-        field: z.string(),
-        question: z.string(),
-        why: z.string().optional(),
-        /** 用户视角的多选候选答案，3-5 条；用户可勾选一项或多项，也可自由输入。 */
-        options: z.array(z.string()).default([]),
-      }),
-    )
-    .max(5),
-  completeness: z.number().int().min(0).max(100),
-});
-export type BriefExtraction = z.infer<typeof BriefExtractionSchema>;
+import { BriefExtractionSchema, type BriefExtraction, type ClarificationAnswer } from '../schemas/extract-brief';
 
 const JSON_SCHEMA = {
   type: 'object',
@@ -115,11 +81,6 @@ const SYSTEM_PROMPT = `你是「思考工作台」的 AI 副驾驶。用户刚�
    - 8 个字段里填了 5 个且 boundaries + red_lines 非空 ≈ 70。
 
 务必：只输出 JSON，不要任何前后文。`;
-
-export interface ClarificationAnswer {
-  question: string;
-  answer: string | string[];
-}
 
 function formatClarifications(answers?: ClarificationAnswer[]): string {
   if (!answers || answers.length === 0) return '';

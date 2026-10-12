@@ -6,14 +6,14 @@ import { useRouter } from 'next/navigation';
 import { Copilot, type CopilotCard } from '@/components/shell/Copilot';
 import { NodeFollowUpsSection } from '@/components/shared/NodeFollowUpsSection';
 import { EditableTextarea, EditableList } from '@/components/shared/Editable';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
-import type { Persona, Job, UsersAnalysis } from '@/lib/ai/tasks/analyze-users';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
+import type { Persona, Job, UsersAnalysis } from '@/lib/ai/schemas/analyze-users';
 import type {
   Alternative,
   AlternativesAnalysis,
   StrategicProfile,
   FeatureBreakdown,
-} from '@/lib/ai/tasks/analyze-alternatives';
+} from '@/lib/ai/schemas/analyze-alternatives';
 import { readCache, writeCache } from '@/lib/client-cache';
 import { readPreferredModel } from '@/lib/client-model';
 import { nextNodeKind, getNode, formatNodeNum } from '@/data/nodes';

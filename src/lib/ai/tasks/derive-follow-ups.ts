@@ -1,11 +1,6 @@
-import { z } from 'zod';
 import { runAi } from '../router';
-import {
-  FollowUpItemSchema,
-  FOLLOW_UPS_SCHEMA_FRAGMENT,
-  FOLLOW_UPS_PROMPT_FRAGMENT,
-  type FollowUpItem,
-} from '../follow-ups';
+import { FOLLOW_UPS_SCHEMA_FRAGMENT, FOLLOW_UPS_PROMPT_FRAGMENT, type FollowUpItem } from '../follow-ups';
+import { DeriveFollowUpsResultSchema } from '../schemas/derive-follow-ups';
 
 /**
  * 通用"派生追问"任务：给定某节点已经产出的 content（任意 JSON），
@@ -15,11 +10,6 @@ import {
  * 不修改各节点本身的 schema —— 而是事后单独调用一次。
  * 同一节点的同一份 content + 同一个 nodeKind 调用结果应可缓存（前端 cache 了）。
  */
-
-const ResultSchema = z.object({
-  follow_ups: z.array(FollowUpItemSchema).max(5).default([]),
-});
-export type DeriveFollowUpsResult = z.infer<typeof ResultSchema>;
 
 const JSON_SCHEMA = {
   type: 'object',
@@ -79,6 +69,6 @@ export async function deriveFollowUps(args: {
     temperature: 0.4,
     override: args.override,
   });
-  const parsed = ResultSchema.parse(res.data);
+  const parsed = DeriveFollowUpsResultSchema.parse(res.data);
   return parsed.follow_ups;
 }

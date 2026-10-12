@@ -5,17 +5,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Copilot, type CopilotCard } from '@/components/shell/Copilot';
 import { NodeFollowUpsSection } from '@/components/shared/NodeFollowUpsSection';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
-import type { Persona, Job, UsersAnalysis } from '@/lib/ai/tasks/analyze-users';
-import type { FeatureList } from '@/lib/ai/tasks/draft-features';
-import type { AlternativesAnalysis } from '@/lib/ai/tasks/analyze-alternatives';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
+import type { Persona, Job, UsersAnalysis } from '@/lib/ai/schemas/analyze-users';
+import type { FeatureList } from '@/lib/ai/schemas/draft-features';
+import type { AlternativesAnalysis } from '@/lib/ai/schemas/analyze-alternatives';
 import type {
   AnalogyTransfer,
   ConstraintFlip,
   CreativeLeapAnalysis,
   FirstPrincipleRethink,
-} from '@/lib/ai/tasks/creative-leap';
-import type { FeatureRevision, RevisionNote } from '@/lib/ai/tasks/revise-features';
+} from '@/lib/ai/schemas/creative-leap';
+import type { FeatureRevision, RevisionNote } from '@/lib/ai/schemas/revise-features';
 import { readCache, writeCache } from '@/lib/client-cache';
 import { readPreferredModel } from '@/lib/client-model';
 import { nextNodeKind, getNode, formatNodeNum } from '@/data/nodes';

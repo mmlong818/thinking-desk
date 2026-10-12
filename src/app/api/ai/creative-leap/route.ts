@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { analyzeCreativeLeap, generateMoreLeapItems } from '@/lib/ai/tasks/creative-leap';
 import { findProjectBySlug, getNode, logAiExchange, upsertNode } from '@/lib/db/projects';
 import { providerFor } from '@/lib/ai/router';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
-import type { Persona, Job, UsersAnalysis } from '@/lib/ai/tasks/analyze-users';
-import type { Feature, FeatureList } from '@/lib/ai/tasks/draft-features';
-import type { AlternativesAnalysis } from '@/lib/ai/tasks/analyze-alternatives';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
+import type { Persona, Job, UsersAnalysis } from '@/lib/ai/schemas/analyze-users';
+import type { Feature, FeatureList } from '@/lib/ai/schemas/draft-features';
+import type { AlternativesAnalysis } from '@/lib/ai/schemas/analyze-alternatives';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -1,39 +1,10 @@
-import { z } from 'zod';
 import { runAi } from '../router';
+import { ProbeResultSchema, type ProbeTurn, type ProbeResult } from '../schemas/probe-brief';
 
 /**
  * 方法论 v2 §5.3 "如何挖出真正的 Job" 的访谈引导。
  * 每次只问一个开放题，根据用户的答案动态推进 —— 是"一问一答"模式。
  */
-
-export const ProbeTurnSchema = z.object({
-  question: z.string(),
-  answer: z.string(),
-  field_tag: z.string().optional(),
-});
-export type ProbeTurn = z.infer<typeof ProbeTurnSchema>;
-
-export const ProbeResultSchema = z.union([
-  z.object({
-    action: z.literal('question'),
-    /** 当前要问用户的下一个问题 */
-    question: z.string(),
-    /** 绑定到 Brief 哪个字段（problem_statement / target_user / scenario / ...） */
-    field_tag: z.string(),
-    /** 为什么问这个，展示在问题下方 */
-    why: z.string(),
-    /** 可选的提示性选项，用户可以点击快速填入 */
-    hints: z.array(z.string()).default([]),
-    /** 大概还剩几个问题（用户看得到进度） */
-    remaining_estimate: z.number().int().min(0).max(10),
-  }),
-  z.object({
-    action: z.literal('done'),
-    /** 总结已收集到的关键信息 */
-    summary: z.string(),
-  }),
-]);
-export type ProbeResult = z.infer<typeof ProbeResultSchema>;
 
 const JSON_SCHEMA = {
   type: 'object',

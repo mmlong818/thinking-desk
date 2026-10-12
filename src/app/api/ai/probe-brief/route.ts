@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { probeBrief, ProbeTurnSchema } from '@/lib/ai/tasks/probe-brief';
+import { ProbeTurnSchema } from '@/lib/ai/schemas/probe-brief';
+import { probeBrief } from '@/lib/ai/tasks/probe-brief';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { ProbeResult, ProbeTurn } from '@/lib/ai/tasks/probe-brief';
+import type { ProbeResult, ProbeTurn } from '@/lib/ai/schemas/probe-brief';
 
 interface Props {
   rawText: string;

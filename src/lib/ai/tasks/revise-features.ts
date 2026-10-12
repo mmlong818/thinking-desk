@@ -1,58 +1,13 @@
-import { z } from 'zod';
 import { runAi } from '../router';
-import {
-  FeatureSchema,
-  NotDoingSchema,
-  PillarSchema,
-  type Feature,
-  type FeatureList,
-} from './draft-features';
-import type { CreativeLeapAnalysis } from './creative-leap';
-import type { BriefExtraction, ClarificationAnswer } from './extract-brief';
+import type { Feature, FeatureList } from '../schemas/draft-features';
+import type { CreativeLeapAnalysis } from '../schemas/creative-leap';
+import type { BriefExtraction, ClarificationAnswer } from '../schemas/extract-brief';
+import { FeatureRevisionSchema, type FeatureRevision } from '../schemas/revise-features';
 
 /**
  * 把用户采纳的跃迁应用到功能列表，产出"修订后的最终功能列表"。
  * 这是 §十 → §九 的回流 —— 跃迁只有影响了功能，才真正是设计。
  */
-
-export const RevisionNoteSchema = z.object({
-  action: z.enum(['added', 'modified', 'removed', 'kept']),
-  /** 新 / 修改后 feature 的 id（kept / modified / added 有效） */
-  feature_id: z.string().optional(),
-  /** 被替换 / 被删除的原 feature id（modified / removed 有效） */
-  original_feature_id: z.string().optional(),
-  /** 名字快照 · 便于展示 diff */
-  name_before: z.string().optional(),
-  name_after: z.string().optional(),
-  /** 这次变更的理由 */
-  reason: z.string(),
-  /** 来源跃迁 id（如果这条变更源自某条跃迁） */
-  source_leap_ids: z.array(z.string()).default([]),
-});
-export type RevisionNote = z.infer<typeof RevisionNoteSchema>;
-
-export const FeatureRevisionSchema = z.object({
-  revised_features: z.array(FeatureSchema).min(3),
-  revised_pillars: z.array(PillarSchema).min(2).max(6),
-  /** 修订理由清单 */
-  revisions: z.array(RevisionNoteSchema).min(1),
-  /** 修订后新的"不做清单" */
-  revised_not_doing: z.array(NotDoingSchema),
-  /** 新的差异化回响 */
-  differentiation_echo: z.string(),
-  /** 一段话讲清"这次修订改了什么，为什么" */
-  summary: z.string(),
-  critiques: z
-    .array(
-      z.object({
-        kind: z.enum(['check', 'critique', 'ask']),
-        title: z.string(),
-        body: z.string(),
-      }),
-    )
-    .max(5),
-});
-export type FeatureRevision = z.infer<typeof FeatureRevisionSchema>;
 
 // ---- JSON schema (镜像 zod 上面的) ----
 const JSON_SCHEMA = {

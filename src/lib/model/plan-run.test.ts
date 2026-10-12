@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { validFeature } from '../ai/tasks/__fixtures__/draft-features';
-import { validLeap } from '../ai/tasks/__fixtures__/creative-leap';
+import { validFeature } from '../ai/schemas/__fixtures__/draft-features';
+import { validLeap } from '../ai/schemas/__fixtures__/creative-leap';
 import { isStale } from './graph';
 import { planRunOutput, type PlanState } from './plan-run';
 import { RepositoryError, type ItemDraft } from './repository';

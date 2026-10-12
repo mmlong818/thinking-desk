@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { splitSubfeatures } from '@/lib/ai/tasks/split-subfeatures';
 import { findProjectBySlug, getNode, logAiExchange, upsertNode } from '@/lib/db/projects';
 import { providerFor } from '@/lib/ai/router';
-import type { DesignProposal } from '@/lib/ai/tasks/generate-design';
+import type { DesignProposal } from '@/lib/ai/schemas/generate-design';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

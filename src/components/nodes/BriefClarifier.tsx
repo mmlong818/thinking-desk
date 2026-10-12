@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { BriefQuestion } from '@/lib/ai/tasks/clarify-brief';
+import type { BriefQuestion } from '@/lib/ai/schemas/clarify-brief';
 
 const OTHER_VALUE = '__other__';
 

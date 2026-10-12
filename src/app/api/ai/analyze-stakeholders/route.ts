@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { analyzeStakeholders } from '@/lib/ai/tasks/analyze-stakeholders';
-import { PersonaSchema, JobSchema } from '@/lib/ai/tasks/analyze-users';
+import { PersonaSchema, JobSchema } from '@/lib/ai/schemas/analyze-users';
 import { findProjectBySlug, getNode, logAiExchange, upsertNode } from '@/lib/db/projects';
 import { providerFor } from '@/lib/ai/router';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
-import type { Persona, Job, UsersAnalysis } from '@/lib/ai/tasks/analyze-users';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
+import type { Persona, Job, UsersAnalysis } from '@/lib/ai/schemas/analyze-users';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

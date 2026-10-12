@@ -5,13 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Copilot, type CopilotCard } from '@/components/shell/Copilot';
 import { NodeFollowUpsSection } from '@/components/shared/NodeFollowUpsSection';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
-import type { Persona, Job, UsersAnalysis } from '@/lib/ai/tasks/analyze-users';
-import type {
-  EngagementPlan,
-  Stakeholder,
-  StakeholdersAnalysis,
-} from '@/lib/ai/tasks/analyze-stakeholders';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
+import type { Persona, Job, UsersAnalysis } from '@/lib/ai/schemas/analyze-users';
+import type { EngagementPlan, Stakeholder, StakeholdersAnalysis } from '@/lib/ai/schemas/analyze-stakeholders';
 import { readCache, writeCache } from '@/lib/client-cache';
 import { readPreferredModel } from '@/lib/client-model';
 import { nextNodeKind, getNode, formatNodeNum } from '@/data/nodes';

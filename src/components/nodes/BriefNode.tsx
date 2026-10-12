@@ -7,9 +7,9 @@ import { EditableText, EditableTextarea, EditableList } from '@/components/share
 import { BriefClarifier, type ClarifierAnswer } from '@/components/nodes/BriefClarifier';
 import { BriefInterview } from '@/components/nodes/BriefInterview';
 import { NodeFollowUpsRunner } from '@/components/shared/NodeFollowUpsRunner';
-import type { BriefExtraction } from '@/lib/ai/tasks/extract-brief';
-import type { BriefQuestion, ClarifyResult } from '@/lib/ai/tasks/clarify-brief';
-import type { ProbeResult, ProbeTurn } from '@/lib/ai/tasks/probe-brief';
+import type { BriefExtraction } from '@/lib/ai/schemas/extract-brief';
+import type { BriefQuestion, ClarifyResult } from '@/lib/ai/schemas/clarify-brief';
+import type { ProbeResult, ProbeTurn } from '@/lib/ai/schemas/probe-brief';
 import { readCache, writeCache } from '@/lib/client-cache';
 import { readPreferredModel } from '@/lib/client-model';
 import { nextNodeKind, formatNodeNum } from '@/data/nodes';

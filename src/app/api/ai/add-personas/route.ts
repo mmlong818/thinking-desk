@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { generateMorePersonas, PersonaSchema } from '@/lib/ai/tasks/analyze-users';
+import { PersonaSchema } from '@/lib/ai/schemas/analyze-users';
+import { generateMorePersonas } from '@/lib/ai/tasks/analyze-users';
 import { findProjectBySlug, getNode, logAiExchange } from '@/lib/db/projects';
 import { providerFor } from '@/lib/ai/router';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

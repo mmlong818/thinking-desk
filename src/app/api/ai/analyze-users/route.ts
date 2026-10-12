@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { analyzeUsers } from '@/lib/ai/tasks/analyze-users';
 import { findProjectBySlug, getNode, logAiExchange, upsertNode } from '@/lib/db/projects';
 import { providerFor } from '@/lib/ai/router';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

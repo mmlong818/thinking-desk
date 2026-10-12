@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { reviseFeaturesWithLeaps } from '@/lib/ai/tasks/revise-features';
 import { findProjectBySlug, getNode, logAiExchange, upsertNode } from '@/lib/db/projects';
 import { providerFor } from '@/lib/ai/router';
-import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/tasks/extract-brief';
-import type { FeatureList } from '@/lib/ai/tasks/draft-features';
-import type { CreativeLeapAnalysis } from '@/lib/ai/tasks/creative-leap';
+import type { BriefExtraction, ClarificationAnswer } from '@/lib/ai/schemas/extract-brief';
+import type { FeatureList } from '@/lib/ai/schemas/draft-features';
+import type { CreativeLeapAnalysis } from '@/lib/ai/schemas/creative-leap';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

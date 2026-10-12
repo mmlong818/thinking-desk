@@ -1,13 +1,9 @@
 import { z } from 'zod';
 import type { NodeKind } from '../../data/nodes';
-import { BriefExtractionSchema } from '../ai/tasks/extract-brief';
-import { JobSchema, PersonaSchema, UsersAnalysisSchema } from '../ai/tasks/analyze-users';
-import { EngagementPlanSchema, StakeholderSchema } from '../ai/tasks/analyze-stakeholders';
-import {
-  AlternativeSchema,
-  FeatureBreakdownSchema,
-  StrategicProfileSchema,
-} from '../ai/tasks/analyze-alternatives';
+import { BriefExtractionSchema } from '../ai/schemas/extract-brief';
+import { JobSchema, PersonaSchema, UsersAnalysisSchema } from '../ai/schemas/analyze-users';
+import { EngagementPlanSchema, StakeholderSchema } from '../ai/schemas/analyze-stakeholders';
+import { AlternativeSchema, FeatureBreakdownSchema, StrategicProfileSchema } from '../ai/schemas/analyze-alternatives';
 import {
   DIMENSION_KEYS,
   DelightPointSchema,
@@ -18,22 +14,18 @@ import {
   MatrixCellSchema,
   PainPointSchema,
   ScenarioDraftSchema,
-} from '../ai/tasks/analyze-scenarios';
-import { FeatureSchema, NotDoingSchema, PillarSchema } from '../ai/tasks/draft-features';
-import { RevisionNoteSchema } from '../ai/tasks/revise-features';
-import {
-  AnalogyTransferSchema,
-  ConstraintFlipSchema,
-  FirstPrincipleRethinkSchema,
-} from '../ai/tasks/creative-leap';
+} from '../ai/schemas/analyze-scenarios';
+import { FeatureSchema, NotDoingSchema, PillarSchema } from '../ai/schemas/draft-features';
+import { RevisionNoteSchema } from '../ai/schemas/revise-features';
+import { AnalogyTransferSchema, ConstraintFlipSchema, FirstPrincipleRethinkSchema } from '../ai/schemas/creative-leap';
 import {
   DataEntitySchema,
   MilestoneSchema,
   ModuleSchema,
   SectionSchema,
   UserFlowSchema,
-} from '../ai/tasks/generate-design';
-import { SubFeatureSchema } from '../ai/tasks/split-subfeatures';
+} from '../ai/schemas/generate-design';
+import { SubFeatureSchema } from '../ai/schemas/split-subfeatures';
 import type { ItemEnvelope, ItemRecord, ItemType, LinkRel } from './types';
 
 // Per-type body registry. Bodies are derived from the task response schemas:

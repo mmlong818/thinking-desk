@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { generateDesignProposal } from '@/lib/ai/tasks/generate-design';
 import { findProjectBySlug, getNode, logAiExchange, upsertNode } from '@/lib/db/projects';
 import { providerFor } from '@/lib/ai/router';
-import type { BriefExtraction } from '@/lib/ai/tasks/extract-brief';
-import type { Feature, FeatureList, Pillar } from '@/lib/ai/tasks/draft-features';
+import type { BriefExtraction } from '@/lib/ai/schemas/extract-brief';
+import type { Feature, FeatureList, Pillar } from '@/lib/ai/schemas/draft-features';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
