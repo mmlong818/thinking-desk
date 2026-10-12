@@ -103,12 +103,7 @@ function CurrentQuestion({ turn, current, pending, canFinish, onAnswer, onSkipCu
           rows={3}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), submit())}
           disabled={pending}
         />
         <InterviewActions pending={pending} canSubmit={!pending && !!answer} canFinish={canFinish} onSkip={onSkipCurrent} onFinish={onFinish} onSubmit={submit} />

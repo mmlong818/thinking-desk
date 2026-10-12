@@ -37,13 +37,7 @@ export function ScenarioJobMatrix({ scenarios, jobs, cells, links }: {
   const get = cellLookup(cells, links);
   return (
     <div className="matrix-shell">
-      <div className="matrix-legend">
-        <span className="matrix-legend-item cat-core"><span className="matrix-legend-dot" /> 核心</span>
-        <span className="matrix-legend-item cat-safety_net"><span className="matrix-legend-dot" /> 安全网</span>
-        <span className="matrix-legend-item cat-fringe"><span className="matrix-legend-dot" /> 边缘</span>
-        <span className="matrix-legend-sep" />
-        <span className="matrix-legend-hint">F = 频率 · I = 重要度</span>
-      </div>
+      <MatrixLegend />
       <div className="matrix-wrap">
         <table className="matrix" style={{ ['--matrix-cols' as string]: jobs.length }}>
           <thead>
@@ -71,6 +65,18 @@ export function ScenarioJobMatrix({ scenarios, jobs, cells, links }: {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function MatrixLegend() {
+  return (
+    <div className="matrix-legend">
+      <span className="matrix-legend-item cat-core"><span className="matrix-legend-dot" /> 核心</span>
+      <span className="matrix-legend-item cat-safety_net"><span className="matrix-legend-dot" /> 安全网</span>
+      <span className="matrix-legend-item cat-fringe"><span className="matrix-legend-dot" /> 边缘</span>
+      <span className="matrix-legend-sep" />
+      <span className="matrix-legend-hint">F = 频率 · I = 重要度</span>
     </div>
   );
 }
