@@ -1,4 +1,5 @@
-import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
+import type { AiProvider, CompleteResult } from '../types';
+import { schemaInstruction } from '../json-schema';
 import { validateBaseUrl } from './validate-base-url';
 
 // Zhipu exposes an OpenAI-compatible Chat Completions endpoint. We call it
@@ -11,17 +12,6 @@ const ZHIPU_FALLBACK = [
   { id: 'glm-5-turbo',   label: 'GLM-5 Turbo · 快速' },
   { id: 'glm-4.7-flash', label: 'GLM-4.7 Flash · 免费' },
 ];
-
-function safeParseJson(raw: string): unknown {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error(`Zhipu response is not valid JSON. First 300 chars: ${trimmed.slice(0, 300)}`);
-  }
-}
 
 export const zhipuProvider: AiProvider = {
   name: 'zhipu',
@@ -54,12 +44,7 @@ export const zhipuProvider: AiProvider = {
     const started = Date.now();
 
     const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
-    if (req.schema) {
-      messages.push({
-        role: 'system',
-        content: `输出必须是 JSON，且严格符合以下 schema：\n${JSON.stringify(req.schema)}`,
-      });
-    }
+    if (req.schema) messages.push({ role: 'system', content: schemaInstruction(req.schema) });
 
     const body: Record<string, unknown> = {
       model,
@@ -114,10 +99,7 @@ export const zhipuProvider: AiProvider = {
           `Raw: ${JSON.stringify(json).slice(0, 500)}`,
       );
     }
-    const data = req.schema ? safeParseJson(text) : text;
-
     return {
-      data,
       text,
       provider: 'zhipu',
       model,
@@ -126,6 +108,7 @@ export const zhipuProvider: AiProvider = {
         inputTokens: json.usage?.prompt_tokens,
         outputTokens: json.usage?.completion_tokens,
       },
+      finishReason: choice?.finish_reason === 'length' ? 'length' : 'stop',
     };
   },
 };

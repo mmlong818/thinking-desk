@@ -1,4 +1,5 @@
-import type { AiProvider, CompleteRequest, CompleteResult, ChatMessage } from '../types';
+import type { AiProvider, CompleteResult, ChatMessage, FinishReason } from '../types';
+import { adaptSchema, GEMINI_DIALECT, schemaInstruction } from '../json-schema';
 import { validateBaseUrl } from './validate-base-url';
 
 interface GeminiPart { text: string }
@@ -38,7 +39,11 @@ export const geminiProvider: AiProvider = {
     const base = validateBaseUrl('gemini', process.env.GEMINI_BASE_URL) || 'https://generativelanguage.googleapis.com';
     const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
 
-    const system = req.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+    const native = req.schema ? adaptSchema(req.schema, GEMINI_DIALECT) : null;
+    const system = [
+      ...req.messages.filter((m) => m.role === 'system').map((m) => m.content),
+      req.schema && !native ? schemaInstruction(req.schema) : null,
+    ].filter(Boolean).join('\n\n');
     const started = Date.now();
 
     const body: Record<string, unknown> = {
@@ -48,7 +53,8 @@ export const geminiProvider: AiProvider = {
         temperature: req.temperature ?? 0.3,
         maxOutputTokens: req.maxTokens ?? 4096,
         responseMimeType: req.schema ? 'application/json' : 'text/plain',
-        responseSchema: req.schema,
+        // JSON Schema form (mutually exclusive with the OpenAPI-subset `responseSchema`).
+        ...(native ? { responseJsonSchema: native } : {}),
       },
       // Gemini grounding via Google Search — only available on supported models.
       tools: req.webSearch ? [{ googleSearch: {} }] : undefined,
@@ -64,15 +70,13 @@ export const geminiProvider: AiProvider = {
       throw new Error(`Gemini ${res.status}: ${await res.text()}`);
     }
     const json = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
+      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     };
-    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-    const data = req.schema ? JSON.parse(text) : text;
+    const candidate = json.candidates?.[0];
 
     return {
-      data,
-      text,
+      text: candidate?.content?.parts?.map((p) => p.text ?? '').join('') ?? '',
       provider: 'gemini',
       model,
       latencyMs: Date.now() - started,
@@ -80,6 +84,13 @@ export const geminiProvider: AiProvider = {
         inputTokens: json.usageMetadata?.promptTokenCount,
         outputTokens: json.usageMetadata?.candidatesTokenCount,
       },
+      finishReason: finishReason(candidate?.finishReason),
     };
   },
 };
+
+function finishReason(raw: string | undefined): FinishReason {
+  if (raw === 'MAX_TOKENS') return 'length';
+  if (raw === 'SAFETY') return 'refusal';
+  return raw === 'STOP' ? 'stop' : 'other';
+}

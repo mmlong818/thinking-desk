@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
+import type { AiProvider, CompleteResult } from '../types';
+import { schemaInstruction } from '../json-schema';
 import { validateBaseUrl } from './validate-base-url';
 
 function getClient(): Anthropic {
@@ -46,9 +47,7 @@ export const claudeProvider: AiProvider = {
 
     const systemText = [
       ...systemMessages.map((m) => m.content),
-      req.schema
-        ? `你必须只输出 JSON，且严格符合以下 schema（不要包含 Markdown 代码块包裹）：\n${JSON.stringify(req.schema)}`
-        : null,
+      req.schema ? schemaInstruction(req.schema) : null,
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -69,9 +68,7 @@ export const claudeProvider: AiProvider = {
       .map((b) => (b.type === 'text' ? b.text : ''))
       .join('');
 
-    const data = req.schema ? safeParseJson(text) : text;
     return {
-      data,
       text,
       provider: 'claude',
       model,
@@ -80,17 +77,7 @@ export const claudeProvider: AiProvider = {
         inputTokens: res.usage.input_tokens,
         outputTokens: res.usage.output_tokens,
       },
+      finishReason: res.stop_reason === 'max_tokens' ? 'length' : 'stop',
     };
   },
 };
-
-function safeParseJson(raw: string): unknown {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('Claude response is not valid JSON');
-  }
-}

@@ -23,26 +23,42 @@ export interface ChatMessage {
   content: string;
 }
 
+/** Provider-neutral reasoning-effort hint; a provider maps it only where its API documents it. */
+export type Effort = 'low' | 'medium' | 'high';
+
+/** A JSON Schema document (see src/lib/ai/json-schema.ts for how it is produced and adapted). */
+export type JsonSchema = Record<string, unknown>;
+
 export interface CompleteRequest {
   task: AiTask;
   messages: ChatMessage[];
-  /** JSON Schema the response must conform to (provider enforces via structured output when possible). */
-  schema?: Record<string, unknown>;
+  /**
+   * Canonical JSON Schema of the expected output (taskJsonSchema). Providers use their native
+   * structured-output mechanism when the schema fits it, else embed it in the prompt.
+   */
+  schema?: JsonSchema;
   /** Enable provider-side web search when supported (Gemini grounding / Zhipu web_search). */
   webSearch?: boolean;
+  /** Budget for the visible answer; providers add headroom for thinking / reasoning tokens. */
   maxTokens?: number;
   temperature?: number;
+  effort?: Effort;
   signal?: AbortSignal;
+  /** Milliseconds left before the caller's deadline (used as the SDK request timeout). */
+  timeoutMs?: number;
 }
 
+/** Why generation stopped: `length` = hit the token cap, `refusal` = provider safety stop. */
+export type FinishReason = 'stop' | 'length' | 'refusal' | 'other';
+
 export interface CompleteResult {
-  /** Parsed structured output if `schema` was provided, else raw text. */
-  data: unknown;
+  /** Raw answer text. runTask() parses and validates it; providers never parse. */
   text: string;
   provider: AiProviderName;
   model: string;
   latencyMs: number;
   usage?: { inputTokens?: number; outputTokens?: number };
+  finishReason?: FinishReason;
 }
 
 export interface ModelInfo {

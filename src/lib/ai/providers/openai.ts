@@ -1,4 +1,5 @@
-import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
+import type { AiProvider, CompleteResult, FinishReason } from '../types';
+import { schemaInstruction } from '../json-schema';
 import { validateBaseUrl } from './validate-base-url';
 
 const OPENAI_FALLBACK = [
@@ -19,6 +20,7 @@ function getKey(): string {
 
 interface ChatChoice {
   message?: { content?: string | null };
+  finish_reason?: string | null;
 }
 interface ChatResponse {
   choices?: ChatChoice[];
@@ -50,11 +52,7 @@ export const openaiProvider: AiProvider = {
   async complete(model, req): Promise<CompleteResult> {
     const started = Date.now();
     const systemMessages = req.messages.filter((m) => m.role === 'system').map((m) => m.content);
-    if (req.schema) {
-      systemMessages.push(
-        `你必须只输出 JSON，且严格符合以下 schema（不要包含 Markdown 代码块包裹）：\n${JSON.stringify(req.schema)}`,
-      );
-    }
+    if (req.schema) systemMessages.push(schemaInstruction(req.schema));
     const messages = [
       ...systemMessages.map((c) => ({ role: 'system' as const, content: c })),
       ...req.messages
@@ -88,12 +86,10 @@ export const openaiProvider: AiProvider = {
       throw new Error(`OpenAI ${res.status}: ${detail.slice(0, 300)}`);
     }
     const json = (await res.json()) as ChatResponse;
-    const text = json.choices?.[0]?.message?.content ?? '';
-    const data = req.schema ? safeParseJson(text) : text;
+    const choice = json.choices?.[0];
 
     return {
-      data,
-      text,
+      text: choice?.message?.content ?? '',
       provider: 'openai',
       model,
       latencyMs: Date.now() - started,
@@ -101,17 +97,14 @@ export const openaiProvider: AiProvider = {
         inputTokens: json.usage?.prompt_tokens,
         outputTokens: json.usage?.completion_tokens,
       },
+      finishReason: finishReason(choice?.finish_reason),
     };
   },
 };
 
-function safeParseJson(raw: string): unknown {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('OpenAI response is not valid JSON');
-  }
+/** Chat Completions finish_reason: stop | length | content_filter | tool_calls | function_call. */
+function finishReason(raw: string | null | undefined): FinishReason {
+  if (raw === 'length') return 'length';
+  if (raw === 'content_filter') return 'refusal';
+  return raw === 'stop' ? 'stop' : 'other';
 }
