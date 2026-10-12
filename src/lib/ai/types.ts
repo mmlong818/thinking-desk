@@ -1,22 +1,24 @@
 export type AiProviderName = 'claude' | 'openai' | 'gemini' | 'zhipu';
 
-export type AiTask =
-  | 'BRIEF_CLARIFY'
-  | 'BRIEF_EXTRACT'
-  | 'BRIEF_PROBE'
-  | 'USERS_JTBD'
-  | 'STAKE_MATRIX'
-  | 'ALT_SCAN'
-  | 'SCEN_FEED'
-  | 'SCEN_PAIN'
-  | 'FEAT_DRAFT'
-  | 'LEAP_FIRST_PRINCIPLES'
-  | 'LEAP_ANALOGY'
-  | 'LEAP_CONSTRAINT_FLIP'
-  | 'DESIGN_PROPOSAL'
-  | 'SPLIT_SUBFEATURES'
-  | 'FREE_ASK'
-  | 'FOLLOW_UPS';
+export const AI_TASKS = [
+  'BRIEF_CLARIFY',
+  'BRIEF_EXTRACT',
+  'BRIEF_PROBE',
+  'USERS_JTBD',
+  'STAKE_MATRIX',
+  'ALT_SCAN',
+  'SCEN_FEED',
+  'SCEN_PAIN',
+  'FEAT_DRAFT',
+  'LEAP_FIRST_PRINCIPLES',
+  'LEAP_ANALOGY',
+  'LEAP_CONSTRAINT_FLIP',
+  'DESIGN_PROPOSAL',
+  'SPLIT_SUBFEATURES',
+  'FREE_ASK',
+  'FOLLOW_UPS',
+] as const;
+export type AiTask = (typeof AI_TASKS)[number];
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';

@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { z } from 'zod';
-import type { NodeKind } from '../../data/nodes';
-import type { ItemRef, RunInput, RunStatus, Usage } from '../model/types';
+import type { RunStatus, Usage } from '../model/types';
 import { Deadline, DeadlineError } from './deadline';
 import { parseJsonLoose } from './json';
 import { taskJsonSchema } from './json-schema';
@@ -93,15 +92,8 @@ export function promptVersionOf(system: string, schema?: JsonSchema): string {
   return `sha256:${digest.slice(0, 16)}`;
 }
 
-/** A Run record (minus id / projectId / createdAt) for Repository.saveRunOutput. */
-export function toRunInput(meta: RunMeta, ctx: { node: NodeKind; inputs?: ItemRef[] }): RunInput {
-  return {
-    task: meta.task, node: ctx.node, provider: meta.provider, model: meta.model,
-    promptVersion: meta.promptVersion, inputs: ctx.inputs ?? [], status: meta.status, latencyMs: meta.latencyMs,
-    ...(meta.usage ? { usage: meta.usage } : {}),
-    ...(meta.error ? { error: meta.error } : {}),
-  };
-}
+/** Client-safe mapping onto a Run record (the browser saves runs after each route call). */
+export { toRunInput } from '../model/run-meta';
 
 export async function runTask<S extends z.ZodType>(
   spec: RunTaskSpec & { schema: S }, deps?: RunTaskDeps,
