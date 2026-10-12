@@ -1,5 +1,7 @@
-import { runAi } from '../router';
-import type { BriefExtraction, ClarificationAnswer } from '../schemas/extract-brief';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext } from '../schemas/snapshots';
 import {
   JobsRefinementSchema,
   UsersAnalysisSchema,
@@ -10,114 +12,6 @@ import {
   type UsersAnalysis,
   type PersonaBatch,
 } from '../schemas/analyze-users';
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['personas', 'jobs', 'priority_summary', 'critiques'],
-  properties: {
-    personas: {
-      type: 'array',
-      minItems: 3,
-      maxItems: 3,
-      items: personaItemSchema(),
-    },
-    jobs: {
-      type: 'object',
-      required: ['functional', 'emotional', 'social'],
-      properties: {
-        functional: { type: 'array', items: jobItemSchema() },
-        emotional: { type: 'array', items: jobItemSchema() },
-        social: { type: 'array', items: jobItemSchema() },
-      },
-    },
-    priority_summary: { type: 'string' },
-    critiques: {
-      type: 'array',
-      maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
-function jobItemSchema() {
-  return {
-    type: 'object',
-    required: ['id', 'title', 'reach', 'impact', 'source', 'suggested_priority', 'persona_ids'],
-    properties: {
-      id: { type: 'string' },
-      title: { type: 'string' },
-      reach: { type: 'integer', minimum: 1, maximum: 10 },
-      impact: { type: 'integer', minimum: 1, maximum: 3 },
-      source: { type: 'string' },
-      suggested_priority: { type: 'boolean' },
-      persona_ids: { type: 'array', items: { type: 'string' } },
-    },
-  };
-}
-const REFINE_JOBS_SCHEMA = {
-  type: 'object',
-  required: ['jobs', 'priority_summary', 'critiques'],
-  properties: {
-    jobs: {
-      type: 'object',
-      required: ['functional', 'emotional', 'social'],
-      properties: {
-        functional: { type: 'array', items: jobItemSchema() },
-        emotional: { type: 'array', items: jobItemSchema() },
-        social: { type: 'array', items: jobItemSchema() },
-      },
-    },
-    priority_summary: { type: 'string' },
-    critiques: {
-      type: 'array',
-      maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
-function personaItemSchema() {
-  return {
-    type: 'object',
-    required: ['id', 'role', 'name', 'one_liner', 'meta', 'story', 'pain'],
-    properties: {
-      id: { type: 'string' },
-      role: { type: 'string', enum: ['primary', 'candidate'] },
-      name: { type: 'string' },
-      one_liner: { type: 'string' },
-      meta: { type: 'string' },
-      story: { type: 'string' },
-      pain: { type: 'string' },
-    },
-  };
-}
-
-const ADD_PERSONAS_SCHEMA = {
-  type: 'object',
-  required: ['personas'],
-  properties: {
-    personas: {
-      type: 'array',
-      minItems: 3,
-      maxItems: 3,
-      items: personaItemSchema(),
-    },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 02 节点"用户与任务 (JTBD)"的 AI 副驾驶。
 
@@ -203,7 +97,13 @@ const ADD_PERSONAS_PROMPT = `你是「思考工作台」第 02 节点的 AI 副�
 # 输出
 严格 JSON：{"personas": [ ... 3 个 ...]}，不含任何前后文。`;
 
-function formatBriefContext(brief: BriefExtraction, rawText?: string, answers?: ClarificationAnswer[]): string {
+interface BriefArgs {
+  brief: BriefContext;
+  rawText?: string;
+  answers?: ClarificationAnswer[];
+}
+
+function formatBriefContext(brief: BriefContext, rawText?: string, answers?: ClarificationAnswer[]): string {
   const fields = Object.entries(brief.fields)
     .map(([k, v]) => {
       const val = Array.isArray(v) ? v.join(' · ') : v ?? '（未定义）';
@@ -223,25 +123,17 @@ function formatBriefContext(brief: BriefExtraction, rawText?: string, answers?: 
   return `## Brief 结构化字段\n${fields}\n\n## Brief 高亮\n${hl}${answersBlock}${rawBlock}`;
 }
 
-export async function analyzeUsers(args: {
-  brief: BriefExtraction;
-  rawText?: string;
-  answers?: ClarificationAnswer[];
-  override?: string;
-}): Promise<UsersAnalysis> {
+export async function analyzeUsers(args: BriefArgs, opts?: TaskOptions): Promise<RunTaskResult<UsersAnalysis>> {
   const context = formatBriefContext(args.brief, args.rawText, args.answers);
-  const res = await runAi({
+  return runTask({
     task: 'USERS_JTBD',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: `请基于以下 Brief 完成用户与 Job 分析。\n\n${context}` },
-    ],
-    schema: JSON_SCHEMA,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: `请基于以下 Brief 完成用户与 Job 分析。\n\n${dataBlock('project_context', context)}` }],
+    schema: UsersAnalysisSchema,
     maxTokens: 10000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
-  return UsersAnalysisSchema.parse(res.data);
 }
 
 function formatExistingPersonas(existing: Persona[], lockedIds: string[]): string {
@@ -253,16 +145,14 @@ function formatExistingPersonas(existing: Persona[], lockedIds: string[]): strin
   return lines.join('\n\n');
 }
 
-export async function refineJobs(args: {
-  brief: BriefExtraction;
-  rawText?: string;
-  answers?: ClarificationAnswer[];
+export interface RefineJobsArgs extends BriefArgs {
   selectedPersonas: Persona[];
   existingJobs: { functional: Job[]; emotional: Job[]; social: Job[] };
   /** Job ids the user has manually locked as "priority" — AI must preserve these. */
   userLockedJobIds: string[];
-  override?: string;
-}): Promise<JobsRefinement> {
+}
+
+function refineJobsMessage(args: RefineJobsArgs): string {
   const context = formatBriefContext(args.brief, args.rawText, args.answers);
   const personaBlock = args.selectedPersonas
     .map(
@@ -286,64 +176,62 @@ export async function refineJobs(args: {
           .map((j) => `- 🔒 [${j.id}] ${j.title}  (当前 R${j.reach}·I${j.impact})`)
           .join('\n');
 
-  const res = await runAi({
+  return (
+    `## Brief 上下文\n${dataBlock('project_context', context)}\n\n` +
+    `## 已选定 personas（共 ${args.selectedPersonas.length} 个）\n${dataBlock('selected_personas', personaBlock)}\n\n` +
+    `## 当前 Jobs 清单\n${dataBlock('current_jobs', jobsBlock)}\n\n` +
+    `## 🔒 用户已手动锁定的 Job（必须保留 · 不允许改动 id/title/source · suggested_priority 强制 true）\n${dataBlock('locked_jobs', lockedBlock)}\n\n` +
+    `请基于以上信息重新整理 Jobs。特别注意：\n` +
+    `1. 上面 🔒 列表里的 Job 必须原封不动出现在输出里；\n` +
+    `2. 通读每个 persona 的 pain / story，找出**当前清单没覆盖的 Job**；\n` +
+    `3. 新增的 Job 要与锁定项互补、不重复。`
+  );
+}
+
+/** Re-asserts the user's priority locks in case the model drops the flag on a preserved job. */
+function reassertLocks(refined: JobsRefinement, lockedIds: string[]): JobsRefinement {
+  const locked = new Set(lockedIds);
+  const mark = (jobs: Job[]) => jobs.map((j) => (locked.has(j.id) ? { ...j, suggested_priority: true } : j));
+  return {
+    ...refined,
+    jobs: { functional: mark(refined.jobs.functional), emotional: mark(refined.jobs.emotional), social: mark(refined.jobs.social) },
+  };
+}
+
+export async function refineJobs(args: RefineJobsArgs, opts?: TaskOptions): Promise<RunTaskResult<JobsRefinement>> {
+  const res = await runTask({
     task: 'USERS_JTBD',
+    system: REFINE_JOBS_PROMPT,
+    messages: [{ role: 'user', content: refineJobsMessage(args) }],
+    schema: JobsRefinementSchema,
+    maxTokens: 10000,
+    temperature: 0.3,
+    options: opts,
+  });
+  return { ...res, data: reassertLocks(res.data, args.userLockedJobIds) };
+}
+
+export async function generateMorePersonas(
+  args: BriefArgs & { existing: Persona[]; lockedIds: string[] },
+  opts?: TaskOptions,
+): Promise<RunTaskResult<PersonaBatch>> {
+  const context = formatBriefContext(args.brief, args.rawText, args.answers);
+  const existingBlock = formatExistingPersonas(args.existing, args.lockedIds);
+  return runTask({
+    task: 'USERS_JTBD',
+    system: ADD_PERSONAS_PROMPT,
     messages: [
-      { role: 'system', content: REFINE_JOBS_PROMPT },
       {
         role: 'user',
         content:
-          `## Brief 上下文\n${context}\n\n` +
-          `## 已选定 personas（共 ${args.selectedPersonas.length} 个）\n${personaBlock}\n\n` +
-          `## 当前 Jobs 清单\n\`\`\`json\n${jobsBlock}\n\`\`\`\n\n` +
-          `## 🔒 用户已手动锁定的 Job（必须保留 · 不允许改动 id/title/source · suggested_priority 强制 true）\n${lockedBlock}\n\n` +
-          `请基于以上信息重新整理 Jobs。特别注意：\n` +
-          `1. 上面 🔒 列表里的 Job 必须原封不动出现在输出里；\n` +
-          `2. 通读每个 persona 的 pain / story，找出**当前清单没覆盖的 Job**；\n` +
-          `3. 新增的 Job 要与锁定项互补、不重复。`,
+          `## Brief 上下文\n${dataBlock('project_context', context)}\n\n` +
+          `## 已有 persona（🔒 = 用户已锁定）\n${dataBlock('existing_personas', existingBlock)}\n\n` +
+          `请生成 3 个全新的、与上述清单明显不同的 persona。`,
       },
     ],
-    schema: REFINE_JOBS_SCHEMA,
-    maxTokens: 10000,
-    temperature: 0.3,
-    override: args.override,
-  });
-
-  // Defensive: re-assert the user's priority locks client-side in case the
-  // model drops the flag or mis-ids a preserved job.
-  const refined = JobsRefinementSchema.parse(res.data);
-  const lockedIdSet = new Set(args.userLockedJobIds);
-  for (const group of ['functional', 'emotional', 'social'] as const) {
-    refined.jobs[group] = refined.jobs[group].map((j) =>
-      lockedIdSet.has(j.id) ? { ...j, suggested_priority: true } : j,
-    );
-  }
-  return refined;
-}
-
-export async function generateMorePersonas(args: {
-  brief: BriefExtraction;
-  rawText?: string;
-  answers?: ClarificationAnswer[];
-  existing: Persona[];
-  lockedIds: string[];
-  override?: string;
-}): Promise<PersonaBatch> {
-  const context = formatBriefContext(args.brief, args.rawText, args.answers);
-  const existingBlock = formatExistingPersonas(args.existing, args.lockedIds);
-  const res = await runAi({
-    task: 'USERS_JTBD',
-    messages: [
-      { role: 'system', content: ADD_PERSONAS_PROMPT },
-      {
-        role: 'user',
-        content: `## Brief 上下文\n${context}\n\n## 已有 persona（🔒 = 用户已锁定）\n${existingBlock}\n\n请生成 3 个全新的、与上述清单明显不同的 persona。`,
-      },
-    ],
-    schema: ADD_PERSONAS_SCHEMA,
+    schema: PersonaBatchSchema,
     maxTokens: 6000,
     temperature: 0.7,
-    override: args.override,
+    options: opts,
   });
-  return PersonaBatchSchema.parse(res.data);
 }

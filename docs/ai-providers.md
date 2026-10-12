@@ -50,9 +50,8 @@ Task names are the `AiTask` string literal union in `src/lib/ai/types.ts`; `.env
 
 ## Per-Task Prompts
 
-Each AI task lives in `src/lib/ai/tasks/<task-name>.ts` and exports:
+- `src/lib/ai/schemas/<task>.ts` — the Zod output schema, its types and any UI constants. Client-safe: no router or provider imports (`schemas/client-safety.test.ts` enforces it).
+- `src/lib/ai/tasks/<task>.ts` — the prompt template and a task function `(args, opts) => runTask({ task, system, messages, schema, … })`. Request-supplied text goes into `dataBlock()` / `dataJson()` (`src/lib/ai/prompt.ts`); `runTask()` appends a guard to every system prompt telling the model to treat `<data>` blocks as material, never as instructions.
+- `src/app/api/ai/<task>/route.ts` — `export const POST = aiRoute({ name, body, timeoutMs, handle })`. The factory validates the body with Zod (upstream snapshots use the lenient schemas in `schemas/snapshots.ts`), passes the request's `AbortSignal`, and answers `{ ok: true, data, run }` or `{ error, detail? }` (plus `code` / `run` for AI failures).
 
-- A prompt builder / task function that receives the current node state and calls `runAi()`.
-- A Zod schema for the expected response structure.
-
-The route handler in `src/app/api/ai/<task>/route.ts` validates the request, calls the task function, and returns the full result as JSON.
+`runTask()` returns `{ data, text, run }`: `run` carries provider, model, `promptVersion` (hash of the system prompt + output schema), summed usage, latency and status `ok | retried | failed`; `toRunInput(run, { node, inputs })` turns it into a `Run` for `Repository.saveRunOutput`. Failures throw `RunTaskError` with `code`: `config`, `provider`, `invalid_output` (still invalid after the retry), `truncated` (hit the token cap), `refused` (provider safety stop), `timeout`, `aborted`.

@@ -83,9 +83,9 @@ export async function findProjectBySlug(slug: string): Promise<ProjectRow | null
   return rows[0] ?? null;
 }
 
-// Legacy node-blob helpers below target the `nodes` / `ai_exchanges` tables,
-// which schema.sql dropped in Phase 1. Every caller already catches DB errors,
-// so they fail softly until node pages and AI routes move to PgRepository.
+// Legacy node-blob reader for the `nodes` table, which schema.sql dropped in
+// Phase 1. Its only caller (the node page) catches DB errors, so it fails softly
+// until node pages move to PgRepository. AI routes no longer touch the database.
 
 /** @deprecated `nodes` table dropped; use PgRepository. */
 export async function getNode<T = Record<string, unknown>>(
@@ -97,51 +97,4 @@ export async function getNode<T = Record<string, unknown>>(
     [projectId, kind],
   );
   return rows[0] ?? null;
-}
-
-/** @deprecated `nodes` table dropped; use PgRepository. */
-export async function upsertNode(
-  projectId: string,
-  kind: string,
-  content: Record<string, unknown>,
-  completeness: number,
-): Promise<void> {
-  await query(
-    `INSERT INTO nodes (project_id, kind, content, completeness)
-       VALUES ($1, $2, $3::jsonb, $4)
-       ON CONFLICT (project_id, kind) DO UPDATE
-         SET content = EXCLUDED.content,
-             completeness = EXCLUDED.completeness,
-             updated_at = now()`,
-    [projectId, kind, JSON.stringify(content), completeness],
-  );
-}
-
-/** @deprecated `ai_exchanges` table dropped; runs are recorded by Repository.saveRunOutput. */
-export async function logAiExchange(args: {
-  projectId: string;
-  nodeKind: string;
-  task: string;
-  kind: 'feed' | 'ask' | 'check' | 'critique';
-  prompt: string;
-  response: unknown;
-  provider: string;
-  model: string;
-  latencyMs: number;
-}): Promise<void> {
-  await query(
-    `INSERT INTO ai_exchanges (project_id, node_kind, task, kind, prompt, response, provider, model, latency_ms)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
-    [
-      args.projectId,
-      args.nodeKind,
-      args.task,
-      args.kind,
-      args.prompt,
-      JSON.stringify(args.response),
-      args.provider,
-      args.model,
-      args.latencyMs,
-    ],
-  );
 }

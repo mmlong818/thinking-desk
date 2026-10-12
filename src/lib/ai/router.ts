@@ -1,5 +1,4 @@
-import type { AiProvider, AiProviderName, AiTask, CompleteRequest, CompleteResult, ModelInfo } from './types';
-import { parseJsonLoose } from './json';
+import type { AiProvider, AiProviderName, AiTask, ModelInfo } from './types';
 import { claudeProvider } from './providers/claude';
 import { openaiProvider } from './providers/openai';
 import { geminiProvider } from './providers/gemini';
@@ -137,10 +136,4 @@ export async function providerFor(task: AiTask, override?: string): Promise<Reso
 export async function resolveProvider(task: AiTask, override?: string): Promise<{ provider: AiProvider; model: string }> {
   const { provider, model } = await providerFor(task, override);
   return { provider: PROVIDERS[provider], model };
-}
-
-export async function runAi(req: CompleteRequest & { override?: string }): Promise<CompleteResult & { data: unknown }> {
-  const { provider, model } = await providerFor(req.task, req.override);
-  const res = await PROVIDERS[provider].complete(model, req);
-  return { ...res, data: req.schema ? parseJsonLoose(res.text) : res.text };
 }

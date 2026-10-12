@@ -80,7 +80,7 @@ final → split
 
 1. Add literal to `AiTask` in `src/lib/ai/types.ts`.
 2. Create `src/lib/ai/schemas/your-task.ts` (Zod output schema + types, client-safe) and `src/lib/ai/tasks/your-task.ts` (prompt builder). Components import from `schemas/` only — `schemas/client-safety.test.ts` fails if client code reaches the router or a provider SDK.
-3. Create `src/app/api/ai/your-task/route.ts` — POST handler that calls the task and returns JSON (no streaming; providers expose a single `complete()`).
+3. Create `src/app/api/ai/your-task/route.ts` — `export const POST = aiRoute({ name, body, handle })` from `src/lib/ai/route.ts`; the task calls `runTask()` (`src/lib/ai/run-task.ts`) and wraps request data in `dataBlock()`. No streaming; providers expose a single `complete()`.
 4. Document `AI_MODEL_YOUR_TASK` in `.env.example`.
 
 ## AI Model Routing

@@ -1,137 +1,14 @@
-import { runAi } from '../router';
-import type { Feature, FeatureList } from '../schemas/draft-features';
-import type { CreativeLeapAnalysis } from '../schemas/creative-leap';
-import type { BriefExtraction, ClarificationAnswer } from '../schemas/extract-brief';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { Feature } from '../schemas/draft-features';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext, FeatureListSnapshot, LeapSnapshot } from '../schemas/snapshots';
 import { FeatureRevisionSchema, type FeatureRevision } from '../schemas/revise-features';
 
 /**
  * 把用户采纳的跃迁应用到功能列表，产出"修订后的最终功能列表"。
  * 这是 §十 → §九 的回流 —— 跃迁只有影响了功能，才真正是设计。
  */
-
-// ---- JSON schema (镜像 zod 上面的) ----
-const JSON_SCHEMA = {
-  type: 'object',
-  required: [
-    'revised_features', 'revised_pillars', 'revisions', 'revised_not_doing',
-    'differentiation_echo', 'summary', 'critiques',
-  ],
-  properties: {
-    revised_features: {
-      type: 'array', minItems: 3,
-      items: {
-        type: 'object',
-        required: [
-          'id', 'name', 'description', 'pillar', 'group',
-          'traces', 'kano', 'rice', 'rice_score',
-          'five_questions',
-          'core_hypothesis', 'validation_metric', 'failure_signal',
-          'ethics_concern', 'red_line_risk', 'suggested_priority',
-        ],
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          description: { type: 'string' },
-          pillar: { type: 'string' },
-          group: { type: 'string' },
-          traces: {
-            type: 'object',
-            required: ['insight_ids', 'job_ids', 'persona_ids', 'scenario_ids'],
-            properties: {
-              insight_ids: { type: 'array', items: { type: 'string' } },
-              job_ids: { type: 'array', items: { type: 'string' } },
-              persona_ids: { type: 'array', items: { type: 'string' } },
-              scenario_ids: { type: 'array', items: { type: 'string' } },
-            },
-          },
-          kano: { type: 'string', enum: ['must', 'performance', 'delight', 'indifferent', 'reverse'] },
-          rice: {
-            type: 'object',
-            required: ['reach', 'impact', 'confidence', 'effort'],
-            properties: {
-              reach: { type: 'number' },
-              impact: { type: 'number', enum: [0.25, 0.5, 1, 2, 3] },
-              confidence: { type: 'number', enum: [0.5, 0.8, 1] },
-              effort: { type: 'number' },
-            },
-          },
-          rice_score: { type: 'number' },
-          five_questions: {
-            type: 'object',
-            required: ['why_do', 'why_this_way', 'alternatives', 'what_if_not', 'what_if_wrong'],
-            properties: {
-              why_do: { type: 'string' },
-              why_this_way: { type: 'string' },
-              alternatives: { type: 'string' },
-              what_if_not: { type: 'string' },
-              what_if_wrong: { type: 'string' },
-            },
-          },
-          core_hypothesis: { type: 'string' },
-          validation_metric: { type: 'string' },
-          failure_signal: { type: 'string' },
-          ethics_concern: { type: 'string' },
-          red_line_risk: { type: 'boolean' },
-          suggested_priority: { type: 'boolean' },
-        },
-      },
-    },
-    revised_pillars: {
-      type: 'array', minItems: 2, maxItems: 6,
-      items: {
-        type: 'object',
-        required: ['id', 'name', 'description'],
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          description: { type: 'string' },
-        },
-      },
-    },
-    revisions: {
-      type: 'array', minItems: 1,
-      items: {
-        type: 'object',
-        required: ['action', 'reason', 'source_leap_ids'],
-        properties: {
-          action: { type: 'string', enum: ['added', 'modified', 'removed', 'kept'] },
-          feature_id: { type: 'string' },
-          original_feature_id: { type: 'string' },
-          name_before: { type: 'string' },
-          name_after: { type: 'string' },
-          reason: { type: 'string' },
-          source_leap_ids: { type: 'array', items: { type: 'string' } },
-        },
-      },
-    },
-    revised_not_doing: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['name', 'reason', 'why'],
-        properties: {
-          name: { type: 'string' },
-          reason: { type: 'string', enum: ['boundary', 'ethics', 'indifferent', 'low_rice', 'dependency'] },
-          why: { type: 'string' },
-        },
-      },
-    },
-    differentiation_echo: { type: 'string' },
-    summary: { type: 'string' },
-    critiques: {
-      type: 'array', maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」的 AI 副驾驶。
 用户刚从 §十 创造性跃迁节点选出了几条要采纳的跃迁，现在你要**回到 §九 功能列表**，
@@ -183,7 +60,7 @@ const SYSTEM_PROMPT = `你是「思考工作台」的 AI 副驾驶。
 严格 JSON · 不含前后文 · 不用 Markdown。`;
 
 function formatLeapsForRevision(
-  leaps: CreativeLeapAnalysis,
+  leaps: LeapSnapshot,
   selectedIds: string[],
 ): string {
   const picked: Array<{ id: string; kind: string; text: string }> = [];
@@ -206,7 +83,7 @@ function formatLeapsForRevision(
   return picked.map((p) => `- [${p.id}] [${p.kind}] ${p.text}`).join('\n');
 }
 
-function formatOriginalFeatures(list: FeatureList): string {
+function formatOriginalFeatures(list: FeatureListSnapshot): string {
   const block = list.features
     .map(
       (f) =>
@@ -221,7 +98,7 @@ function formatOriginalFeatures(list: FeatureList): string {
 }
 
 function formatBriefContext(
-  brief: BriefExtraction,
+  brief: BriefContext,
   rawText?: string,
   answers?: ClarificationAnswer[],
 ): string {
@@ -243,42 +120,40 @@ function formatBriefContext(
 }
 
 export async function reviseFeaturesWithLeaps(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
-  original: FeatureList;
-  leaps: CreativeLeapAnalysis;
+  original: FeatureListSnapshot;
+  leaps: LeapSnapshot;
   selectedLeapIds: string[];
-  override?: string;
-}): Promise<FeatureRevision> {
+}, opts?: TaskOptions): Promise<RunTaskResult<FeatureRevision>> {
   const briefCtx = formatBriefContext(args.brief, args.rawText, args.answers);
   const leapBlock = formatLeapsForRevision(args.leaps, args.selectedLeapIds);
   const originalBlock = formatOriginalFeatures(args.original);
 
-  const res = await runAi({
+  const res = await runTask({
     task: 'FEAT_DRAFT',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `${briefCtx}\n\n` +
-          `## 用户采纳的跃迁（${args.selectedLeapIds.length} 条）\n${leapBlock}\n\n` +
-          `## 修订前的功能列表（§九 产出）\n${originalBlock}\n\n` +
+          `${dataBlock('brief', briefCtx)}\n\n` +
+          `## 用户采纳的跃迁（${args.selectedLeapIds.length} 条）\n${dataBlock('adopted_leaps', leapBlock)}\n\n` +
+          `## 修订前的功能列表（§九 产出）\n${dataBlock('original_features', originalBlock)}\n\n` +
           `请基于采纳的跃迁修订功能列表，产出：revised_features · revised_pillars · revisions · revised_not_doing · differentiation_echo · summary · critiques`,
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: FeatureRevisionSchema,
     maxTokens: 16000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
 
-  const parsed = FeatureRevisionSchema.parse(res.data);
   // Defensive: recompute RICE score client-side
-  parsed.revised_features = parsed.revised_features.map((f: Feature) => {
+  const revised_features = res.data.revised_features.map((f: Feature) => {
     const computed = (f.rice.reach * f.rice.impact * f.rice.confidence) / Math.max(f.rice.effort, 0.1);
     return { ...f, rice_score: Math.round(computed * 10) / 10 };
   });
-  return parsed;
+  return { ...res, data: { ...res.data, revised_features } };
 }

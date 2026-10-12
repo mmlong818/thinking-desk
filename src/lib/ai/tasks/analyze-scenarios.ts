@@ -1,5 +1,7 @@
-import { runAi } from '../router';
-import type { BriefExtraction, ClarificationAnswer } from '../schemas/extract-brief';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext } from '../schemas/snapshots';
 import type { Persona, Job } from '../schemas/analyze-users';
 import {
   DIMENSION_KEYS,
@@ -30,36 +32,6 @@ import {
 // Stage 1: 7-dim exhaust
 // =============================================================
 
-const DIMENSIONS_JSON_SCHEMA = {
-  type: 'object',
-  required: ['dimensions'],
-  properties: {
-    dimensions: {
-      type: 'object',
-      required: [...DIMENSION_KEYS],
-      properties: Object.fromEntries(
-        DIMENSION_KEYS.map((k) => [
-          k,
-          {
-            type: 'array',
-            minItems: 6,
-            maxItems: 12,
-            items: {
-              type: 'object',
-              required: ['id', 'text', 'relevance'],
-              properties: {
-                id: { type: 'string' },
-                text: { type: 'string' },
-                relevance: { type: 'string', enum: ['high', 'medium', 'low'] },
-              },
-            },
-          },
-        ]),
-      ),
-    },
-  },
-};
-
 const EXHAUST_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副驾驶。
 方法论 v2 §8.1 要求穷举 7 维构成情景的要素，**先发散再收敛**。
 
@@ -86,7 +58,7 @@ const EXHAUST_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副
 不含任何前后文、不用 Markdown 代码块。`;
 
 function formatContext(
-  brief: BriefExtraction,
+  brief: BriefContext,
   personas: Persona[],
   jobs: Job[],
   rawText?: string,
@@ -119,59 +91,32 @@ function formatContext(
 }
 
 export async function exhaustScenarioDimensions(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
-  override?: string;
-}): Promise<DimensionsResult> {
+}, opts?: TaskOptions): Promise<RunTaskResult<DimensionsResult>> {
   const context = formatContext(args.brief, args.personas, args.lockedJobs, args.rawText, args.answers);
-  const res = await runAi({
+  return runTask({
     task: 'SCEN_FEED',
+    system: EXHAUST_PROMPT,
     messages: [
-      { role: 'system', content: EXHAUST_PROMPT },
       {
         role: 'user',
-        content: `${context}\n\n请按 7 维穷举 8-12 个候选要素。覆盖标准场景 + 极值。`,
+        content: `${dataBlock('project_context', context)}\n\n请按 7 维穷举 8-12 个候选要素。覆盖标准场景 + 极值。`,
       },
     ],
-    schema: DIMENSIONS_JSON_SCHEMA,
+    schema: DimensionsResultSchema,
     maxTokens: 10000,
     temperature: 0.6,
-    override: args.override,
+    options: opts,
   });
-  return DimensionsResultSchema.parse(res.data);
 }
 
 // =============================================================
 // Stage 2: combine selected elements into scenarios
 // =============================================================
-
-const COMBINE_JSON_SCHEMA = {
-  type: 'object',
-  required: ['scenarios'],
-  properties: {
-    scenarios: {
-      type: 'array',
-      minItems: 5,
-      maxItems: 8,
-      items: {
-        type: 'object',
-        required: ['id', 'title', 'meta', 'narrative', 'element_ids', 'job_ids', 'pain_hint'],
-        properties: {
-          id: { type: 'string' },
-          title: { type: 'string' },
-          meta: { type: 'string' },
-          narrative: { type: 'string' },
-          element_ids: { type: 'array', minItems: 3, items: { type: 'string' } },
-          job_ids: { type: 'array', items: { type: 'string' } },
-          pain_hint: { type: 'string' },
-        },
-      },
-    },
-  },
-};
 
 const COMBINE_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副驾驶。
 方法论 v2 §8.2 要求把用户勾选的要素交叉组合成**具体情景**。
@@ -200,15 +145,14 @@ const COMBINE_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副
 不含任何前后文、不用 Markdown 代码块。`;
 
 export async function combineScenarios(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
   dimensions: DimensionsResult;
   selectedElementIds: string[];
-  override?: string;
-}): Promise<ScenarioDrafts> {
+}, opts?: TaskOptions): Promise<RunTaskResult<ScenarioDrafts>> {
   const context = formatContext(args.brief, args.personas, args.lockedJobs, args.rawText, args.answers);
   const selectedSet = new Set(args.selectedElementIds);
   const selectedBlock = DIMENSION_KEYS.map((k) => {
@@ -219,153 +163,28 @@ export async function combineScenarios(args: {
     .filter(Boolean)
     .join('\n\n');
 
-  const res = await runAi({
+  return runTask({
     task: 'SCEN_FEED',
+    system: COMBINE_PROMPT,
     messages: [
-      { role: 'system', content: COMBINE_PROMPT },
       {
         role: 'user',
         content:
-          `${context}\n\n## 用户勾选的要素（${args.selectedElementIds.length} 个）\n${selectedBlock}\n\n` +
+          `${dataBlock('project_context', context)}\n\n` +
+          `## 用户勾选的要素（${args.selectedElementIds.length} 个）\n${dataBlock('selected_elements', selectedBlock)}\n\n` +
           `请组合出 5-8 个差异化情景。`,
       },
     ],
-    schema: COMBINE_JSON_SCHEMA,
+    schema: ScenarioDraftsSchema,
     maxTokens: 8000,
     temperature: 0.5,
-    override: args.override,
+    options: opts,
   });
-  return ScenarioDraftsSchema.parse(res.data);
 }
 
 // =============================================================
 // Stage 3: deep analyze (matrix / extremes / hostiles / insights)
 // =============================================================
-
-const DEEP_JSON_SCHEMA = {
-  type: 'object',
-  required: [
-    'matrix',
-    'extremes',
-    'hostiles',
-    'pain_points',
-    'delight_points',
-    'design_insights',
-    'critiques',
-  ],
-  properties: {
-    matrix: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['scenario_id', 'job_id', 'frequency', 'importance', 'category', 'note'],
-        properties: {
-          scenario_id: { type: 'string' },
-          job_id: { type: 'string' },
-          frequency: { type: 'string', enum: ['high', 'medium', 'low'] },
-          importance: { type: 'string', enum: ['high', 'medium', 'low'] },
-          category: { type: 'string', enum: ['core', 'safety_net', 'fringe'] },
-          note: { type: 'string' },
-        },
-      },
-    },
-    extremes: {
-      type: 'array',
-      minItems: 3,
-      maxItems: 8,
-      items: {
-        type: 'object',
-        required: ['id', 'dim', 'pushed_to_limit', 'description', 'robustness_gap'],
-        properties: {
-          id: { type: 'string' },
-          dim: { type: 'string', enum: [...DIMENSION_KEYS] },
-          pushed_to_limit: { type: 'string' },
-          description: { type: 'string' },
-          robustness_gap: { type: 'string' },
-        },
-      },
-    },
-    hostiles: {
-      type: 'array',
-      minItems: 2,
-      maxItems: 6,
-      items: {
-        type: 'object',
-        required: ['id', 'attack', 'vulnerable_users', 'mitigation', 'severity'],
-        properties: {
-          id: { type: 'string' },
-          attack: { type: 'string' },
-          vulnerable_users: { type: 'string' },
-          mitigation: { type: 'string' },
-          severity: { type: 'string', enum: ['high', 'medium', 'low'] },
-        },
-      },
-    },
-    pain_points: {
-      type: 'array',
-      minItems: 3,
-      items: {
-        type: 'object',
-        required: ['id', 'scenario_id', 'moment', 'feeling', 'why_1', 'why_2', 'why_3', 'root_cause'],
-        properties: {
-          id: { type: 'string' },
-          scenario_id: { type: 'string' },
-          moment: { type: 'string' },
-          feeling: { type: 'string' },
-          why_1: { type: 'string' },
-          why_2: { type: 'string' },
-          why_3: { type: 'string' },
-          root_cause: { type: 'string' },
-        },
-      },
-    },
-    delight_points: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['id', 'scenario_id', 'moment', 'feeling', 'root_reason', 'opportunity'],
-        properties: {
-          id: { type: 'string' },
-          scenario_id: { type: 'string' },
-          moment: { type: 'string' },
-          feeling: { type: 'string' },
-          root_reason: { type: 'string' },
-          opportunity: { type: 'string' },
-        },
-      },
-    },
-    design_insights: {
-      type: 'array',
-      minItems: 3,
-      maxItems: 10,
-      items: {
-        type: 'object',
-        required: ['id', 'scenario_id', 'insight_text', 'action'],
-        properties: {
-          id: { type: 'string' },
-          scenario_id: { type: 'string' },
-          job_id: { type: 'string' },
-          pain_id: { type: 'string' },
-          insight_text: { type: 'string' },
-          action: { type: 'string' },
-        },
-      },
-    },
-    critiques: {
-      type: 'array',
-      maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
 
 const DEEP_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副驾驶。
 用户已从组合情景里选了 3 个深入。你要一次产出五份产出物，覆盖 §8.2-8.5 全部方法论要求。
@@ -436,15 +255,14 @@ insight_text 就放完整这句话，action 单独放"设计动作"短句方便�
 严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
 
 export async function deepAnalyzeScenarios(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
   scenarios: ScenarioDraft[];
   pickedScenarioIds: string[];
-  override?: string;
-}): Promise<ScenarioDeepAnalysis> {
+}, opts?: TaskOptions): Promise<RunTaskResult<ScenarioDeepAnalysis>> {
   const context = formatContext(args.brief, args.personas, args.lockedJobs, args.rawText, args.answers);
   const pickedSet = new Set(args.pickedScenarioIds);
   const picked = args.scenarios.filter((s) => pickedSet.has(s.id));
@@ -457,22 +275,22 @@ export async function deepAnalyzeScenarios(args: {
 
   const jobsBlock = args.lockedJobs.map((j) => `- [${j.id}] ${j.title}`).join('\n');
 
-  const res = await runAi({
+  return runTask({
     task: 'SCEN_PAIN',
+    system: DEEP_PROMPT,
     messages: [
-      { role: 'system', content: DEEP_PROMPT },
       {
         role: 'user',
         content:
-          `${context}\n\n## 用户选入深入分析的 ${picked.length} 个情景\n${pickedBlock}\n\n` +
-          `## 已锁 Jobs（矩阵列头）\n${jobsBlock}\n\n` +
+          `${dataBlock('project_context', context)}\n\n` +
+          `## 用户选入深入分析的 ${picked.length} 个情景\n${dataBlock('picked_scenarios', pickedBlock)}\n\n` +
+          `## 已锁 Jobs（矩阵列头）\n${dataBlock('locked_jobs', jobsBlock)}\n\n` +
           `请一次产出：矩阵 · 极值情景 · 敌意情景 · 痛点连续追问 · 快点 · 设计启发 · critiques。`,
       },
     ],
-    schema: DEEP_JSON_SCHEMA,
+    schema: ScenarioDeepAnalysisSchema,
     maxTokens: 16000,
     temperature: 0.35,
-    override: args.override,
+    options: opts,
   });
-  return ScenarioDeepAnalysisSchema.parse(res.data);
 }

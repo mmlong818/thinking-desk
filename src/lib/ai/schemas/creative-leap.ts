@@ -87,7 +87,8 @@ export const CreativeLeapAnalysisSchema = z.object({
     .max(5),
 });
 export type CreativeLeapAnalysis = z.infer<typeof CreativeLeapAnalysisSchema>;
-export type LeapCategory = 'first_principles' | 'analogies' | 'constraint_flips';
+export const LEAP_CATEGORIES = ['first_principles', 'analogies', 'constraint_flips'] as const;
+export type LeapCategory = (typeof LEAP_CATEGORIES)[number];
 
 export const MoreItemsResultSchema = z.object({
   first_principles: z.array(FirstPrincipleRethinkSchema).optional(),
@@ -95,3 +96,10 @@ export const MoreItemsResultSchema = z.object({
   constraint_flips: z.array(ConstraintFlipSchema).optional(),
 });
 export type MoreItemsResult = z.infer<typeof MoreItemsResultSchema>;
+
+/** What a "give me more" run must return for the requested category (2-4 new items). */
+export const MORE_ITEMS_SCHEMAS = {
+  first_principles: z.object({ first_principles: z.array(FirstPrincipleRethinkSchema).min(2).max(4) }),
+  analogies: z.object({ analogies: z.array(AnalogyTransferSchema).min(2).max(4) }),
+  constraint_flips: z.object({ constraint_flips: z.array(ConstraintFlipSchema).min(2).max(4) }),
+} satisfies Record<LeapCategory, z.ZodType<MoreItemsResult>>;

@@ -1,46 +1,6 @@
-import { runAi } from '../router';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import { ClarifyResultSchema, type ClarifyResult } from '../schemas/clarify-brief';
-
-const JSON_SCHEMA = {
-  type: 'object',
-  oneOf: [
-    {
-      type: 'object',
-      required: ['action', 'reason'],
-      properties: {
-        action: { const: 'proceed' },
-        reason: { type: 'string' },
-      },
-    },
-    {
-      type: 'object',
-      required: ['action', 'need_type', 'reasoning', 'questions', 'suggested_mode', 'mode_reason'],
-      properties: {
-        action: { const: 'ask' },
-        need_type: { type: 'string', enum: ['design', 'product', 'mixed', 'other'] },
-        suggested_mode: { type: 'string', enum: ['questionnaire', 'interview'] },
-        mode_reason: { type: 'string' },
-        reasoning: { type: 'string' },
-        questions: {
-          type: 'array',
-          minItems: 1,
-          maxItems: 12,
-          items: {
-            type: 'object',
-            required: ['id', 'title', 'type', 'options'],
-            properties: {
-              id: { type: 'string' },
-              title: { type: 'string' },
-              subtitle: { type: 'string' },
-              type: { type: 'string', enum: ['single', 'multi'] },
-              options: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 6 },
-            },
-          },
-        },
-      },
-    },
-  ],
-};
 
 const SYSTEM_PROMPT = `# ROLE
 你是"需求澄清助手"。当用户描述一个设计或产品需求时，你的任务不是立刻动手，而是判断：是否需要先问几个关键问题，才能产出高质量结果？
@@ -136,17 +96,17 @@ mode_reason：一句话说明你为什么建议这个模式（让用户判断要
 本轮的目标是把需求澄清到能进入下一步「结构化抽取」。
 因此你的问题应该偏产品 / 设计方向，为后续的 Job 分析、情景、功能列表打好基础。`;
 
-export async function clarifyBrief(rawText: string, override?: string): Promise<ClarifyResult> {
-  const res = await runAi({
+export async function clarifyBrief(
+  args: { rawText: string },
+  opts?: TaskOptions,
+): Promise<RunTaskResult<ClarifyResult>> {
+  return runTask({
     task: 'BRIEF_CLARIFY',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: `请判断下列原始需求是否需要澄清。\n\n原始文字：\n${rawText}` },
-    ],
-    schema: JSON_SCHEMA,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: `请判断下列原始需求是否需要澄清。\n\n原始文字：\n${dataBlock('raw_text', args.rawText)}` }],
+    schema: ClarifyResultSchema,
     maxTokens: 8000,
     temperature: 0.3,
-    override,
+    options: opts,
   });
-  return ClarifyResultSchema.parse(res.data);
 }

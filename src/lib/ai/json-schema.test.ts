@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { adaptSchema, CLAUDE_DIALECT, GEMINI_DIALECT, schemaInstruction, taskJsonSchema } from './json-schema';
 import type { JsonSchema } from './types';
+import { AlternativesAnalysisSchema } from './schemas/analyze-alternatives';
+import { DimensionsResultSchema, ScenarioDeepAnalysisSchema, ScenarioDraftsSchema } from './schemas/analyze-scenarios';
+import { StakeholdersAnalysisSchema } from './schemas/analyze-stakeholders';
+import { JobsRefinementSchema, PersonaBatchSchema, UsersAnalysisSchema } from './schemas/analyze-users';
+import { ClarifyResultSchema } from './schemas/clarify-brief';
+import { CreativeLeapAnalysisSchema, MORE_ITEMS_SCHEMAS } from './schemas/creative-leap';
+import { DeriveFollowUpsResultSchema } from './schemas/derive-follow-ups';
+import { FeatureListSchema } from './schemas/draft-features';
+import { BriefExtractionSchema } from './schemas/extract-brief';
+import { DesignProposalSchema } from './schemas/generate-design';
+import { ProbeResultSchema } from './schemas/probe-brief';
+import { FeatureRevisionSchema } from './schemas/revise-features';
+import { SubfeatureBreakdownSchema } from './schemas/split-subfeatures';
 
 const Sample = z.object({
   title: z.string().min(1),
@@ -87,5 +100,31 @@ describe('adaptSchema · Gemini', () => {
 describe('schemaInstruction', () => {
   it('embeds the schema for providers without native structured output', () => {
     expect(schemaInstruction({ type: 'object' })).toContain('{"type":"object"}');
+  });
+});
+
+describe('every task output schema', () => {
+  const outputs: Record<string, z.ZodType> = {
+    BriefExtractionSchema, ClarifyResultSchema, ProbeResultSchema, UsersAnalysisSchema, JobsRefinementSchema,
+    PersonaBatchSchema, StakeholdersAnalysisSchema, AlternativesAnalysisSchema, DimensionsResultSchema,
+    ScenarioDraftsSchema, ScenarioDeepAnalysisSchema, FeatureListSchema, CreativeLeapAnalysisSchema,
+    FeatureRevisionSchema, DesignProposalSchema, SubfeatureBreakdownSchema, DeriveFollowUpsResultSchema,
+    ...Object.fromEntries(Object.entries(MORE_ITEMS_SCHEMAS).map(([k, v]) => [`more:${k}`, v])),
+  };
+  const unionRoots = ['ClarifyResultSchema', 'ProbeResultSchema'];
+
+  it.each(Object.entries(outputs))('%s converts and adapts to both native dialects', (name, schema) => {
+    const canonical = taskJsonSchema(schema);
+    const claude = adaptSchema(canonical, CLAUDE_DIALECT);
+    const gemini = adaptSchema(canonical, GEMINI_DIALECT);
+    if (unionRoots.includes(name)) {
+      expect([claude, gemini]).toEqual([null, null]);
+      return;
+    }
+    expect(claude).not.toBeNull();
+    expect(gemini).not.toBeNull();
+    const claudeUnsupported = ['minimum', 'maximum', 'minItems', 'maxItems', 'minLength', 'maxLength', 'default', 'oneOf'];
+    expect(nodes(claude).filter((n) => claudeUnsupported.some((k) => k in n))).toEqual([]);
+    expect(nodes(gemini).some((n) => 'const' in n || 'oneOf' in n || 'default' in n)).toBe(false);
   });
 });

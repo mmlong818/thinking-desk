@@ -1,6 +1,7 @@
-import { runAi } from '../router';
-import type { BriefExtraction } from '../schemas/extract-brief';
-import type { Feature, Pillar } from '../schemas/draft-features';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { BriefContext, FeatureDigest } from '../schemas/snapshots';
+import type { Pillar } from '../schemas/draft-features';
 import { DesignProposalSchema, type DesignProposal } from '../schemas/generate-design';
 
 /**
@@ -8,123 +9,6 @@ import { DesignProposalSchema, type DesignProposal } from '../schemas/generate-d
  * 输入：跃迁后的最终功能列表 + Brief + 选中场景
  * 输出：完整设计文档（不是功能罗列） —— 信息架构、关键用户流、核心交互、数据模型、技术骨架、里程碑
  */
-
-const sectionJson = {
-  type: 'object',
-  required: ['id', 'title', 'body'],
-  properties: {
-    id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' },
-  },
-};
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: [
-    'title','one_liner','vision','design_principles',
-    'information_architecture','modules','user_flows','key_interactions',
-    'data_model','tech_skeleton','metrics','risks','milestones','open_questions',
-  ],
-  properties: {
-    title: { type: 'string' },
-    one_liner: { type: 'string' },
-    vision: { type: 'string' },
-    design_principles: { type: 'array', items: { type: 'string' } },
-    information_architecture: { type: 'array', items: sectionJson },
-    modules: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['id','name','responsibility','feature_ids','key_screens','depends_on'],
-        properties: {
-          id: { type: 'string' }, name: { type: 'string' },
-          responsibility: { type: 'string' },
-          feature_ids: { type: 'array', items: { type: 'string' } },
-          key_screens: { type: 'array', items: { type: 'string' } },
-          depends_on: { type: 'array', items: { type: 'string' } },
-        },
-      },
-    },
-    user_flows: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['id','name','goal','precondition','steps','success_criteria','failure_handling'],
-        properties: {
-          id: { type: 'string' }, name: { type: 'string' },
-          goal: { type: 'string' }, precondition: { type: 'string' },
-          steps: {
-            type: 'array',
-            items: {
-              type: 'object',
-              required: ['step','actor','action','system_response'],
-              properties: {
-                step: { type: 'integer' },
-                actor: { type: 'string' },
-                action: { type: 'string' },
-                system_response: { type: 'string' },
-              },
-            },
-          },
-          success_criteria: { type: 'string' },
-          failure_handling: { type: 'string' },
-        },
-      },
-    },
-    key_interactions: { type: 'array', items: sectionJson },
-    data_model: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['name','description','fields'],
-        properties: {
-          name: { type: 'string' }, description: { type: 'string' },
-          fields: {
-            type: 'array',
-            items: {
-              type: 'object',
-              required: ['name','type','note'],
-              properties: {
-                name: { type: 'string' }, type: { type: 'string' }, note: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    },
-    tech_skeleton: { type: 'array', items: sectionJson },
-    metrics: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['name','definition','target'],
-        properties: {
-          name: { type: 'string' }, definition: { type: 'string' }, target: { type: 'string' },
-        },
-      },
-    },
-    risks: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['risk','mitigation'],
-        properties: { risk: { type: 'string' }, mitigation: { type: 'string' } },
-      },
-    },
-    milestones: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['phase','goal','deliverables','duration'],
-        properties: {
-          phase: { type: 'string' }, goal: { type: 'string' },
-          deliverables: { type: 'array', items: { type: 'string' } },
-          duration: { type: 'string' },
-        },
-      },
-    },
-    open_questions: { type: 'array', items: { type: 'string' } },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 08 设计案节点的 AI 副驾驶。
 
@@ -156,8 +40,8 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 08 设计案节点的 AI �
 - 严格 JSON，不含前后文，不用 Markdown 代码块。`;
 
 function formatContext(args: {
-  brief: BriefExtraction;
-  features: Feature[];
+  brief: BriefContext;
+  features: FeatureDigest[];
   pillars: Pillar[];
 }): string {
   const briefFields = Object.entries(args.brief.fields)
@@ -181,27 +65,25 @@ function formatContext(args: {
 }
 
 export async function generateDesignProposal(args: {
-  brief: BriefExtraction;
-  features: Feature[];
+  brief: BriefContext;
+  features: FeatureDigest[];
   pillars: Pillar[];
-  override?: string;
-}): Promise<DesignProposal> {
+}, opts?: TaskOptions): Promise<RunTaskResult<DesignProposal>> {
   const ctx = formatContext(args);
-  const res = await runAi({
+  return runTask({
     task: 'DESIGN_PROPOSAL',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `请基于以下材料产出一份完整的设计案。\n\n${ctx}\n\n` +
+          `请基于以下材料产出一份完整的设计案。\n\n${dataBlock('project_context', ctx)}\n\n` +
           `要求：模块的 feature_ids 必须用真实 id；用户流要写到能画 wireframe 的颗粒度；数据模型要能直接建表。`,
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: DesignProposalSchema,
     maxTokens: 16000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
-  return DesignProposalSchema.parse(res.data);
 }

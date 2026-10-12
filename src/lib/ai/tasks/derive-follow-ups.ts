@@ -1,6 +1,8 @@
-import { runAi } from '../router';
-import { FOLLOW_UPS_SCHEMA_FRAGMENT, FOLLOW_UPS_PROMPT_FRAGMENT, type FollowUpItem } from '../follow-ups';
-import { DeriveFollowUpsResultSchema } from '../schemas/derive-follow-ups';
+import type { NodeKind } from '../../../data/nodes';
+import { FOLLOW_UPS_PROMPT_FRAGMENT } from '../follow-ups';
+import { dataJson } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import { DeriveFollowUpsResultSchema, type DeriveFollowUpsResult } from '../schemas/derive-follow-ups';
 
 /**
  * 通用"派生追问"任务：给定某节点已经产出的 content（任意 JSON），
@@ -11,15 +13,7 @@ import { DeriveFollowUpsResultSchema } from '../schemas/derive-follow-ups';
  * 同一节点的同一份 content + 同一个 nodeKind 调用结果应可缓存（前端 cache 了）。
  */
 
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['follow_ups'],
-  properties: {
-    follow_ups: FOLLOW_UPS_SCHEMA_FRAGMENT,
-  },
-};
-
-const NODE_LABELS: Record<string, string> = {
+const NODE_LABELS: Record<NodeKind, string> = {
   brief: '01 Brief（问题陈述）',
   users: '02 用户与任务 (JTBD)',
   stake: '03 干系人 (Mendelow)',
@@ -44,31 +38,25 @@ ${FOLLOW_UPS_PROMPT_FRAGMENT.split('\n').map((l) => '   ' + l).join('\n')}
 严格 JSON：{ follow_ups: [...] }
 没有其他内容、没有 Markdown。`;
 
-export async function deriveFollowUps(args: {
-  nodeKind: string;
-  content: unknown;
-  override?: string;
-}): Promise<FollowUpItem[]> {
-  const label = NODE_LABELS[args.nodeKind] ?? args.nodeKind;
-  const contentJson = JSON.stringify(args.content, null, 2);
-
-  const res = await runAi({
+export async function deriveFollowUps(
+  args: { nodeKind: NodeKind; content: unknown },
+  opts?: TaskOptions,
+): Promise<RunTaskResult<DeriveFollowUpsResult>> {
+  return runTask({
     task: 'FOLLOW_UPS',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `当前节点：${label}\n\n` +
-          `## 节点已产出的 content（JSON）\n\`\`\`json\n${contentJson}\n\`\`\`\n\n` +
+          `当前节点：${NODE_LABELS[args.nodeKind]}\n\n` +
+          `## 节点已产出的 content（JSON）\n${dataJson('node_content', args.content)}\n\n` +
           `请返回 follow_ups。`,
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: DeriveFollowUpsResultSchema,
     maxTokens: 4000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
-  const parsed = DeriveFollowUpsResultSchema.parse(res.data);
-  return parsed.follow_ups;
 }

@@ -35,7 +35,9 @@ export const BriefExtractionSchema = z.object({
   completeness: z.number().int().min(0).max(100),
 });
 export type BriefExtraction = z.infer<typeof BriefExtractionSchema>;
-export interface ClarificationAnswer {
-  question: string;
-  answer: string | string[];
-}
+/** One answered clarify-questionnaire question (request input, also stored on the brief). */
+export const ClarificationAnswerSchema = z.object({
+  question: z.string(),
+  answer: z.union([z.string(), z.array(z.string())]),
+});
+export type ClarificationAnswer = z.infer<typeof ClarificationAnswerSchema>;

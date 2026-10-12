@@ -1,5 +1,6 @@
-import { runAi } from '../router';
-import type { DesignProposal } from '../schemas/generate-design';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { DesignSnapshot } from '../schemas/snapshots';
 import { SubfeatureBreakdownSchema, type SubfeatureBreakdown } from '../schemas/split-subfeatures';
 
 /**
@@ -7,43 +8,6 @@ import { SubfeatureBreakdownSchema, type SubfeatureBreakdown } from '../schemas/
  * 输入：设计案（modules + features）
  * 输出：每个 feature 拆成 2-6 条可执行子任务（前端 / 后端 / 数据 / 测试 标签 + 工作量估计）
  */
-
-const subJson = {
-  type: 'object',
-  required: ['id','title','description','layer','estimate','acceptance_criteria','dependencies'],
-  properties: {
-    id: { type: 'string' },
-    title: { type: 'string' },
-    description: { type: 'string' },
-    layer: { type: 'string', enum: ['frontend','backend','data','ai','design','test','devops','mixed'] },
-    estimate: { type: 'string' },
-    acceptance_criteria: { type: 'array', items: { type: 'string' } },
-    dependencies: { type: 'array', items: { type: 'string' } },
-  },
-};
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['splits','summary','total_subfeatures','critical_path'],
-  properties: {
-    splits: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['feature_id','feature_name','module_id','subfeatures'],
-        properties: {
-          feature_id: { type: 'string' },
-          feature_name: { type: 'string' },
-          module_id: { type: 'string' },
-          subfeatures: { type: 'array', items: subJson },
-        },
-      },
-    },
-    summary: { type: 'string' },
-    total_subfeatures: { type: 'integer' },
-    critical_path: { type: 'array', items: { type: 'string' } },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 09 子功能拆分节点的 AI 副驾驶。
 
@@ -72,7 +36,7 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 09 子功能拆分节点�
 - 子任务必须可独立完成、可验收
 - 严格 JSON 输出`;
 
-function formatContext(design: DesignProposal): string {
+function formatContext(design: DesignSnapshot): string {
   const moduleBlock = design.modules
     .map((m) => `- [${m.id}] ${m.name} → features=[${m.feature_ids.join(', ')}]`)
     .join('\n');
@@ -95,23 +59,21 @@ function formatContext(design: DesignProposal): string {
 }
 
 export async function splitSubfeatures(args: {
-  design: DesignProposal;
-  override?: string;
-}): Promise<SubfeatureBreakdown> {
+  design: DesignSnapshot;
+}, opts?: TaskOptions): Promise<RunTaskResult<SubfeatureBreakdown>> {
   const ctx = formatContext(args.design);
-  const res = await runAi({
+  return runTask({
     task: 'SPLIT_SUBFEATURES',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `请把以下设计案里的功能拆成可执行子任务：\n\n${ctx}\n\n每个 feature 至少 2 条 subfeature，最多 6 条。`,
+        content: `请把以下设计案里的功能拆成可执行子任务：\n\n${dataBlock('design', ctx)}\n\n每个 feature 至少 2 条 subfeature，最多 6 条。`,
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: SubfeatureBreakdownSchema,
     maxTokens: 16000,
     temperature: 0.3,
-    override: args.override,
+    options: opts,
   });
-  return SubfeatureBreakdownSchema.parse(res.data);
 }

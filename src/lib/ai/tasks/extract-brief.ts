@@ -1,55 +1,6 @@
-import { runAi } from '../router';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import { BriefExtractionSchema, type BriefExtraction, type ClarificationAnswer } from '../schemas/extract-brief';
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['highlights', 'fields', 'follow_ups', 'completeness'],
-  properties: {
-    highlights: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['text', 'kind'],
-        properties: {
-          text: { type: 'string' },
-          kind: { type: 'string', enum: ['fact', 'assumption', 'missing'] },
-          reason: { type: 'string' },
-        },
-      },
-    },
-    fields: {
-      type: 'object',
-      required: [
-        'problem_statement', 'target_user', 'scenario', 'value_prop',
-        'success_criteria', 'time_constraint', 'boundaries', 'red_lines',
-      ],
-      properties: {
-        problem_statement: { type: ['string', 'null'] },
-        target_user: { type: ['string', 'null'] },
-        scenario: { type: ['string', 'null'] },
-        value_prop: { type: ['string', 'null'] },
-        success_criteria: { type: ['string', 'null'] },
-        time_constraint: { type: ['string', 'null'] },
-        boundaries: { type: 'array', items: { type: 'string' } },
-        red_lines: { type: 'array', items: { type: 'string' } },
-      },
-    },
-    follow_ups: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['field', 'question'],
-        properties: {
-          field: { type: 'string' },
-          question: { type: 'string' },
-          why: { type: 'string' },
-          options: { type: 'array', items: { type: 'string' }, maxItems: 5 },
-        },
-      },
-    },
-    completeness: { type: 'integer', minimum: 0, maximum: 100 },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」的 AI 副驾驶。用户刚粘贴了一段原始需求文字（通常是老板的会议纪要或口头描述）。
 你的任务是把这段文字结构化为 Brief，并标注其中哪些是事实、哪些是假设、哪些是缺失。
@@ -88,25 +39,21 @@ function formatClarifications(answers?: ClarificationAnswer[]): string {
     const val = Array.isArray(a.answer) ? a.answer.join(' / ') : a.answer;
     return `- ${a.question}：${val}`;
   });
-  return `\n\n用户在澄清问卷里的选择（请把这些作为事实处理，不再标记为假设）：\n${lines.join('\n')}`;
+  return `\n\n用户在澄清问卷里的选择（请把这些作为事实处理，不再标记为假设）：\n${dataBlock('clarify_answers', lines.join('\n'))}`;
 }
 
 export async function extractBrief(
-  rawText: string,
-  answers?: ClarificationAnswer[],
-  override?: string,
-): Promise<BriefExtraction> {
-  const clarification = formatClarifications(answers);
-  const res = await runAi({
+  args: { rawText: string; answers?: ClarificationAnswer[] },
+  opts?: TaskOptions,
+): Promise<RunTaskResult<BriefExtraction>> {
+  const clarification = formatClarifications(args.answers);
+  return runTask({
     task: 'BRIEF_EXTRACT',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: `原始文字：\n\n${rawText}${clarification}` },
-    ],
-    schema: JSON_SCHEMA,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: `原始文字：\n\n${dataBlock('raw_text', args.rawText)}${clarification}` }],
+    schema: BriefExtractionSchema,
     maxTokens: 8000,
     temperature: 0.2,
-    override,
+    options: opts,
   });
-  return BriefExtractionSchema.parse(res.data);
 }

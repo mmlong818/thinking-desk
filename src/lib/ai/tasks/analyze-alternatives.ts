@@ -1,5 +1,7 @@
-import { runAi } from '../router';
-import type { BriefExtraction, ClarificationAnswer } from '../schemas/extract-brief';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext } from '../schemas/snapshots';
 import type { Persona, Job } from '../schemas/analyze-users';
 import { AlternativesAnalysisSchema, type AlternativesAnalysis } from '../schemas/analyze-alternatives';
 
@@ -8,99 +10,6 @@ import { AlternativesAnalysisSchema, type AlternativesAnalysis } from '../schema
  * 关键：三类替代（直接/间接/非消费）全覆盖 · 对重点替代做 §7.2 三问 ·
  * 产出"差异化假设"（一句话说清凭什么赢）。
  */
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: [
-    'alternatives',
-    'strategic_profiles',
-    'feature_breakdowns',
-    'differentiation_hypothesis',
-    'key_threats',
-    'critiques',
-  ],
-  properties: {
-    alternatives: {
-      type: 'array',
-      minItems: 6,
-      maxItems: 15,
-      items: altItemSchema(),
-    },
-    strategic_profiles: {
-      type: 'array',
-      minItems: 2,
-      maxItems: 6,
-      items: profileItemSchema(),
-    },
-    feature_breakdowns: {
-      type: 'array',
-      maxItems: 4,
-      items: breakdownItemSchema(),
-    },
-    differentiation_hypothesis: { type: 'string' },
-    key_threats: {
-      type: 'array',
-      minItems: 1,
-      maxItems: 5,
-      items: { type: 'string' },
-    },
-    critiques: {
-      type: 'array',
-      maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
-
-function altItemSchema() {
-  return {
-    type: 'object',
-    required: ['id', 'name', 'category', 'description', 'why_users_use', 'threat_level', 'sources'],
-    properties: {
-      id: { type: 'string' },
-      name: { type: 'string' },
-      category: { type: 'string', enum: ['direct', 'indirect', 'non_consumption'] },
-      description: { type: 'string' },
-      why_users_use: { type: 'string' },
-      threat_level: { type: 'string', enum: ['high', 'medium', 'low'] },
-      sources: { type: 'array', items: { type: 'string' } },
-    },
-  };
-}
-function profileItemSchema() {
-  return {
-    type: 'object',
-    required: ['alt_id', 'promise', 'revenue_model', 'moat', 'moat_strength'],
-    properties: {
-      alt_id: { type: 'string' },
-      promise: { type: 'string', maxLength: 30 },
-      revenue_model: { type: 'string' },
-      moat: { type: 'string' },
-      moat_strength: { type: 'string', enum: ['strong', 'medium', 'weak'] },
-    },
-  };
-}
-function breakdownItemSchema() {
-  return {
-    type: 'object',
-    required: ['alt_id', 'menu_structure', 'core_flows', 'key_interactions', 'headline_features'],
-    properties: {
-      alt_id: { type: 'string' },
-      menu_structure: { type: 'array', items: { type: 'string' } },
-      core_flows: { type: 'array', items: { type: 'string' } },
-      key_interactions: { type: 'array', items: { type: 'string' } },
-      headline_features: { type: 'array', items: { type: 'string' } },
-    },
-  };
-}
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 04 节点"替代方案与战略分析"的 AI 副驾驶。
 
@@ -157,7 +66,7 @@ feature_breakdowns 每条覆盖：
 严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
 
 function formatContext(
-  brief: BriefExtraction,
+  brief: BriefContext,
   personas: Persona[],
   jobs: Job[],
   rawText?: string,
@@ -195,13 +104,12 @@ function formatContext(
 }
 
 export async function analyzeAlternatives(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
-  override?: string;
-}): Promise<AlternativesAnalysis> {
+}, opts?: TaskOptions): Promise<RunTaskResult<AlternativesAnalysis>> {
   const context = formatContext(
     args.brief,
     args.personas,
@@ -209,23 +117,22 @@ export async function analyzeAlternatives(args: {
     args.rawText,
     args.answers,
   );
-  const res = await runAi({
+  return runTask({
     task: 'ALT_SCAN',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `请基于以下上下文完成替代方案与战略分析。\n\n${context}\n\n` +
+          `请基于以下上下文完成替代方案与战略分析。\n\n${dataBlock('project_context', context)}\n\n` +
           `**请使用联网搜索** —— 查找真实的直接/间接替代产品（官网、价位、用户量、评价），` +
           `把搜到的 URL 填入对应 alternative.sources。非消费替代不需要搜索。`,
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: AlternativesAnalysisSchema,
     webSearch: true, // ← 触发 provider 的联网搜索能力
     maxTokens: 12000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
-  return AlternativesAnalysisSchema.parse(res.data);
 }
