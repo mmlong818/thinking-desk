@@ -140,11 +140,27 @@ describe.skipIf(!url)('PgRepository against Postgres', () => {
     expect(after[0].n).toBe(before[0].n);
   });
 
-  it('lists projects from items, and the legacy node helpers fail softly', async () => {
-    const { listProjects, getNode } = await import('./projects');
+  it('lists projects from items', async () => {
+    const { listProjects } = await import('./projects');
     const p = (await listProjects(DEMO_OWNER)).find((x) => x.id === pid);
     expect(p?.node_count).toBe(3);
     expect(['users', 'brief', 'stake']).toContain(p?.last_node_kind);
-    await expect(getNode(pid, 'brief')).rejects.toThrow(/nodes/);
+  });
+
+  it('forks a project with every run, item, link and event', async () => {
+    const { forkProject } = await import('./fork-project');
+    const { PgRepository } = await import('./pg-repository');
+    const repo = new PgRepository();
+    const fork = await forkProject(pid, { name: 'it fork' });
+    try {
+      const [a, b] = [await snapshot(repo, pid), await snapshot(repo, fork.id)];
+      const strip = <T extends { projectId: string }>(xs: T[]) => xs.map(({ projectId: _p, ...rest }) => rest);
+      expect(strip(b.all)).toEqual(strip(a.all));
+      expect(strip(b.graph.links)).toEqual(strip(a.graph.links));
+      expect(strip(b.runs)).toEqual(strip(a.runs));
+      expect(strip(b.events)).toEqual(strip(a.events));
+    } finally {
+      await client.query('DELETE FROM projects WHERE id = $1', [fork.id]);
+    }
   });
 });

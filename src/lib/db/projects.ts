@@ -67,35 +67,10 @@ export function toSlug(name: string): string {
   return `${base || 'proj'}-${suffix}`;
 }
 
-export interface NodeRow<T = Record<string, unknown>> {
-  id: string;
-  project_id: string;
-  kind: string;
-  content: T;
-  completeness: number;
-  updated_at: Date;
-}
-
 export async function findProjectBySlug(slug: string): Promise<ProjectRow | null> {
   const rows = await query<ProjectRow>(
     'SELECT * FROM projects WHERE slug = $1 ORDER BY updated_at DESC LIMIT 1',
     [slug],
-  );
-  return rows[0] ?? null;
-}
-
-// Legacy node-blob reader for the `nodes` table, which schema.sql dropped in
-// Phase 1. Its only caller (the node page) catches DB errors, so it fails softly
-// until node pages move to PgRepository. AI routes no longer touch the database.
-
-/** @deprecated `nodes` table dropped; use PgRepository. */
-export async function getNode<T = Record<string, unknown>>(
-  projectId: string,
-  kind: string,
-): Promise<NodeRow<T> | null> {
-  const rows = await query<NodeRow<T>>(
-    'SELECT * FROM nodes WHERE project_id = $1 AND kind = $2',
-    [projectId, kind],
   );
   return rows[0] ?? null;
 }
