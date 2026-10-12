@@ -1,6 +1,14 @@
+import type { ItemType } from '../lib/model/types';
+
 export type NodeKind =
   | 'brief' | 'users' | 'stake' | 'alt'
   | 'scen' | 'feat' | 'leap' | 'final' | 'split';
+
+/** Satisfied when the node holds ≥ `min` live, accepted items whose type is in `anyOf`. */
+export interface CompletionClause {
+  readonly anyOf: readonly ItemType[];
+  readonly min: number;
+}
 
 export interface NodeDef {
   kind: NodeKind;
@@ -11,18 +19,23 @@ export interface NodeDef {
   chip: string;
   /** 上游依赖：这些节点未完成则当前节点锁定 */
   deps: readonly NodeKind[];
+  /** 完成规则：所有子句都满足才算完成（由条目推导，见 src/lib/model/completion.ts） */
+  completion: readonly CompletionClause[];
 }
 
+/** 至少 1 条已采纳的条目，类型取其一 */
+const accepted = (...anyOf: ItemType[]): CompletionClause => ({ anyOf, min: 1 });
+
 export const NODES: readonly NodeDef[] = [
-  { kind: 'brief',  num: '01', label: 'Brief',         sub: '把问题说清楚',          section: '一、问题定义',   chip: '对话式补全 · 预计 15 分钟', deps: [] },
-  { kind: 'users',  num: '02', label: '用户与任务',    sub: 'Job-to-be-done',         section: '二、四维分析',   chip: 'JTBD · 预计 25 分钟',        deps: ['brief'] },
-  { kind: 'stake',  num: '03', label: '干系人',        sub: 'Mendelow 矩阵',          section: '二、四维分析',   chip: 'Mendelow 矩阵 · 预计 20 分钟', deps: ['brief'] },
-  { kind: 'alt',    num: '04', label: '替代方案',      sub: '直接 / 间接 / 非消费',   section: '二、四维分析',   chip: '替代方案扫描 · 预计 25 分钟', deps: ['brief'] },
-  { kind: 'scen',   num: '05', label: '情景',          sub: '六维 × 故事板',          section: '二、四维分析',   chip: '进料加速 · 预计 30 分钟',     deps: ['brief'] },
-  { kind: 'feat',   num: '06', label: '功能列表',      sub: '市场常规方案 · 还未设计', section: '三、常规方案',   chip: '能力罗列 · 预计 45 分钟',     deps: ['brief'] },
-  { kind: 'leap',   num: '07', label: '创造性跃迁',    sub: '★ 设计真正开始的地方',   section: '四、开始设计',   chip: '差异化诞生 · 预计 45 分钟',   deps: ['feat'] },
-  { kind: 'final',  num: '08', label: '设计案',        sub: '从功能 → 完整设计文档',   section: '四、开始设计',   chip: '完整设计输出 · 预计 30 分钟', deps: ['feat'] },
-  { kind: 'split',  num: '09', label: '子功能拆分',    sub: '从设计 → 可执行任务',     section: '四、开始设计',   chip: '拆任务 · 预计 20 分钟',       deps: ['final'] },
+  { kind: 'brief',  num: '01', label: 'Brief',         sub: '把问题说清楚',          section: '一、问题定义',   chip: '对话式补全 · 预计 15 分钟', deps: [], completion: [accepted('brief')] },
+  { kind: 'users',  num: '02', label: '用户与任务',    sub: 'Job-to-be-done',         section: '二、四维分析',   chip: 'JTBD · 预计 25 分钟',        deps: ['brief'], completion: [accepted('persona'), accepted('job')] },
+  { kind: 'stake',  num: '03', label: '干系人',        sub: 'Mendelow 矩阵',          section: '二、四维分析',   chip: 'Mendelow 矩阵 · 预计 20 分钟', deps: ['brief'], completion: [accepted('stakeholder')] },
+  { kind: 'alt',    num: '04', label: '替代方案',      sub: '直接 / 间接 / 非消费',   section: '二、四维分析',   chip: '替代方案扫描 · 预计 25 分钟', deps: ['brief'], completion: [accepted('alternative'), accepted('diff_hypothesis')] },
+  { kind: 'scen',   num: '05', label: '情景',          sub: '六维 × 故事板',          section: '二、四维分析',   chip: '进料加速 · 预计 30 分钟',     deps: ['brief'], completion: [accepted('scenario'), accepted('insight')] },
+  { kind: 'feat',   num: '06', label: '功能列表',      sub: '市场常规方案 · 还未设计', section: '三、常规方案',   chip: '能力罗列 · 预计 45 分钟',     deps: ['brief'], completion: [accepted('feature')] },
+  { kind: 'leap',   num: '07', label: '创造性跃迁',    sub: '★ 设计真正开始的地方',   section: '四、开始设计',   chip: '差异化诞生 · 预计 45 分钟',   deps: ['feat'], completion: [accepted('first_principle', 'analogy', 'constraint_flip')] },
+  { kind: 'final',  num: '08', label: '设计案',        sub: '从功能 → 完整设计文档',   section: '四、开始设计',   chip: '完整设计输出 · 预计 30 分钟', deps: ['feat'], completion: [accepted('module'), accepted('design_section')] },
+  { kind: 'split',  num: '09', label: '子功能拆分',    sub: '从设计 → 可执行任务',     section: '四、开始设计',   chip: '拆任务 · 预计 20 分钟',       deps: ['final'], completion: [accepted('subtask')] },
 ];
 
 /** 给定已完成节点集合，返回 kind 节点缺失的上游 deps（按 NODES 顺序） */

@@ -43,7 +43,7 @@ Tests live next to the code as `*.test.ts`. When you add or change a Zod respons
 ## How to Add a New Node
 
 1. Add a new `NodeKind` literal to the union in `src/data/nodes.ts`.
-2. Add a `NodeDef` entry to the `NODES` array — set `deps` to enforce ordering.
+2. Add a `NodeDef` entry to the `NODES` array — set `deps` to enforce ordering and `completion` to say which accepted item types complete the node (see `docs/data-model.md`).
 3. Create `src/components/nodes/YourNode.tsx` following the pattern of an existing node (e.g. `BriefNode.tsx`).
 4. Register the component in `src/app/project/[id]/[node]/page.tsx`.
 5. Add any new AI tasks (see below) and wire them through the Copilot panel.
