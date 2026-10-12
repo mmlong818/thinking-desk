@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { FeatureSchema, PillarSchema } from './draft-features';
 import { BriefExtractionSchema } from './extract-brief';
-import { DesignInsightSchema, PainPointSchema } from './analyze-scenarios';
+import { DIMENSION_KEYS, DesignInsightSchema, ElementSchema, PainPointSchema, ScenarioDraftSchema } from './analyze-scenarios';
 import { AnalogyTransferSchema, ConstraintFlipSchema, FirstPrincipleRethinkSchema } from './creative-leap';
 import { DataEntitySchema, ModuleSchema, UserFlowSchema } from './generate-design';
 
@@ -59,3 +59,20 @@ export const DesignSnapshotSchema = z.object({
   data_model: z.array(DataEntitySchema.pick({ name: true })).default([]),
 });
 export type DesignSnapshot = z.output<typeof DesignSnapshotSchema>;
+
+/** Scenario elements per dimension as the person kept them (any count; the combine prompt reads the selected ones). */
+export const DimensionsSnapshotSchema = z.object({
+  dimensions: z.object(
+    Object.fromEntries(DIMENSION_KEYS.map((k) => [k, z.array(ElementSchema).default([])])) as Record<
+      (typeof DIMENSION_KEYS)[number],
+      z.ZodDefault<z.ZodArray<typeof ElementSchema>>
+    >,
+  ),
+});
+export type DimensionsSnapshot = z.output<typeof DimensionsSnapshotSchema>;
+
+/** A scenario as later prompts read it; element_ids may be fewer than the AI's minimum after edits. */
+export const ScenarioDigestSchema = ScenarioDraftSchema.extend({
+  element_ids: z.array(z.string()).default([]),
+});
+export type ScenarioDigest = z.output<typeof ScenarioDigestSchema>;

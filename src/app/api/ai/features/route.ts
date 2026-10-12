@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { aiRoute, BriefContextFields, requireBrief } from '@/lib/ai/route';
-import { ScenarioDraftSchema } from '@/lib/ai/schemas/analyze-scenarios';
 import { JobSchema, PersonaSchema } from '@/lib/ai/schemas/analyze-users';
-import { InsightDigestSchema, PainDigestSchema } from '@/lib/ai/schemas/snapshots';
+import { InsightDigestSchema, PainDigestSchema, ScenarioDigestSchema } from '@/lib/ai/schemas/snapshots';
 import { draftFeatures } from '@/lib/ai/tasks/draft-features';
 
 export const runtime = 'nodejs';
@@ -13,7 +12,7 @@ const Body = z.object({
   ...BriefContextFields,
   personas: z.array(PersonaSchema).optional(),
   lockedJobs: z.array(JobSchema).optional(),
-  scenarios: z.array(ScenarioDraftSchema).optional(),
+  scenarios: z.array(ScenarioDigestSchema).optional(),
   design_insights: z.array(InsightDigestSchema).optional(),
   pain_points: z.array(PainDigestSchema).optional(),
   differentiation_hypothesis: z.string().optional(),

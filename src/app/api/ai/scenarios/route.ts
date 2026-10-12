@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { aiRoute, BriefContextFields, requireBrief } from '@/lib/ai/route';
-import { DimensionsResultSchema, ScenarioDraftSchema } from '@/lib/ai/schemas/analyze-scenarios';
+import { DimensionsSnapshotSchema, ScenarioDigestSchema } from '@/lib/ai/schemas/snapshots';
 import { JobSchema, PersonaSchema } from '@/lib/ai/schemas/analyze-users';
 import { combineScenarios, deepAnalyzeScenarios, exhaustScenarioDimensions } from '@/lib/ai/tasks/analyze-scenarios';
 
@@ -19,13 +19,13 @@ const Body = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('combine'),
     ...CommonCtx,
-    dimensions: DimensionsResultSchema,
+    dimensions: DimensionsSnapshotSchema,
     selectedElementIds: z.array(z.string()).min(3),
   }),
   z.object({
     action: z.literal('deep'),
     ...CommonCtx,
-    scenarios: z.array(ScenarioDraftSchema).min(1),
+    scenarios: z.array(ScenarioDigestSchema).min(1),
     pickedScenarioIds: z.array(z.string()).min(1).max(5),
   }),
 ]);

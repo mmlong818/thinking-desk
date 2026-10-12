@@ -151,6 +151,17 @@ describe('AI routes · request validation', () => {
     expect(status).toBe(200);
   });
 
+  it('accepts kept scenario elements and scenarios outside the AI count rules', async () => {
+    canned.set('SCEN_FEED', validScenarioDrafts);
+    const few = { dimensions: { ...validDimensions.dimensions, time: validDimensions.dimensions.time.slice(0, 2), place: [] } };
+    const combined = await call('scenarios', { action: 'combine', ...ctx, dimensions: few, selectedElementIds: ['e-1', 'e-2', 'e-3'] });
+    expect(combined.status).toBe(200);
+    canned.set('SCEN_PAIN', validDeepAnalysis);
+    const scenario = { ...validScenarioDrafts.scenarios[0], element_ids: ['e-1'] };
+    const deep = await call('scenarios', { action: 'deep', ...ctx, scenarios: [scenario], pickedScenarioIds: ['sc-1'] });
+    expect(deep.status).toBe(200);
+  });
+
   it('keeps the existing domain errors', async () => {
     expect((await call('creative-leap', { action: 'more', ...ctx })).json.error).toBe('missing_category');
     expect((await call('generate-design', { projectSlug: 'demo', brief })).json.error).toBe('missing_features');
