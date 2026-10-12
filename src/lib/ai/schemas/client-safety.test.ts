@@ -55,6 +55,7 @@ describe('client-safe modules', () => {
     ...files(path.join(SRC, 'components'), notTest),
     ...files(path.join(SRC, 'lib/ai/schemas'), notTest),
     ...files(path.join(SRC, 'lib/model'), notTest),
+    ...files(path.join(SRC, 'lib/store'), notTest),
     path.join(SRC, 'data/nodes.ts'),
     path.join(SRC, 'lib/ai/follow-ups.ts'),
     ...files(path.join(SRC, 'lib'), (f) => /[\\/]lib[\\/]client-[\w-]+\.ts$/.test(f) && notTest(f)),

@@ -56,7 +56,8 @@ export async function createProject(args: {
   return rows[0];
 }
 
-function toSlug(name: string): string {
+/** URL slug from a project name: lowercase words (CJK kept) + a 4-char random suffix. */
+export function toSlug(name: string): string {
   const base = name
     .toLowerCase()
     .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
