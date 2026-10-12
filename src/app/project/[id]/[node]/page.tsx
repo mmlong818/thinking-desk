@@ -86,9 +86,7 @@ const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
   alt: () => <AlternativesNode />,
   scen: () => <ScenariosNode />,
   feat: () => <FeaturesNode />,
-  leap: (slug) => (
-    <LeapNode projectSlug={slug} brief={null} usersContent={null} featContent={null} altContent={null} />
-  ),
+  leap: () => <LeapNode />,
   final: (slug) => <FinalFeaturesNode projectSlug={slug} />,
   split: (slug) => <SplitNode projectSlug={slug} />,
 };
