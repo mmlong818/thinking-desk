@@ -1,4 +1,4 @@
-import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
+import type { AiProvider, CompleteRequest, CompleteResult, ModelInfo } from '../types';
 import { schemaInstruction } from '../json-schema';
 import { validateBaseUrl } from './validate-base-url';
 
@@ -12,6 +12,11 @@ const ZHIPU_FALLBACK = [
   { id: 'glm-5-turbo',   label: 'GLM-5 Turbo · 快速' },
   { id: 'glm-4.7-flash', label: 'GLM-4.7 Flash · 免费' },
 ];
+
+/** The curated list marked as offline, so the router never treats it as proof of what exists. */
+function offlineList(): ModelInfo[] {
+  return ZHIPU_FALLBACK.map((m) => ({ ...m, fallback: true }));
+}
 
 /** OpenAI-compatible chat body (JSON mode + schema in a trailing system message). */
 function buildZhipuRequest(model: string, req: CompleteRequest): Record<string, unknown> {
@@ -57,10 +62,10 @@ export const zhipuProvider: AiProvider = {
       const res = await fetch(`${base}/models`, {
         headers: { authorization: `Bearer ${process.env.ZHIPU_API_KEY}` },
       });
-      if (!res.ok) return ZHIPU_FALLBACK;
+      if (!res.ok) return offlineList();
       const json = (await res.json()) as { data?: { id: string }[] };
       const ids = (json.data ?? []).map((m) => m.id);
-      if (ids.length === 0) return ZHIPU_FALLBACK;
+      if (ids.length === 0) return offlineList();
       // Keep a friendly label from fallback if we have one.
       const labelled = ids.map((id) => {
         const match = ZHIPU_FALLBACK.find((f) => f.id === id);
@@ -68,7 +73,7 @@ export const zhipuProvider: AiProvider = {
       });
       return labelled;
     } catch {
-      return ZHIPU_FALLBACK;
+      return offlineList();
     }
   },
   async complete(model, req): Promise<CompleteResult> {

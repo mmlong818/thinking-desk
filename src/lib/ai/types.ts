@@ -66,6 +66,11 @@ export interface ModelInfo {
   id: string;
   /** Human-readable display name. */
   label?: string;
+  /**
+   * True when the provider's model endpoint was unavailable and this entry comes from the
+   * adapter's curated offline list: it proves nothing about which ids the account can use.
+   */
+  fallback?: boolean;
   /** Optional capabilities hints for routing. */
   capabilities?: {
     webSearch?: boolean;
@@ -81,6 +86,9 @@ export interface AiProvider {
   /** Discover models from the provider at runtime. Cached by the router. */
   listModels(): Promise<ModelInfo[]>;
   complete(model: string, req: CompleteRequest): Promise<CompleteResult>;
-  /** False for a listed model this adapter's request params would make fail (auto-pick skips it). */
+  /**
+   * False for a listed model this adapter's request params would make fail on structured
+   * (schema) tasks: auto-pick skips it and runTask() refuses it for schema tasks.
+   */
   canDrive?(modelId: string): boolean;
 }

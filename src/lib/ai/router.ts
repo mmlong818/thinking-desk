@@ -70,12 +70,28 @@ export function configuredProviders(): AiProviderName[] {
 //   AI_MODEL_DEFAULT applies when task-specific key missing.
 // If nothing is configured at all, fall back to the first configured provider.
 
-async function pickModel(name: AiProviderName, hint?: string): Promise<string> {
+/**
+ * An explicit `provider:model` from the client is kept unless the provider's real model list
+ * proves it does not exist. An unavailable list (empty, offline fallback, or a listing error)
+ * proves nothing, so the request goes out with the requested id instead of a silent substitute.
+ */
+async function checkOverride(name: AiProviderName, modelId: string): Promise<string> {
+  let models: ModelInfo[];
+  try {
+    models = await listModels(name);
+  } catch {
+    return modelId;
+  }
+  const listed = models.filter((m) => !m.fallback);
+  if (listed.length === 0 || listed.some((m) => m.id === modelId)) return modelId;
+  throw new Error(`Model "${modelId}" is not offered by provider "${name}". Pick another model.`);
+}
+
+async function pickModel(name: AiProviderName): Promise<string> {
   const models = await listModels(name);
   if (models.length === 0) {
     throw new Error(`Provider "${name}" returned no models. Check API key and network.`);
   }
-  if (hint && models.some((m) => m.id === hint)) return hint;
   // Prefer known flagship ids when present (descending capability).
   const preferred = [
     // Zhipu (glm-5.3 excluded: thinking cannot be disabled, but the zhipu adapter sends thinking:disabled for JSON tasks)
@@ -127,8 +143,8 @@ export async function providerFor(task: AiTask, override?: string): Promise<Reso
   if (!modelId) {
     modelId = await pickModel(providerName);
   } else if (override) {
-    // 当 modelId 来自客户端 override 时，验证它在 listModels 里——避免任意字符串被原样发给 provider
-    modelId = await pickModel(providerName, modelId);
+    // 当 modelId 来自客户端 override 时，只在真实模型列表证明它不存在时拒绝（离线 / 空列表不算证据）
+    modelId = await checkOverride(providerName, modelId);
   }
 
   return { provider: providerName, model: modelId };

@@ -37,7 +37,9 @@ AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-5-5
 
 Task names are the `AiTask` string literal union in `src/lib/ai/types.ts`; `.env.example` lists every task in use.
 
-Auto-pick (`AI_MODEL_<TASK>=<provider>`, or an override the provider does not list) takes the first curated id the provider lists (`claude-sonnet-5-5` first for Claude), else the newest listed model the adapter can drive (`AiProvider.canDrive`; Zhipu skips `glm-5.3*`).
+Auto-pick (`AI_MODEL_<TASK>=<provider>`) takes the first curated id the provider lists (`claude-sonnet-5-5` first for Claude), else the newest listed model the adapter can drive (`AiProvider.canDrive`; Zhipu skips `glm-5.3*`).
+
+A per-call `provider:model` override is never silently replaced. It is rejected (a `config` error) only when the provider's real model list does not contain it; when the list is unavailable — empty, a listing error, or the adapter's offline fallback list (entries marked `fallback: true`) — the requested id is sent as is.
 
 ## Request Parameters
 

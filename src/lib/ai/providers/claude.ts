@@ -14,8 +14,8 @@ function getClient(): Anthropic {
 // Static fallback when the models endpoint is unreachable. Request parameters are chosen per
 // model family (claude-params.ts), so any listed model can be driven; these are the defaults.
 const CLAUDE_FALLBACK = [
-  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
-  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', fallback: true },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', fallback: true },
 ];
 
 /** The Messages API body for one call: only the parameters this model family accepts. */

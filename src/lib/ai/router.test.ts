@@ -84,11 +84,33 @@ describe('providerFor resolution order', () => {
     });
   });
 
-  it('override model not in listModels is replaced by an auto-picked one (no arbitrary ids)', async () => {
+  it('rejects an override that a listed (non-fallback) model list proves invalid (no arbitrary ids)', async () => {
     vi.stubEnv('GEMINI_API_KEY', 'k');
     const { router } = await loadRouter({ gemini: models('gemini-a') });
-    const r = await router.providerFor('FREE_ASK', 'gemini:evil-model');
-    expect(r).toEqual({ provider: 'gemini', model: 'gemini-a' });
+    await expect(router.providerFor('FREE_ASK', 'gemini:evil-model')).rejects.toThrow(/not offered by provider "gemini"/);
+  });
+
+  it('keeps an explicit override when the provider only returned its offline fallback list', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'k');
+    const offline = [{ id: 'gpt-6.1-sol', fallback: true }, { id: 'gpt-5.6-terra', fallback: true }];
+    const { router } = await loadRouter({ openai: offline });
+    await expect(router.providerFor('FREE_ASK', 'openai:gpt-5.5-2026-04-23')).resolves.toEqual({
+      provider: 'openai',
+      model: 'gpt-5.5-2026-04-23',
+    });
+  });
+
+  it('keeps an explicit override when the model list is empty', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'k');
+    const { router } = await loadRouter({ openai: [] });
+    await expect(router.providerFor('FREE_ASK', 'openai:gpt-x')).resolves.toEqual({ provider: 'openai', model: 'gpt-x' });
+  });
+
+  it('keeps an explicit override when listing the models throws', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'k');
+    const { router, spies } = await loadRouter();
+    spies.openai.mockRejectedValue(new Error('fetch failed'));
+    await expect(router.providerFor('FREE_ASK', 'openai:gpt-y')).resolves.toEqual({ provider: 'openai', model: 'gpt-y' });
   });
 
   it('bare "provider" auto-picks a model via listModels', async () => {

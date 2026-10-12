@@ -6,10 +6,11 @@ import { validateBaseUrl } from './validate-base-url';
 /** Stays below the smallest output limit of the reasoning families we drive (o-series: 100k). */
 const OPENAI_OUTPUT_CAP = 64_000;
 
+/** Offline list (models endpoint unreachable); `fallback` tells the router it proves nothing. */
 const OPENAI_FALLBACK = [
-  { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
-  { id: 'gpt-6-luna', label: 'GPT-6 Luna' },
-  { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+  { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', fallback: true },
+  { id: 'gpt-6-luna', label: 'GPT-6 Luna', fallback: true },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', fallback: true },
 ];
 
 function getBase(): string {
