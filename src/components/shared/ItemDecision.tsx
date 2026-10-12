@@ -57,9 +57,13 @@ interface DecisionProps {
   /** Shows a ✎ toggle when given. */
   onToggleEdit?: () => void;
   editing?: boolean;
+  /** False when the card shows the rejection note itself (cramped headers). */
+  showNote?: boolean;
 }
 
-export function ItemDecision({ item, variant = 'compact', guardAccept, rejectBlocked, onToggleEdit, editing }: DecisionProps) {
+export function ItemDecision({
+  item, variant = 'compact', guardAccept, rejectBlocked, onToggleEdit, editing, showNote = true,
+}: DecisionProps) {
   const actions = useItemActions();
   const [noting, setNoting] = useState(false);
   const [guardError, setGuardError] = useState<string | null>(null);
@@ -99,10 +103,16 @@ export function ItemDecision({ item, variant = 'compact', guardAccept, rejectBlo
           }}
         />
       ) : null}
-      {item.decision === 'rejected' && item.decisionNote ? <div className="idc-note">否决理由：{item.decisionNote}</div> : null}
+      {showNote ? <RejectionNote item={item} /> : null}
       {guardError || actions.error ? <div className="idc-error">{guardError ?? actions.error}</div> : null}
     </div>
   );
+}
+
+/** "否决理由：…" under a rejected item. */
+export function RejectionNote({ item }: { item: Item }) {
+  if (item.decision !== 'rejected' || !item.decisionNote) return null;
+  return <div className="idc-note">否决理由：{item.decisionNote}</div>;
 }
 
 function DecisionButton({ kind, on, full, disabled, onClick, titleOverride }: {

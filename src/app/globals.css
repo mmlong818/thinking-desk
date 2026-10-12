@@ -1542,3 +1542,6 @@ html, body {
 .stake-row { grid-template-columns: 24px 1fr auto; }
 .stake-row-mark { font-size: 16px; color: var(--ink-4); padding-top: 2px; text-align: center; }
 .stake-row.selected .stake-row-mark { color: var(--accent); }
+.job-row { grid-template-columns: auto 1fr auto auto; cursor: default; }
+.job-row-title .ai-stance { margin-left: 6px; }
+.persona-tile-top .ai-stance { flex-shrink: 0; }
