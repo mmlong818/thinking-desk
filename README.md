@@ -61,25 +61,25 @@ The whole chain can be exported as Markdown or JSON from the top bar.
 
 ## Model Recommendations · 模型选择建议
 
-Thinking Desk routes different AI tasks to different models. Here is what works well (model IDs checked 2026-10-12):
+Thinking Desk routes different AI tasks to different models. Here is what works well (model IDs checked 2026-10-13):
 
-思考工作台对不同任务路由不同模型，以下是推荐配置（模型 ID 核对于 2026-10-12）：
+思考工作台对不同任务路由不同模型，以下是推荐配置（模型 ID 核对于 2026-10-13）：
 
 ### Recommended setup · 推荐配置
 
 ```env
 # Default for every task — Claude is the best choice for structured JSON output
 # 所有任务的默认模型 —— Claude 是结构化 JSON 输出的最佳选择
-AI_MODEL_DEFAULT=claude:claude-sonnet-4-6
+AI_MODEL_DEFAULT=claude:claude-sonnet-5-5
 
 # Optional per-task pins (any task in the AiTask union, see .env.example)
 # 可选的按任务指定（AiTask 中的任意任务，完整列表见 .env.example）
-AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-4-6
-AI_MODEL_USERS_JTBD=claude:claude-sonnet-4-6
-AI_MODEL_STAKE_MATRIX=claude:claude-sonnet-4-6
-AI_MODEL_SCEN_FEED=claude:claude-sonnet-4-6
-AI_MODEL_FEAT_DRAFT=claude:claude-sonnet-4-6
-AI_MODEL_LEAP_FIRST_PRINCIPLES=claude:claude-sonnet-4-6
+AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-5-5
+AI_MODEL_USERS_JTBD=claude:claude-sonnet-5-5
+AI_MODEL_STAKE_MATRIX=claude:claude-sonnet-5-5
+AI_MODEL_SCEN_FEED=claude:claude-sonnet-5-5
+AI_MODEL_FEAT_DRAFT=claude:claude-sonnet-5-5
+AI_MODEL_LEAP_FIRST_PRINCIPLES=claude:claude-sonnet-5-5
 
 # Web search task — Gemini has Google Search grounding built in
 # 联网搜索任务 —— Gemini 内置 Google 搜索接地
@@ -89,10 +89,10 @@ AI_MODEL_ALT_SCAN=gemini:gemini-3.8-flash
 ### Why these models? · 为什么选这些模型？
 
 **Claude (Anthropic) — default for most tasks**
-Claude produces tight, structured JSON output with strong reasoning and follows complex prompts faithfully. `claude-sonnet-4-6` is the newest Claude generation compatible with the request parameters Thinking Desk sends (`temperature`, no `thinking` field): Sonnet 5.x and Opus 4.7+ reject non-default sampling parameters with HTTP 400. Upgrade to `claude-opus-4-6` for deeper reasoning on hard problems.
+Claude produces tight, structured JSON output with strong reasoning and follows complex prompts faithfully. `claude-sonnet-5-5` is the default: the Claude adapter picks request parameters per model family (no sampling parameters where they are rejected, native structured output via `output_config.format`, adaptive thinking at `low` effort), so any current Claude model works. Use `claude-opus-5-5` (runs at `medium` effort) for deeper reasoning on hard problems.
 
 **Claude（Anthropic）—— 大多数任务的默认选择**
-Claude 能生成紧凑的结构化 JSON 输出，推理能力强，忠实遵循复杂提示词。`claude-sonnet-4-6` 是与当前请求参数（`temperature`、不传 `thinking`）兼容的最新 Claude 代际：Sonnet 5.x 与 Opus 4.7+ 对非默认采样参数会返回 HTTP 400。复杂问题可升级到 `claude-opus-4-6`。
+Claude 能生成紧凑的结构化 JSON 输出，推理能力强，忠实遵循复杂提示词。默认用 `claude-sonnet-5-5`：Claude 适配器按模型家族选择请求参数（不支持采样参数的模型不传 `temperature`，原生结构化输出走 `output_config.format`，自适应思考 + `low` effort），当前任意 Claude 模型都能直接用。复杂问题可换 `claude-opus-5-5`（`medium` effort）。
 
 **Gemini (Google) — web search task**
 The `ALT_SCAN` task needs real-time competitive intelligence. The Gemini adapter enables Google Search grounding for it, which makes Gemini the right tool for this specific job. `gemini-3.8-flash` is the current GA fast model. For all other tasks, Claude or OpenAI is preferred.

@@ -33,8 +33,8 @@ services:
       GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}
       ZHIPU_API_KEY: ${ZHIPU_API_KEY}
       ZHIPU_BASE_URL: ${ZHIPU_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
-      AI_MODEL_DEFAULT: ${AI_MODEL_DEFAULT:-claude:claude-sonnet-4-6}
-      AI_MODEL_BRIEF_EXTRACT: ${AI_MODEL_BRIEF_EXTRACT:-claude:claude-sonnet-4-6}
+      AI_MODEL_DEFAULT: ${AI_MODEL_DEFAULT:-claude:claude-sonnet-5-5}
+      AI_MODEL_BRIEF_EXTRACT: ${AI_MODEL_BRIEF_EXTRACT:-claude:claude-sonnet-5-5}
       AI_MODEL_ALT_SCAN: ${AI_MODEL_ALT_SCAN:-gemini:gemini-3.8-flash}
       AI_MODEL_BRIEF_CLARIFY: ${AI_MODEL_BRIEF_CLARIFY:-}
       AI_MODEL_BRIEF_PROBE: ${AI_MODEL_BRIEF_PROBE:-}

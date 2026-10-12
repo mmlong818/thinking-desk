@@ -88,7 +88,7 @@ final → split
 `src/lib/ai/router.ts` reads `process.env.AI_MODEL_<TASK>`. Format:
 
 - `claude` — auto-pick a model from the Anthropic provider
-- `claude:claude-sonnet-4-6` — pin a specific model ID
+- `claude:claude-sonnet-5-5` — pin a specific model ID
 - Falls back to `AI_MODEL_DEFAULT`, then first configured provider.
 
 ## Common Gotchas
