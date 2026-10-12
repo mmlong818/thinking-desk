@@ -87,7 +87,7 @@ const NODE_COMPONENTS: Record<NodeKind, (slug: string) => React.ReactNode> = {
   scen: () => <ScenariosNode />,
   feat: () => <FeaturesNode />,
   leap: () => <LeapNode />,
-  final: (slug) => <FinalFeaturesNode projectSlug={slug} />,
+  final: () => <FinalFeaturesNode />,
   split: (slug) => <SplitNode projectSlug={slug} />,
 };
 
