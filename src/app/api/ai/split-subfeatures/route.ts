@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { aiRoute, ModelOverrideSchema, RouteError } from '@/lib/ai/route';
+import { RegenerationFeedbackSchema } from '@/lib/model/feedback';
 import { DesignSnapshotSchema } from '@/lib/ai/schemas/snapshots';
 import { splitSubfeatures } from '@/lib/ai/tasks/split-subfeatures';
 
@@ -11,6 +12,7 @@ const Body = z.object({
   projectSlug: z.string().min(1),
   design: DesignSnapshotSchema.optional(),
   model: ModelOverrideSchema,
+  feedback: RegenerationFeedbackSchema.optional(),
 });
 
 export const POST = aiRoute({
@@ -19,6 +21,6 @@ export const POST = aiRoute({
   timeoutMs: 290_000,
   handle(body, opts) {
     if (!body.design) throw new RouteError(400, 'missing_design', '需要先在 08 生成设计案');
-    return splitSubfeatures({ design: body.design }, opts);
+    return splitSubfeatures({ design: body.design, feedback: body.feedback }, opts);
   },
 });

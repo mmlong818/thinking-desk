@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
 import type { BriefContext } from '../schemas/snapshots';
@@ -94,6 +96,7 @@ export async function analyzeStakeholders(args: {
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<StakeholdersAnalysis>> {
   const context = formatContext(
     args.brief,
@@ -111,7 +114,8 @@ export async function analyzeStakeholders(args: {
         content:
           `请基于以下上下文完成 Mendelow 矩阵干系人分析。\n\n${dataBlock('project_context', context)}\n\n` +
           `请务必包含 5 类 required: true 的基线干系人（sponsor / maker / business / compliance / user），` +
-          `外加 3-7 个项目专属的。`,
+          `外加 3-7 个项目专属的。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: StakeholdersAnalysisSchema,

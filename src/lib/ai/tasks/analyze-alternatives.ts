@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
 import type { BriefContext } from '../schemas/snapshots';
@@ -109,6 +111,7 @@ export async function analyzeAlternatives(args: {
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<AlternativesAnalysis>> {
   const context = formatContext(
     args.brief,
@@ -126,7 +129,8 @@ export async function analyzeAlternatives(args: {
         content:
           `请基于以下上下文完成替代方案与战略分析。\n\n${dataBlock('project_context', context)}\n\n` +
           `**请使用联网搜索** —— 查找真实的直接/间接替代产品（官网、价位、用户量、评价），` +
-          `把搜到的 URL 填入对应 alternative.sources。非消费替代不需要搜索。`,
+          `把搜到的 URL 填入对应 alternative.sources。非消费替代不需要搜索。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: AlternativesAnalysisSchema,

@@ -30,6 +30,7 @@ export const POST = aiRoute({
         original: body.original,
         leaps: body.leaps,
         selectedLeapIds: body.selectedLeapIds,
+        feedback: body.feedback,
       },
       opts,
     );

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { RunTaskError, type RunTaskResult, type TaskOptions } from './run-task';
 import { ClarificationAnswerSchema } from './schemas/extract-brief';
 import { BriefSnapshotSchema, type BriefContext } from './schemas/snapshots';
+import { RegenerationFeedbackSchema } from '../model/feedback';
 
 // Factory for the /api/ai/* POST handlers: validates the body with Zod, runs the task with the
 // request's AbortSignal and a deadline, and answers with the shapes the UI reads today —
@@ -25,6 +26,8 @@ export const BriefContextFields = {
   rawText: z.string().max(20000).optional(),
   answers: z.array(ClarificationAnswerSchema).optional(),
   model: ModelOverrideSchema,
+  /** The person's judgments on the items a run regenerates (accepted / rejected + note). */
+  feedback: RegenerationFeedbackSchema.optional(),
 };
 
 export function requireBrief(brief: BriefContext | undefined, detail = '需要 Brief 上下文'): BriefContext {

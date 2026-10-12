@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { AiTask } from '../types';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
@@ -146,8 +148,8 @@ const MORE_PROMPT = `你是「思考工作台」第 07 创造性跃迁节点的 
 用户已经看过上一轮候选，现在<em>要你针对某一类方法再补 3 条新的</em>。
 
 # 硬性要求
-1. 必须**和用户锁定的候选互补**（互补 = 不同方向，不是微调变种）
-2. 必须**绕开用户已废弃的方向**（rejected 代表那条路走不通 / 不感兴趣，别再提类似的）
+1. 必须**和用户已采纳的候选互补**（互补 = 不同方向，不是微调变种）
+2. 必须**绕开用户已否决的方向**（否决代表那条路走不通 / 不感兴趣，别再提类似的）
 3. 如果 existing 列表已经有 id，新生成的 id 必须是全新字符串，避免冲突
 4. 每条候选要自带可行度（feasibility）评估
 
@@ -178,13 +180,13 @@ export interface LeapContextArgs {
   features: FeatureDigest[];
   differentiation_hypothesis?: string;
   alt_threats?: string[];
+  /** Accepted / rejected candidates in scope (replaces the old locked_ids / rejected_ids blocks). */
+  feedback?: RegenerationFeedback;
 }
 
 export interface MoreLeapArgs extends LeapContextArgs {
   category: LeapCategory;
   existing: unknown[];
-  locked_ids: string[];
-  rejected_ids: string[];
 }
 
 function leapContext(args: LeapContextArgs): string {
@@ -196,19 +198,11 @@ function leapContext(args: LeapContextArgs): string {
 }
 
 function moreItemsMessage(args: MoreLeapArgs): string {
-  const lockedBlock =
-    args.locked_ids.length > 0
-      ? `已锁定（与这些互补）：${args.locked_ids.join(', ')}`
-      : '无锁定';
-  const rejectedBlock =
-    args.rejected_ids.length > 0
-      ? `已废弃（绕开这些方向）：${args.rejected_ids.join(', ')}`
-      : '无已废弃';
   return (
     `${dataBlock('project_context', leapContext(args))}\n\n` +
     `## 已有候选（${args.category}）\n${dataBlock('existing_candidates', formatItemsForMore(args.existing))}\n\n` +
-    `${dataBlock('candidate_decisions', `${lockedBlock}\n${rejectedBlock}`)}\n\n` +
-    `请为 "${args.category}" 类别补 3 条新的 · 与已锁定互补 · 绕开已废弃方向。`
+    `请为 "${args.category}" 类别补 3 条新的 · 与已采纳的互补 · 绕开已否决的方向。` +
+    feedbackBlock(args.feedback)
   );
 }
 
@@ -246,7 +240,8 @@ export async function analyzeCreativeLeap(
           `4. recommendation：\n` +
           `   - timing_verdict 是跃迁的胆量级别（bold / selective / minimal）\n` +
           `   - top_picks **至少 1 条**（即使最保守的项目也必须有 1 个跃迁点，不然就不是设计）\n` +
-          `   - 每条 top_pick 必须带 required_changes（功能列表要怎么改）`,
+          `   - 每条 top_pick 必须带 required_changes（功能列表要怎么改）` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: CreativeLeapAnalysisSchema,

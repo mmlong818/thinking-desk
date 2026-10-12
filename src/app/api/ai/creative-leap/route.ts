@@ -17,11 +17,9 @@ const Body = z.object({
   features: z.array(FeatureDigestSchema).optional(),
   differentiation_hypothesis: z.string().optional(),
   alt_threats: z.array(z.string()).optional(),
-  // 增量生成参数
+  // 增量生成参数（采纳 / 否决通过 feedback 传入）
   category: z.enum(LEAP_CATEGORIES).optional(),
   existing: z.array(z.unknown()).optional(),
-  locked_ids: z.array(z.string()).optional(),
-  rejected_ids: z.array(z.string()).optional(),
 });
 
 export const POST = aiRoute({
@@ -38,17 +36,12 @@ export const POST = aiRoute({
       features: body.features ?? [],
       differentiation_hypothesis: body.differentiation_hypothesis,
       alt_threats: body.alt_threats,
+      feedback: body.feedback,
     };
     if (body.action === 'initial') return analyzeCreativeLeap(ctx, opts);
     if (!body.category) throw new RouteError(400, 'missing_category');
     return generateMoreLeapItems(
-      {
-        ...ctx,
-        category: body.category,
-        existing: body.existing ?? [],
-        locked_ids: body.locked_ids ?? [],
-        rejected_ids: body.rejected_ids ?? [],
-      },
+      { ...ctx, category: body.category, existing: body.existing ?? [] },
       opts,
     );
   },

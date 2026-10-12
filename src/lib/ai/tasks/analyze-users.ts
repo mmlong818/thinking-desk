@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
 import type { BriefContext } from '../schemas/snapshots';
@@ -101,6 +103,8 @@ interface BriefArgs {
   brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
+  /** The person's earlier judgments on the items this run regenerates. */
+  feedback?: RegenerationFeedback;
 }
 
 function formatBriefContext(brief: BriefContext, rawText?: string, answers?: ClarificationAnswer[]): string {
@@ -128,7 +132,10 @@ export async function analyzeUsers(args: BriefArgs, opts?: TaskOptions): Promise
   return runTask({
     task: 'USERS_JTBD',
     system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: `请基于以下 Brief 完成用户与 Job 分析。\n\n${dataBlock('project_context', context)}` }],
+    messages: [{
+      role: 'user',
+      content: `请基于以下 Brief 完成用户与 Job 分析。\n\n${dataBlock('project_context', context)}${feedbackBlock(args.feedback)}`,
+    }],
     schema: UsersAnalysisSchema,
     maxTokens: 10000,
     temperature: 0.4,
@@ -184,7 +191,8 @@ function refineJobsMessage(args: RefineJobsArgs): string {
     `请基于以上信息重新整理 Jobs。特别注意：\n` +
     `1. 上面 🔒 列表里的 Job 必须原封不动出现在输出里；\n` +
     `2. 通读每个 persona 的 pain / story，找出**当前清单没覆盖的 Job**；\n` +
-    `3. 新增的 Job 要与锁定项互补、不重复。`
+    `3. 新增的 Job 要与锁定项互补、不重复。` +
+    feedbackBlock(args.feedback)
   );
 }
 
@@ -226,7 +234,8 @@ export async function generateMorePersonas(
         content:
           `## Brief 上下文\n${dataBlock('project_context', context)}\n\n` +
           `## 已有 persona（🔒 = 用户已锁定）\n${dataBlock('existing_personas', existingBlock)}\n\n` +
-          `请生成 3 个全新的、与上述清单明显不同的 persona。`,
+          `请生成 3 个全新的、与上述清单明显不同的 persona。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: PersonaBatchSchema,

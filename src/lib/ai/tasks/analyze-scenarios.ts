@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
 import type { BriefContext } from '../schemas/snapshots';
@@ -96,6 +98,7 @@ export async function exhaustScenarioDimensions(args: {
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<DimensionsResult>> {
   const context = formatContext(args.brief, args.personas, args.lockedJobs, args.rawText, args.answers);
   return runTask({
@@ -104,7 +107,9 @@ export async function exhaustScenarioDimensions(args: {
     messages: [
       {
         role: 'user',
-        content: `${dataBlock('project_context', context)}\n\n请按 7 维穷举 8-12 个候选要素。覆盖标准场景 + 极值。`,
+        content:
+          `${dataBlock('project_context', context)}\n\n请按 7 维穷举 8-12 个候选要素。覆盖标准场景 + 极值。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: DimensionsResultSchema,
@@ -152,6 +157,7 @@ export async function combineScenarios(args: {
   lockedJobs: Job[];
   dimensions: DimensionsResult;
   selectedElementIds: string[];
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<ScenarioDrafts>> {
   const context = formatContext(args.brief, args.personas, args.lockedJobs, args.rawText, args.answers);
   const selectedSet = new Set(args.selectedElementIds);
@@ -172,7 +178,8 @@ export async function combineScenarios(args: {
         content:
           `${dataBlock('project_context', context)}\n\n` +
           `## 用户勾选的要素（${args.selectedElementIds.length} 个）\n${dataBlock('selected_elements', selectedBlock)}\n\n` +
-          `请组合出 5-8 个差异化情景。`,
+          `请组合出 5-8 个差异化情景。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: ScenarioDraftsSchema,
@@ -262,6 +269,7 @@ export async function deepAnalyzeScenarios(args: {
   lockedJobs: Job[];
   scenarios: ScenarioDraft[];
   pickedScenarioIds: string[];
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<ScenarioDeepAnalysis>> {
   const context = formatContext(args.brief, args.personas, args.lockedJobs, args.rawText, args.answers);
   const pickedSet = new Set(args.pickedScenarioIds);
@@ -285,7 +293,8 @@ export async function deepAnalyzeScenarios(args: {
           `${dataBlock('project_context', context)}\n\n` +
           `## 用户选入深入分析的 ${picked.length} 个情景\n${dataBlock('picked_scenarios', pickedBlock)}\n\n` +
           `## 已锁 Jobs（矩阵列头）\n${dataBlock('locked_jobs', jobsBlock)}\n\n` +
-          `请一次产出：矩阵 · 极值情景 · 敌意情景 · 痛点连续追问 · 快点 · 设计启发 · critiques。`,
+          `请一次产出：矩阵 · 极值情景 · 敌意情景 · 痛点连续追问 · 快点 · 设计启发 · critiques。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: ScenarioDeepAnalysisSchema,

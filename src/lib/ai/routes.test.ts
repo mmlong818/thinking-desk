@@ -83,7 +83,7 @@ const CASES: Array<[string, AiTask, unknown, unknown]> = [
   ['scenarios', 'SCEN_FEED', { action: 'combine', ...ctx, dimensions: validDimensions, selectedElementIds: ['a', 'b', 'c'] }, validScenarioDrafts],
   ['scenarios', 'SCEN_PAIN', { action: 'deep', ...ctx, scenarios: validScenarioDrafts.scenarios, pickedScenarioIds: ['sc-1'] }, validDeepAnalysis],
   ['creative-leap', 'LEAP_FIRST_PRINCIPLES', { ...ctx, features: validFeatureList.features }, validLeap],
-  ['creative-leap', 'LEAP_ANALOGY', { action: 'more', category: 'analogies', ...ctx, existing: [], locked_ids: [], rejected_ids: [] }, { analogies: [validLeap.analogies[0], validLeap.analogies[1]] }],
+  ['creative-leap', 'LEAP_ANALOGY', { action: 'more', category: 'analogies', ...ctx, existing: [] }, { analogies: [validLeap.analogies[0], validLeap.analogies[1]] }],
   ['revise-features', 'FEAT_DRAFT', { ...ctx, original: validFeatureList, leaps: validLeap, selectedLeapIds: ['x'] }, validRevision],
   ['generate-design', 'DESIGN_PROPOSAL', { projectSlug: 'demo', brief, features: validFeatureList.features, pillars: validFeatureList.pillars }, validDesign],
   ['split-subfeatures', 'SPLIT_SUBFEATURES', { projectSlug: 'demo', design: validDesign }, validBreakdown],
@@ -121,10 +121,11 @@ describe('AI routes · { ok, data } contract', () => {
     expect(ids).toEqual(['p-1_v2', 'p-2']);
   });
 
-  it('refine-jobs re-asserts the user-locked priority', async () => {
+  it('refine-jobs re-asserts the priority of jobs the person kept (feedback.keep)', async () => {
     canned.set('USERS_JTBD', validJobsRefinement);
     const { json } = await call('refine-jobs', {
-      ...ctx, selectedPersonas: validUsers.personas, existingJobs: validUsers.jobs, userLockedJobIds: ['j2'],
+      ...ctx, selectedPersonas: validUsers.personas, existingJobs: validUsers.jobs,
+      feedback: { keep: [{ id: 'j2', type: 'job', summary: 't' }], avoid: [] },
     });
     const emotional = (json.data as typeof validJobsRefinement).jobs.emotional as { id: string; suggested_priority?: boolean }[];
     expect(emotional[0]).toMatchObject({ id: 'j2', suggested_priority: true });
@@ -157,6 +158,39 @@ describe('AI routes · request validation', () => {
     const full = Array.from({ length: 10 }, (_, i) => ({ ...validUsers.personas[0], id: `p${i}` }));
     expect((await call('add-personas', { ...ctx, existing: full, lockedIds: [] })).status).toBe(409);
     expect((await call('derive-follow-ups', { nodeKind: 'nope', content: {} })).status).toBe(400);
+  });
+});
+
+describe('AI routes · regeneration feedback', () => {
+  const feedback = {
+    keep: [{ id: 'per_keep', type: 'persona', summary: '小米 · 初二' }],
+    avoid: [{ id: 'per_no', type: 'persona', summary: '焦虑家长', note: '和小米重复' }],
+  };
+
+  it('renders kept and rejected items, with the rejection note, into the prompt', async () => {
+    canned.set('USERS_JTBD', validUsers);
+    await call('analyze-users', { ...ctx, feedback });
+    const user = specs[0].messages.at(-1)?.content ?? '';
+    expect(user).toContain('<data name="regeneration_feedback">');
+    expect(user).toContain('[per_keep] (persona) 小米 · 初二');
+    expect(user).toContain('[per_no] (persona) 焦虑家长 —— 否决理由：和小米重复');
+  });
+
+  it('replaces the old locked / rejected id blocks of leap "more"', async () => {
+    canned.set('LEAP_ANALOGY', { analogies: [validLeap.analogies[0], validLeap.analogies[1]] });
+    const leapFeedback = { keep: [], avoid: [{ id: 'ana_1', type: 'analogy', summary: 's', note: '太离谱' }] };
+    await call('creative-leap', { action: 'more', category: 'analogies', ...ctx, existing: [], feedback: leapFeedback });
+    const user = specs[0].messages.at(-1)?.content ?? '';
+    expect(user).toContain('太离谱');
+    expect(user).not.toContain('candidate_decisions');
+  });
+
+  it('adds nothing without feedback and rejects malformed feedback', async () => {
+    canned.set('STAKE_MATRIX', validStakeholders);
+    await call('analyze-stakeholders', ctx);
+    expect(specs[0].messages.at(-1)?.content).not.toContain('regeneration_feedback');
+    const bad = await call('analyze-stakeholders', { ...ctx, feedback: { keep: [{ id: 'x', type: 'nope', summary: 's' }] } });
+    expect(bad.status).toBe(400);
   });
 });
 

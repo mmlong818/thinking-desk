@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { aiRoute, ModelOverrideSchema, requireBrief, RouteError } from '@/lib/ai/route';
+import { RegenerationFeedbackSchema } from '@/lib/model/feedback';
 import { PillarSchema } from '@/lib/ai/schemas/draft-features';
 import { BriefSnapshotSchema, FeatureDigestSchema } from '@/lib/ai/schemas/snapshots';
 import { generateDesignProposal } from '@/lib/ai/tasks/generate-design';
@@ -14,6 +15,7 @@ const Body = z.object({
   features: z.array(FeatureDigestSchema).optional(),
   pillars: z.array(PillarSchema).optional(),
   model: ModelOverrideSchema,
+  feedback: RegenerationFeedbackSchema.optional(),
 });
 
 export const POST = aiRoute({
@@ -26,6 +28,6 @@ export const POST = aiRoute({
     if (features.length === 0) {
       throw new RouteError(400, 'missing_features', '需要先完成功能列表 / 跃迁节点');
     }
-    return generateDesignProposal({ brief, features, pillars: body.pillars ?? [] }, opts);
+    return generateDesignProposal({ brief, features, pillars: body.pillars ?? [], feedback: body.feedback }, opts);
   },
 });

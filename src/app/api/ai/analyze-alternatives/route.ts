@@ -25,6 +25,7 @@ export const POST = aiRoute({
         answers: body.answers,
         personas: body.personas ?? [],
         lockedJobs: body.lockedJobs ?? [],
+        feedback: body.feedback,
       },
       opts,
     ),

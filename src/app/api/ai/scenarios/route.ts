@@ -41,6 +41,7 @@ export const POST = aiRoute({
       answers: body.answers,
       personas: body.personas ?? [],
       lockedJobs: body.lockedJobs ?? [],
+      feedback: body.feedback,
     };
     if (body.action === 'exhaust') return exhaustScenarioDimensions(ctx, opts);
     if (body.action === 'combine') {

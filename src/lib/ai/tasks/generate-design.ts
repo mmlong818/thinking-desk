@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { BriefContext, FeatureDigest } from '../schemas/snapshots';
 import type { Pillar } from '../schemas/draft-features';
@@ -68,6 +70,7 @@ export async function generateDesignProposal(args: {
   brief: BriefContext;
   features: FeatureDigest[];
   pillars: Pillar[];
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<DesignProposal>> {
   const ctx = formatContext(args);
   return runTask({
@@ -78,7 +81,8 @@ export async function generateDesignProposal(args: {
         role: 'user',
         content:
           `请基于以下材料产出一份完整的设计案。\n\n${dataBlock('project_context', ctx)}\n\n` +
-          `要求：模块的 feature_ids 必须用真实 id；用户流要写到能画 wireframe 的颗粒度；数据模型要能直接建表。`,
+          `要求：模块的 feature_ids 必须用真实 id；用户流要写到能画 wireframe 的颗粒度；数据模型要能直接建表。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: DesignProposalSchema,

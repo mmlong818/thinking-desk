@@ -14,8 +14,11 @@ const Body = z.object({
     emotional: z.array(JobSchema),
     social: z.array(JobSchema),
   }),
-  userLockedJobIds: z.array(z.string()).default([]),
 });
+
+/** Jobs the person accepted or edited must survive the refinement unchanged (feedback.keep). */
+const keptJobIds = (body: z.output<typeof Body>): string[] =>
+  (body.feedback?.keep ?? []).filter((k) => k.type === 'job').map((k) => k.id);
 
 export const POST = aiRoute({
   name: 'refine-jobs',
@@ -28,7 +31,8 @@ export const POST = aiRoute({
         answers: body.answers,
         selectedPersonas: body.selectedPersonas,
         existingJobs: body.existingJobs,
-        userLockedJobIds: body.userLockedJobIds,
+        userLockedJobIds: keptJobIds(body),
+        feedback: body.feedback,
       },
       opts,
     ),

@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { DesignSnapshot } from '../schemas/snapshots';
 import { SubfeatureBreakdownSchema, type SubfeatureBreakdown } from '../schemas/split-subfeatures';
@@ -60,6 +62,7 @@ function formatContext(design: DesignSnapshot): string {
 
 export async function splitSubfeatures(args: {
   design: DesignSnapshot;
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<SubfeatureBreakdown>> {
   const ctx = formatContext(args.design);
   return runTask({
@@ -68,7 +71,9 @@ export async function splitSubfeatures(args: {
     messages: [
       {
         role: 'user',
-        content: `请把以下设计案里的功能拆成可执行子任务：\n\n${dataBlock('design', ctx)}\n\n每个 feature 至少 2 条 subfeature，最多 6 条。`,
+        content:
+          `请把以下设计案里的功能拆成可执行子任务：\n\n${dataBlock('design', ctx)}\n\n每个 feature 至少 2 条 subfeature，最多 6 条。` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: SubfeatureBreakdownSchema,

@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { Feature } from '../schemas/draft-features';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
@@ -126,6 +128,7 @@ export async function reviseFeaturesWithLeaps(args: {
   original: FeatureListSnapshot;
   leaps: LeapSnapshot;
   selectedLeapIds: string[];
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<FeatureRevision>> {
   const briefCtx = formatBriefContext(args.brief, args.rawText, args.answers);
   const leapBlock = formatLeapsForRevision(args.leaps, args.selectedLeapIds);
@@ -141,7 +144,8 @@ export async function reviseFeaturesWithLeaps(args: {
           `${dataBlock('brief', briefCtx)}\n\n` +
           `## 用户采纳的跃迁（${args.selectedLeapIds.length} 条）\n${dataBlock('adopted_leaps', leapBlock)}\n\n` +
           `## 修订前的功能列表（§九 产出）\n${dataBlock('original_features', originalBlock)}\n\n` +
-          `请基于采纳的跃迁修订功能列表，产出：revised_features · revised_pillars · revisions · revised_not_doing · differentiation_echo · summary · critiques`,
+          `请基于采纳的跃迁修订功能列表，产出：revised_features · revised_pillars · revisions · revised_not_doing · differentiation_echo · summary · critiques` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: FeatureRevisionSchema,

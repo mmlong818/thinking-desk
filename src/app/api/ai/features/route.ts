@@ -35,6 +35,7 @@ export const POST = aiRoute({
         design_insights: body.design_insights ?? [],
         pain_points: body.pain_points ?? [],
         differentiation_hypothesis: body.differentiation_hypothesis,
+        feedback: body.feedback,
       },
       opts,
     ),

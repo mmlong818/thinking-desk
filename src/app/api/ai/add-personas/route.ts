@@ -31,7 +31,10 @@ export const POST = aiRoute({
     if (body.existing.length >= MAX_PERSONAS) throw new RouteError(409, 'limit_reached', '已达 10 个上限');
     const brief = requireBrief(body.brief, '需要 Brief 上下文');
     const res = await generateMorePersonas(
-      { brief, rawText: body.rawText, answers: body.answers, existing: body.existing, lockedIds: body.lockedIds },
+      {
+        brief, rawText: body.rawText, answers: body.answers,
+        existing: body.existing, lockedIds: body.lockedIds, feedback: body.feedback,
+      },
       opts,
     );
     return { ...res, data: { personas: dedupe(res.data.personas, body.existing) } };

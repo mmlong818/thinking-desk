@@ -1,4 +1,6 @@
 import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
 import type { BriefContext, InsightDigest, PainDigest } from '../schemas/snapshots';
@@ -183,6 +185,7 @@ export async function draftFeatures(args: {
   design_insights: InsightDigest[];
   pain_points: PainDigest[];
   differentiation_hypothesis?: string;
+  feedback?: RegenerationFeedback;
 }, opts?: TaskOptions): Promise<RunTaskResult<FeatureList>> {
   const context = formatContext(
     args.brief,
@@ -213,7 +216,8 @@ export async function draftFeatures(args: {
           `5. 五问法五个回答都要具体、不套话\n` +
           `6. 功能卡片三件（假设/指标/信号）必填\n` +
           `7. not_doing 至少 3-6 条\n` +
-          `8. 如果功能触及 red_lines，red_line_risk 必须标 true`,
+          `8. 如果功能触及 red_lines，red_line_risk 必须标 true` +
+          feedbackBlock(args.feedback),
       },
     ],
     schema: FeatureListSchema,
