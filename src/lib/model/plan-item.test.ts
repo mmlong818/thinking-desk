@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { planCreateItem, planItemUpdate, planRefreshLinks } from './plan-item';
+import {
+  ACCEPT_RECOMMENDED_NOTE, planAcceptRecommended, planCreateItem, planItemUpdate, planRefreshLinks,
+} from './plan-item';
 import { RepositoryError } from './repository';
 import type { Link } from './types';
 import { briefBody, jobBody, makeItem, personaBody, PROJECT, seqIdSource, T1 } from './__fixtures__/model';
@@ -120,5 +122,33 @@ describe('planRefreshLinks', () => {
     expect(() => planRefreshLinks({ items: [to, from], links: [link] }, ['nope'])).toThrow(/not found/);
     const gone = makeItem({ id: 'per_1', version: 5, deletedAt: T1 });
     expect(() => planRefreshLinks({ items: [gone, from], links: [link] }, ['lnk_1'])).toThrow(/deleted/);
+  });
+});
+
+describe('planAcceptRecommended', () => {
+  const recommend = { verdict: 'recommend' as const, reason: 'core job' };
+  const items = [
+    makeItem({ id: 'per_r1', aiStance: recommend }),
+    makeItem({ id: 'per_r2', aiStance: recommend, version: 3 }),
+    makeItem({ id: 'per_n', aiStance: { verdict: 'neutral', reason: '' } }),
+    makeItem({ id: 'per_done', aiStance: recommend, decision: 'rejected' }),
+    makeItem({ id: 'per_gone', aiStance: recommend, deletedAt: T1 }),
+    makeItem({ id: 'stk_other', node: 'stake', aiStance: recommend }),
+  ];
+
+  it('accepts only live pending recommended items on the node, one human event each', () => {
+    const p = planAcceptRecommended({ items, links: [] }, 'users', ctx());
+    expect(p.items.map((i) => [i.id, i.decision, i.version, i.updatedAt])).toEqual([
+      ['per_r1', 'accepted', 1, T1], ['per_r2', 'accepted', 3, T1],
+    ]);
+    expect(p.events.map((e) => [e.itemId, e.kind, e.actor, e.fromVersion, e.toVersion, e.note])).toEqual([
+      ['per_r1', 'accepted', 'human', 1, 1, ACCEPT_RECOMMENDED_NOTE],
+      ['per_r2', 'accepted', 'human', 3, 3, ACCEPT_RECOMMENDED_NOTE],
+    ]);
+    expect(new Set(p.events.map((e) => e.id)).size).toBe(2);
+  });
+
+  it('is a no-op when nothing qualifies', () => {
+    expect(planAcceptRecommended({ items, links: [] }, 'alt', ctx())).toEqual({ items: [], events: [] });
   });
 });

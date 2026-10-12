@@ -1,3 +1,4 @@
+import type { NodeKind } from '../../data/nodes';
 import { indexById } from './graph';
 import { decisionEventKind, makeEvent, type EventSpec } from './events';
 import { deepEqual } from './json';
@@ -120,6 +121,35 @@ export function planItemUpdate(
     if (patch.decision !== undefined || patch.decisionNote !== undefined) step = applyDecision(step, patch, event, ctx.now);
   }
   return { item: step.item, events: step.specs.map((s) => makeEvent(s, ctx.projectId, ctx.now, alloc)) };
+}
+
+export const ACCEPT_RECOMMENDED_NOTE = 'accept all recommended';
+
+/** Live, pending items on `node` that the AI recommends (aiStance.verdict === 'recommend'). */
+export function recommendedPending(items: readonly Item[], node: NodeKind): Item[] {
+  return items.filter(
+    (i) => !i.deletedAt && i.node === node && i.decision === 'pending' && i.aiStance?.verdict === 'recommend',
+  );
+}
+
+/** Accepts every recommended pending item on `node`: one `accepted` event each, actor human. */
+export function planAcceptRecommended(
+  state: PlanState,
+  node: NodeKind,
+  ctx: PlanContext,
+  note: string = ACCEPT_RECOMMENDED_NOTE,
+): { items: Item[]; events: DecisionEvent[] } {
+  const taken = [...(state.takenIds ?? [])];
+  const items: Item[] = [];
+  const events: DecisionEvent[] = [];
+  for (const item of recommendedPending(state.items, node)) {
+    const plan = planItemUpdate(item, { decision: 'accepted' }, { actor: 'human', note }, ctx, [
+      ...taken, ...events.map((e) => e.id),
+    ]);
+    items.push(plan.item);
+    events.push(...plan.events);
+  }
+  return { items, events };
 }
 
 /** toVersionSeen := current version of `to`. Unknown link ids are rejected. */

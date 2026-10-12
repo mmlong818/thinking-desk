@@ -5,7 +5,7 @@ import type { ItemRow, LinkRow } from './pg-rows';
 import { LocalRepository } from '../model/local-repository';
 import type { Item } from '../model/item-types';
 import {
-  makeItem, output, personaBody, rawJob, rawPersona, seqIdSource, T1,
+  briefBody, makeItem, output, personaBody, rawJob, rawPersona, runInput, seqIdSource, T1,
 } from '../model/__fixtures__/model';
 import { memoryStorage } from '../model/__fixtures__/storage';
 
@@ -151,5 +151,45 @@ describe('PgRepository · other methods', () => {
     });
     expect(await repo.listItems(PID)).toHaveLength(1);
     expect(onInvalidRows).toHaveBeenCalledWith('items', 1);
+  });
+});
+
+describe('PgRepository · decision follow-ups', () => {
+  it('records a run without valid output as failed: only the run row is written', async () => {
+    const db = fakeDb({ items: [makeItem({ id: 'per_old', projectId: PID })] });
+    const res = await db.repo.saveRunOutput(PID, output({
+      drafts: [{ type: 'persona', body: { name: 1 } }], replace: [{ node: 'users', type: 'persona' }],
+    }));
+    expect(res.run.status).toBe('failed');
+    expect(db.writes().map((c) => c.text)).toEqual([SQL.insertRun]);
+    expect(db.writes()[0].params[8]).toBe('failed');
+  });
+
+  it('sends prevBody with the edited event of a rewritten singleton', async () => {
+    const brief = makeItem({
+      id: 'brf_1', projectId: PID, node: 'brief', type: 'brief', decision: 'accepted',
+      body: { ...briefBody('v1'), highlights: [], follow_ups: [], completeness: 0, answers: [], follow_up_answers: {} },
+    });
+    const db = fakeDb({ items: [brief] });
+    await db.repo.saveRunOutput(PID, output({
+      run: runInput({ task: 'BRIEF_EXTRACT', node: 'brief' }), drafts: [{ type: 'brief', body: briefBody('v2') }],
+    }));
+    const events = jsonParam(db.calls.find((c) => c.text === SQL.insertEvents)?.params[1]);
+    expect(events[0]).toMatchObject({ kind: 'edited', prevBody: brief.body });
+    expect(SQL.insertEvents).toContain("e.v->'prevBody'");
+  });
+
+  it('acceptRecommended locks, then writes items and events in one transaction', async () => {
+    const recommend = { verdict: 'recommend' as const, reason: 'r' };
+    const db = fakeDb({ items: [makeItem({ id: 'per_1', projectId: PID, aiStance: recommend }), makeItem({ id: 'per_2', projectId: PID })] });
+    const accepted = await db.repo.acceptRecommended(PID, 'users');
+    expect(accepted.map((i) => i.id)).toEqual(['per_1']);
+    expect(db.transactions()).toBe(1);
+    expect(db.calls.map((c) => c.text)).toEqual([
+      SQL.lockProject, SQL.selectItems, SQL.selectLinks, SQL.overwriteItems, SQL.insertEvents,
+    ]);
+    const none = fakeDb({ items: [makeItem({ id: 'per_2', projectId: PID })] });
+    expect(await none.repo.acceptRecommended(PID, 'users')).toEqual([]);
+    expect(none.writes()).toEqual([]);
   });
 });

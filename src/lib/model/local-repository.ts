@@ -1,8 +1,9 @@
+import type { NodeKind } from '../../data/nodes';
 import { liveGraph, type Graph } from './graph';
 import type { IdSource } from './ids';
 import type { Item } from './item-types';
 import { decodeDoc, hasLoss, type DecodeReport, type ProjectDoc } from './local-doc';
-import { planCreateItem, planItemUpdate, planRefreshLinks } from './plan-item';
+import { planAcceptRecommended, planCreateItem, planItemUpdate, planRefreshLinks } from './plan-item';
 import { planRunOutput, toSaveRunResult, type PlanContext, type PlanState, type RunPlan } from './plan-run';
 import {
   RepositoryError,
@@ -44,6 +45,18 @@ export interface LocalRepositoryOptions {
 
 export const localProjectKey = (projectId: string): string => `td:v2:${projectId}`;
 export const localBackupKey = (projectId: string): string => `td:v2-corrupt:${projectId}`;
+
+/**
+ * Pure-local projectId = the decoded URL slug, so `/project/%E9%A1%B9%E7%9B%AE/…` and
+ * `/project/项目/…` share one storage key (same normalisation as client-cache).
+ */
+export function localProjectId(slug: string): string {
+  try {
+    return decodeURIComponent(slug);
+  } catch {
+    return slug;
+  }
+}
 
 function replaceById<T extends { id: string }>(list: readonly T[], next: readonly T[]): T[] {
   const byId = new Map(next.map((x) => [x.id, x]));
@@ -149,6 +162,14 @@ export class LocalRepository implements Repository {
       events: [...doc.events, ...plan.events],
     });
     return plan.item;
+  }
+
+  async acceptRecommended(projectId: string, node: NodeKind, meta: { note?: string } = {}): Promise<Item[]> {
+    const doc = this.load(projectId);
+    const plan = planAcceptRecommended(planState(doc), node, this.ctx(projectId), meta.note);
+    if (plan.items.length === 0) return [];
+    this.save(projectId, { ...doc, items: replaceById(doc.items, plan.items), events: [...doc.events, ...plan.events] });
+    return plan.items;
   }
 
   async refreshLinks(projectId: string, linkIds: readonly string[]): Promise<Link[]> {

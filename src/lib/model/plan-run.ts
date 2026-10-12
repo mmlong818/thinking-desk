@@ -1,10 +1,12 @@
 import { indexById } from './graph';
 import { createIdAllocator, type IdAllocator, type IdSource } from './ids';
-import { buildLinks, classifyDrafts, type ResolvedDraft } from './ingest';
-import { asItem, type Item } from './item-types';
+import { buildLinks, classifyDrafts, type Classification, type ResolvedDraft } from './ingest';
+import { asItem, isSingletonType, type Item } from './item-types';
 import { makeEvent, type EventSpec } from './events';
 import { retireCandidates } from './regenerate';
-import { RepositoryError, type IngestIssue, type RunOutputInput, type SaveRunResult } from './repository';
+import {
+  RepositoryError, type IngestIssue, type ReplaceScope, type RunOutputInput, type SaveRunResult,
+} from './repository';
 import { RunSchema, type DecisionEvent, type Link, type Run } from './types';
 
 // Pure planner for Repository.saveRunOutput. Storage adapters apply the plan
@@ -72,7 +74,11 @@ function rewrittenItem(r: ResolvedDraft, existing: Item, run: Run, ctx: PlanCont
 function rewriteEvents(existing: Item, run: Run): EventSpec[] {
   const v = existing.version;
   const note = `run ${run.id}`;
-  const edited: EventSpec = { itemId: existing.id, kind: 'edited', fromVersion: v, toVersion: v + 1, actor: 'ai', note };
+  const edited: EventSpec = {
+    itemId: existing.id, kind: 'edited', fromVersion: v, toVersion: v + 1, actor: 'ai', note,
+    // A singleton is rewritten in place even when judged: keep the old body recoverable.
+    ...(isSingletonType(existing.type) ? { prevBody: existing.body } : {}),
+  };
   if (existing.decision === 'pending') return [edited];
   return [edited, { itemId: existing.id, kind: 'reset', fromVersion: v + 1, toVersion: v + 1, actor: 'ai', note }];
 }
@@ -105,10 +111,26 @@ function versionSeenFn(run: Run, liveById: ReadonlyMap<string, Item>, written: r
   };
 }
 
-function emptyPlan(run: Run): RunPlan {
+function emptyPlan(run: Run, issues: IngestIssue[] = []): RunPlan {
   return {
-    run, created: [], updated: [], retired: [], linksAdded: [], linksRemoved: [], events: [], idMap: {}, issues: [],
+    run, created: [], updated: [], retired: [], linksAdded: [], linksRemoved: [], events: [], idMap: {}, issues,
   };
+}
+
+/** A run that was asked for output but yielded no valid item fails as a whole and changes nothing. */
+function noOutputError(input: RunOutputInput, c: Classification): string | null {
+  if (c.resolved.length > 0 || (input.drafts.length === 0 && input.replace.length === 0)) return null;
+  if (input.drafts.length === 0) return 'run produced no items';
+  return `run produced no valid items (${input.drafts.length} drafts rejected)`;
+}
+
+/** Replace scopes that received at least one valid draft; empty scopes keep their pending items. */
+function filledScopes(replace: readonly ReplaceScope[], c: Classification) {
+  const filled = replace.filter((s) => c.resolved.some((r) => r.node === s.node && r.draft.type === s.type));
+  const issues: IngestIssue[] = replace
+    .filter((s) => !filled.includes(s))
+    .map((s) => ({ kind: 'empty_scope', node: s.node, type: s.type }));
+  return { filled, issues };
 }
 
 export function planRunOutput(state: PlanState, input: RunOutputInput, ctx: PlanContext): RunPlan {
@@ -119,8 +141,11 @@ export function planRunOutput(state: PlanState, input: RunOutputInput, ctx: Plan
   const live = state.items.filter((i) => !i.deletedAt);
   const liveById = indexById(live);
   const c = classifyDrafts(input.drafts, liveById, run.node, alloc);
+  const error = noOutputError(input, c);
+  if (error) return emptyPlan({ ...run, status: 'failed', error }, c.issues);
+  const scopes = filledScopes(input.replace, c);
   const touched = new Set(c.resolved.filter((r) => r.target !== 'new').map((r) => r.itemId));
-  const retiredIds = new Set(retireCandidates(live, input.replace, touched).map((i) => i.id));
+  const retiredIds = new Set(retireCandidates(live, scopes.filled, touched).map((i) => i.id));
   const { created, updated, specs } = materialize(c.resolved, run, ctx);
   const linkResult = buildLinks(c, {
     projectId: ctx.projectId, liveById, retired: retiredIds, alloc,
@@ -141,7 +166,7 @@ export function planRunOutput(state: PlanState, input: RunOutputInput, ctx: Plan
     linksAdded: linkResult.links,
     linksRemoved: state.links.filter((l) => retiredIds.has(l.from) || retiredIds.has(l.to)).map((l) => l.id),
     idMap: Object.fromEntries([...c.keyMap].map(([k, v]) => [k, v.itemId])),
-    issues: [...c.issues, ...linkResult.issues],
+    issues: [...c.issues, ...linkResult.issues, ...scopes.issues],
   };
 }
 

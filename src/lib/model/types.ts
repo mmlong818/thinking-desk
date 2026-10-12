@@ -131,6 +131,8 @@ export const DecisionEventSchema = z.object({
   fromVersion: z.number().int().min(0),
   toVersion: Version,
   note: z.string().optional(),
+  /** Body before an AI run rewrote a singleton in place (`edited` events only), so it stays recoverable. */
+  prevBody: z.unknown().optional(),
   actor: z.enum(ACTORS),
   at: Timestamp,
 });

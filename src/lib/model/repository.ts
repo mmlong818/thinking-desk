@@ -67,7 +67,9 @@ export type IngestIssue =
   | { kind: 'node_not_allowed'; index: number; type: ItemType; node: NodeKind }
   | { kind: 'duplicate_singleton'; index: number; type: ItemType }
   | { kind: 'duplicate_ref'; index: number; type: ItemType; ref: string }
-  | { kind: 'unresolved_ref'; index: number; type: ItemType; path: string; value: string };
+  | { kind: 'unresolved_ref'; index: number; type: ItemType; path: string; value: string }
+  /** A replace scope got no valid item from this run, so its pending items were kept rather than retired. */
+  | { kind: 'empty_scope'; node: NodeKind; type: ItemType };
 
 export interface SaveRunResult {
   run: Run;
@@ -123,6 +125,11 @@ export interface Repository {
   updateItem(projectId: string, itemId: string, patch: ItemPatch, event: EventMeta): Promise<Item>;
   /** Human-authored item (origin 'human'). */
   createItem(projectId: string, input: CreateItemInput): Promise<Item>;
+  /**
+   * Atomic: accepts every live, pending item on `node` whose aiStance.verdict is 'recommend',
+   * one `accepted` event each (actor human). Returns the accepted items (empty when none qualify).
+   */
+  acceptRecommended(projectId: string, node: NodeKind, meta?: { note?: string }): Promise<Item[]>;
   /** Marks links as reviewed: toVersionSeen := current version of `to`. */
   refreshLinks(projectId: string, linkIds: readonly string[]): Promise<Link[]>;
   /** Newest first. */

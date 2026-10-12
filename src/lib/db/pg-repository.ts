@@ -3,10 +3,11 @@ import {
   itemToJson, mapRows, rowToEvent, rowToItem, rowToLink, rowToRun,
   type EventRow, type ItemRow, type LinkRow, type RunRow,
 } from './pg-rows';
+import type { NodeKind } from '../../data/nodes';
 import { liveGraph, type Graph } from '../model/graph';
 import type { IdSource } from '../model/ids';
 import type { Item } from '../model/item-types';
-import { planCreateItem, planItemUpdate, planRefreshLinks } from '../model/plan-item';
+import { planAcceptRecommended, planCreateItem, planItemUpdate, planRefreshLinks } from '../model/plan-item';
 import { planRunOutput, toSaveRunResult, type PlanContext, type PlanState, type RunPlan } from '../model/plan-run';
 import {
   RepositoryError,
@@ -61,9 +62,10 @@ export const SQL = {
   refreshLinks: `UPDATE links AS l SET to_version_seen = (e.v->>'toVersionSeen')::int
     FROM jsonb_array_elements($2::jsonb) AS e(v)
     WHERE l.project_id = $1::uuid AND l.id = e.v->>'id'`,
-  insertEvents: `INSERT INTO decision_events (project_id, id, item_id, kind, from_version, to_version, note, actor, at)
+  insertEvents: `INSERT INTO decision_events (project_id, id, item_id, kind, from_version, to_version, note, prev_body,
+                                   actor, at)
     SELECT $1::uuid, e.v->>'id', e.v->>'itemId', e.v->>'kind', (e.v->>'fromVersion')::int, (e.v->>'toVersion')::int,
-           e.v->>'note', e.v->>'actor', (e.v->>'at')::timestamptz
+           e.v->>'note', e.v->'prevBody', e.v->>'actor', (e.v->>'at')::timestamptz
     FROM jsonb_array_elements($2::jsonb) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord`,
 } as const;
 
@@ -191,6 +193,17 @@ export class PgRepository implements Repository {
       await writeLinks(tx, projectId, plan.links, []);
       await writeEvents(tx, projectId, plan.events);
       return plan.item;
+    });
+  }
+
+  async acceptRecommended(projectId: string, node: NodeKind, meta: { note?: string } = {}): Promise<Item[]> {
+    return this.tx(async (tx) => {
+      await this.lock(tx, projectId);
+      const plan = planAcceptRecommended(await this.state(tx, projectId), node, this.ctx(projectId), meta.note);
+      if (plan.items.length === 0) return [];
+      await writeItems(tx, projectId, [], plan.items);
+      await writeEvents(tx, projectId, plan.events);
+      return plan.items;
     });
   }
 

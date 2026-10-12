@@ -68,16 +68,20 @@ One record per AI call; replaces the `ai_exchanges` log. Append-only.
 
 ### DecisionEvent
 
-Append-only audit trail: `id, projectId, itemId, kind, fromVersion, toVersion, note?, actor (human|ai), at`.
+Append-only audit trail: `id, projectId, itemId, kind, fromVersion, toVersion, note?, prevBody?, actor (human|ai), at`.
+
+`prevBody` is set only on the `edited` event of an AI run that rewrites a **singleton** in place: it holds the body before the rewrite, so a judged brief / engagement plan / differentiation hypothesis that a re-run overwrote stays recoverable without a snapshot table.
 
 | Operation | Events |
 |---|---|
 | AI run creates an item | `created` 0→1, actor ai |
-| AI run rewrites an item (echo / singleton) | `edited` v→v+1, actor ai; plus `reset` if it was accepted/rejected |
+| AI run rewrites an echoed AI-pending item | `edited` v→v+1, actor ai |
+| AI run rewrites a singleton | `edited` v→v+1 with `prevBody`, actor ai; plus `reset` if it was accepted/rejected |
 | AI run retires a superseded pending item | `deleted`, actor ai, note `superseded by run <id>` |
 | Human creates an item | `created` 0→1, plus `accepted`/`rejected` if not pending |
 | Human edits the body | `edited` v→v+1 (origin `ai` → `ai_edited`; decision unchanged) |
 | Human accepts / rejects / resets | `accepted` / `rejected` / `reset`, from = to = current version |
+| Human "accept all recommended" on a node | one `accepted` per item, actor human, note `accept all recommended` |
 | Human changes only the note | the current decision's event again, with the new note |
 | Soft delete | `deleted` |
 
@@ -136,6 +140,19 @@ Completion is derived from items: a node is complete when every clause of its `c
 
 The `td-done:<slug>` cookie stays, but only as a cache for SSR lock decisions: it is overwritten with `completionCookieValue(completedNodes(items))` after each write (wired in the node-migration milestone).
 
+The rules stay deliberately minimal. What a good node *should* also have is reported separately as **hints** that never block completion or locking: `nodeHints(kind, items)` / `projectHints(items)` in `src/lib/model/hints.ts`, judged on live accepted items and silent for a node that has no items yet.
+
+| Node | Hint (`code`) when nothing accepted covers it |
+|---|---|
+| brief | no `red_line` (`brief.no_red_line`); brief without `success_criteria` (`brief.no_success_criteria`) |
+| users | no emotional `job` (`users.no_emotional_job`) |
+| stake | each baseline category missing among stakeholders: sponsor, maker, business, compliance, user (`stake.missing_baseline`, `params.category`) |
+| alt | no `non_consumption` alternative (`alt.no_non_consumption`) |
+| scen | no `hostile` scenario (`scen.no_hostile`) |
+| feat | no `not_doing` (`feat.no_not_doing`) |
+
+AI items are created `pending`. `acceptRecommended(projectId, node)` accepts, atomically, every live pending item on the node whose `aiStance.verdict` is `recommend` (one `accepted` event each, actor human); the one-click UI arrives with the node migration.
+
 ## AI temp ids → permanent ids and Links
 
 AI output keeps using short temporary ids (`p1`, `j3`, `sc-1`) and cross-refs between them (`persona_ids`, `job_ids`, `scenario_id`, `element_ids`, `alt_id`, `feature_ids`, `source_id`, …). Prompts present existing items by their permanent id. A task adapter (next milestone, with `runTask()`) turns each output entity into an `ItemDraft { ref, type, node?, body, aiStance?, evidence?, links? }` where `body` is the raw entity; the registry knows which fields are refs. At save time, inside the same transaction:
@@ -158,7 +175,9 @@ AI output keeps using short temporary ids (`p1`, `j3`, `sc-1`) and cross-refs be
 - **Retired**: AI-pending items in the scope that the new output did not echo — soft-deleted with a `deleted` event (actor ai). Links touching them are removed; new refs to them are dropped.
 - **Additive runs** ("give me 3 more personas", leap "more items") pass `replace: []`.
 - **Failed runs** are recorded (status `failed`, `error`) and change nothing else.
-- **Singletons** (`brief`, `engagement_plan`, `diff_hypothesis`) are rewritten in place, even when judged: version+1, back to `pending`, `edited` + `reset` events. Links into them therefore go stale instead of dangling. The previous body is not kept (see open questions); the UI should confirm before re-running over a judged singleton.
+- **Runs without valid output**: a run that has drafts or a replace scope but yields no valid item (empty output, or every draft rejected) is recorded as `failed` with `error` (`run produced no items` / `run produced no valid items (N drafts rejected)`), whatever status the caller passed, and changes nothing — the pending items it would have replaced stay. A run with neither drafts nor scope (e.g. a clarify run) is recorded as passed.
+- **Empty scope**: when a run does yield items but one of its replace scopes got no valid draft, that scope's pending items are kept (not retired) and an `empty_scope` issue is reported; the other scopes regenerate normally.
+- **Singletons** (`brief`, `engagement_plan`, `diff_hypothesis`) are rewritten in place, even when judged: version+1, back to `pending`, `edited` + `reset` events. Links into them therefore go stale instead of dangling. The previous body is kept on the `edited` event (`prevBody`); the UI should still confirm before re-running over a judged singleton.
 
 Feedback into the next prompt (implemented with `runTask()`; shape fixed now):
 
@@ -188,17 +207,18 @@ interface Repository {
   updateItem(projectId, itemId, patch: { body?, decision?, decisionNote?, deleted? },
              event: { actor, note? }): Promise<Item>;
   createItem(projectId, { node, type, body, decision?, decisionNote?, links? }): Promise<Item>;
+  acceptRecommended(projectId, node, meta?: { note? }): Promise<Item[]>;  // atomic
   refreshLinks(projectId, linkIds): Promise<Link[]>;
   listRuns(projectId, filter?): Promise<Run[]>;        // newest first
   listEvents(projectId, filter?): Promise<DecisionEvent[]>;  // append order
 }
 ```
 
-`SaveRunResult` = `{ run, created, updated, retired (ids), links, idMap, issues }`. Errors are `RepositoryError` with `code: not_found | invalid | conflict | storage`. Human items default to `accepted`; creating a second live singleton is a `conflict`.
+`SaveRunResult` = `{ run, created, updated, retired (ids), links, idMap, issues }`; `issues` covers `invalid_body`, `node_not_allowed`, `duplicate_singleton`, `duplicate_ref`, `unresolved_ref` and `empty_scope`. Errors are `RepositoryError` with `code: not_found | invalid | conflict | storage`. Human items default to `accepted`; creating a second live singleton is a `conflict`.
 
 Both implementations delegate every decision to the same pure planners (`planRunOutput`, `planItemUpdate`, `planCreateItem`, `planRefreshLinks`) and only apply the resulting plan, so they behave identically — an integration test runs the same write sequence against both and compares the results.
 
-**LocalRepository** (pure-local mode, browser): one `localStorage` value per project, `td:v2:<projectId>` → `{ v: 1, items, links, runs, events }`. Each method is a synchronous read-modify-write ending in a single `setItem`, so a failed write (quota) leaves the stored value untouched. Reads validate every record with Zod; invalid records and dangling links are dropped, the original value is copied once to `td:v2-corrupt:<projectId>` and `onCorrupt` is called. A value written by a newer format version is refused rather than overwritten. Storage, clock and id source are injectable. Two tabs writing the same project: last write wins.
+**LocalRepository** (pure-local mode, browser): one `localStorage` value per project, `td:v2:<projectId>` → `{ v: 1, items, links, runs, events }`. In pure-local mode the projectId is the **decoded URL slug** — `localProjectId(slug)` applies the same `decodeURIComponent` normalisation as `client-cache`, so encoded and decoded URLs of one project share a key. Each method is a synchronous read-modify-write ending in a single `setItem`, so a failed write (quota) leaves the stored value untouched. Reads validate every record with Zod; invalid records and dangling links are dropped, the original value is copied once to `td:v2-corrupt:<projectId>` and `onCorrupt` is called. A value written by a newer format version is refused rather than overwritten. Storage, clock and id source are injectable. Two tabs writing the same project: last write wins.
 
 **PgRepository** (server): every write runs in one transaction that first locks the project row (`SELECT … FOR UPDATE`), loads the project's items and links, plans, then applies the plan with bulk `jsonb_array_elements` statements in FK-safe order (run → items → links → events). Project ids must be UUIDs. Like every `src/lib/db` caller it rejects (catchably) without `DATABASE_URL`, so pure-local mode and `pnpm build` are unaffected. The `/api/projects/[id]/graph` routes that expose it to the browser come with the node migration.
 
@@ -248,6 +268,7 @@ CREATE TABLE decision_events (
   item_id TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted')),
   from_version INTEGER NOT NULL, to_version INTEGER NOT NULL, note TEXT,
+  prev_body JSONB,   -- singleton body before an AI rewrite; added by ALTER … IF NOT EXISTS on older DBs
   actor TEXT NOT NULL CHECK (actor IN ('human','ai')), at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (project_id, id),
   FOREIGN KEY (project_id, item_id) REFERENCES items (project_id, id) ON DELETE CASCADE

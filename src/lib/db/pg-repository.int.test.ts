@@ -50,6 +50,12 @@ async function scenario(repo: Repository, pid: string) {
   const briefRun = runInput({ task: 'BRIEF_EXTRACT', node: 'brief' });
   await repo.saveRunOutput(pid, output({ run: briefRun, drafts: [{ type: 'brief', body: briefBody('p', 'r') }] }));
   await repo.saveRunOutput(pid, output({ run: briefRun, drafts: [{ type: 'brief', body: briefBody('p', 'r2') }] }));
+  await repo.saveRunOutput(pid, output({
+    run: runInput({ task: 'STAKE_MATRIX', node: 'stake' }),
+    drafts: [{ type: 'critique', node: 'stake', body: { kind: 'check', title: 'r', body: 'b' }, aiStance: { verdict: 'recommend', reason: 'r' } }],
+  }));
+  await repo.acceptRecommended(pid, 'stake');
+  await repo.saveRunOutput(pid, output({ drafts: [{ type: 'persona', body: { name: 1 } }], replace: [{ node: 'users', type: 'persona' }] }));
   await repo.saveRunOutput(pid, output({ run: runInput({ status: 'failed', error: 'timeout' }) }));
 }
 
@@ -96,6 +102,8 @@ describe.skipIf(!url)('PgRepository against Postgres', () => {
     expect(a.events).toEqual(b.events);
     expect(a.all.length).toBeGreaterThan(5);
     expect(a.events.length).toBeGreaterThan(10);
+    expect(a.events.some((e) => e.kind === 'edited' && e.prevBody !== undefined)).toBe(true);
+    expect(a.runs.filter((r) => r.status === 'failed')).toHaveLength(2);
   });
 
   it('serialises concurrent runs on one project (row lock) without id clashes', async () => {

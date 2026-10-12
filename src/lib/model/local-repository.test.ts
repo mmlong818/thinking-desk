@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LOCAL_DOC_VERSION } from './local-doc';
-import { LocalRepository, localBackupKey, localProjectKey, type LocalRepositoryOptions } from './local-repository';
-import { RepositoryError } from './repository';
 import {
-  jobBody, output, personaBody, PROJECT, rawJob, rawPersona, runInput, seqIdSource, T0,
+  LocalRepository, localBackupKey, localProjectId, localProjectKey, type LocalRepositoryOptions,
+} from './local-repository';
+import { RepositoryError, type ItemDraft } from './repository';
+import {
+  briefBody, jobBody, output, personaBody, PROJECT, rawJob, rawPersona, runInput, seqIdSource, T0,
 } from './__fixtures__/model';
 import { memoryStorage } from './__fixtures__/storage';
 
@@ -13,7 +15,7 @@ function setup(opts: Partial<LocalRepositoryOptions> = {}) {
   return { storage, repo };
 }
 
-const usersRun = (drafts = [
+const usersRun = (drafts: ItemDraft[] = [
   { ref: 'p1', type: 'persona' as const, body: rawPersona('p1') },
   { ref: 'j1', type: 'job' as const, body: rawJob('j1', ['p1']) },
 ]) => output({ drafts, replace: [{ node: 'users', type: 'persona' }, { node: 'users', type: 'job' }] });
@@ -52,16 +54,68 @@ describe('LocalRepository', () => {
 
   it('applies regeneration semantics across runs', async () => {
     const { repo } = setup();
-    const first = await repo.saveRunOutput(PROJECT, usersRun());
-    const [persona, job] = first.created;
+    const first = await repo.saveRunOutput(PROJECT, usersRun([
+      { ref: 'p1', type: 'persona', body: rawPersona('p1') },
+      { ref: 'p2', type: 'persona', body: rawPersona('p2') },
+      { ref: 'j1', type: 'job', body: rawJob('j1', ['p1']) },
+    ]));
+    const [persona, pendingPersona, job] = first.created;
     await repo.updateItem(PROJECT, persona.id, { decision: 'accepted' }, { actor: 'human' });
+    await repo.updateItem(PROJECT, job.id, { decision: 'rejected' }, { actor: 'human' });
     const second = await repo.saveRunOutput(PROJECT, usersRun([
       { ref: 'p9', type: 'persona', body: rawPersona('p9', 'New') },
+      { ref: 'j9', type: 'job', body: rawJob('j9', ['p9']) },
     ]));
-    expect(second.retired).toEqual([job.id]);
+    expect(second.retired).toEqual([pendingPersona.id]);
     const live = await repo.listItems(PROJECT);
-    expect(live.map((i) => i.id)).toEqual([persona.id, second.created[0].id]);
-    expect((await repo.getGraph(PROJECT)).links).toEqual([]);
+    expect(live.map((i) => i.id)).toEqual([persona.id, job.id, ...second.created.map((i) => i.id)]);
+    expect((await repo.getGraph(PROJECT)).links.map((l) => [l.from, l.to])).toEqual([
+      [job.id, persona.id], [second.created[1].id, second.created[0].id],
+    ]);
+  });
+
+  it('records a run without valid output as failed and keeps the pending items it would replace', async () => {
+    const { repo } = setup();
+    const first = await repo.saveRunOutput(PROJECT, usersRun());
+    const second = await repo.saveRunOutput(PROJECT, usersRun([{ type: 'persona', body: { name: 1 } }]));
+    expect(second.run).toMatchObject({ status: 'failed', error: 'run produced no valid items (1 drafts rejected)' });
+    expect(second.retired).toEqual([]);
+    expect((await repo.listItems(PROJECT)).map((i) => i.id)).toEqual(first.created.map((i) => i.id));
+    expect((await repo.listRuns(PROJECT)).map((r) => r.status)).toEqual(['failed', 'ok']);
+  });
+
+  it('keeps an AI-overwritten singleton body on the edited event', async () => {
+    const { repo } = setup();
+    const briefRun = (problem: string) => output({
+      run: runInput({ task: 'BRIEF_EXTRACT', node: 'brief' }), drafts: [{ type: 'brief', body: briefBody(problem) }],
+    });
+    const { created: [brief] } = await repo.saveRunOutput(PROJECT, briefRun('v1'));
+    await repo.updateItem(PROJECT, brief.id, { decision: 'accepted' }, { actor: 'human' });
+    await repo.saveRunOutput(PROJECT, briefRun('v2'));
+    const events = await repo.listEvents(PROJECT, { itemId: brief.id });
+    const edited = events.find((e) => e.kind === 'edited');
+    expect(edited?.prevBody).toEqual(brief.body);
+  });
+
+  it('acceptRecommended accepts recommended pending items in one write', async () => {
+    const { storage, repo } = setup();
+    await repo.saveRunOutput(PROJECT, usersRun([
+      { ref: 'p1', type: 'persona', body: rawPersona('p1'), aiStance: { verdict: 'recommend', reason: 'r' } },
+      { ref: 'p2', type: 'persona', body: rawPersona('p2'), aiStance: { verdict: 'caution', reason: 'c' } },
+    ]));
+    const spy = vi.spyOn(storage, 'setItem');
+    const accepted = await repo.acceptRecommended(PROJECT, 'users');
+    expect(accepted.map((i) => i.decision)).toEqual(['accepted']);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await repo.listEvents(PROJECT)).at(-1)).toMatchObject({ kind: 'accepted', actor: 'human' });
+    expect(await repo.acceptRecommended(PROJECT, 'users')).toEqual([]);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('localProjectId decodes the slug so encoded and decoded URLs share one key', () => {
+    expect(localProjectId('%E9%A1%B9%E7%9B%AE-a1')).toBe('项目-a1');
+    expect(localProjectId('项目-a1')).toBe('项目-a1');
+    expect(localProjectId('bad%E4')).toBe('bad%E4');
   });
 
   it('updateItem bumps the version on body edits and appends events', async () => {

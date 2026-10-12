@@ -108,11 +108,14 @@ CREATE TABLE IF NOT EXISTS decision_events (
   from_version INTEGER NOT NULL CHECK (from_version >= 0),
   to_version   INTEGER NOT NULL CHECK (to_version >= 1),
   note         TEXT,
+  prev_body    JSONB,                                -- body before an AI run rewrote a singleton
   actor        TEXT NOT NULL CHECK (actor IN ('human','ai')),
   at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (project_id, id),
   FOREIGN KEY (project_id, item_id) REFERENCES items (project_id, id) ON DELETE CASCADE
 );
+-- Databases initialised before prev_body existed.
+ALTER TABLE decision_events ADD COLUMN IF NOT EXISTS prev_body JSONB;
 CREATE INDEX IF NOT EXISTS decision_events_item_idx ON decision_events (project_id, item_id, seq);
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$

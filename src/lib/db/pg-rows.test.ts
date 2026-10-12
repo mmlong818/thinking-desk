@@ -57,11 +57,19 @@ describe('rowToLink / rowToRun / rowToEvent', () => {
     })).toMatchObject({ promptVersion: 'h', latencyMs: 10, inputs: [{ itemId: 'brf_1', version: 2 }] });
     expect(rowToEvent({
       project_id: PID, id: 'evt_1', item_id: 'per_1', kind: 'accepted', from_version: 1, to_version: 1,
-      note: null, actor: 'human', at: new Date('2026-10-13T00:00:00Z'),
+      note: null, prev_body: null, actor: 'human', at: new Date('2026-10-13T00:00:00Z'),
     })).toEqual({
       id: 'evt_1', projectId: PID, itemId: 'per_1', kind: 'accepted', fromVersion: 1, toVersion: 1,
       actor: 'human', at: '2026-10-13T00:00:00.000Z',
     });
+  });
+
+  it('maps prev_body (JSONB) to prevBody on edited events', () => {
+    const prev = { raw_text: 'old' };
+    expect(rowToEvent({
+      project_id: PID, id: 'evt_2', item_id: 'brf_1', kind: 'edited', from_version: 1, to_version: 2,
+      note: 'run run_1', prev_body: prev, actor: 'ai', at: new Date('2026-10-13T00:00:00Z'),
+    })).toMatchObject({ kind: 'edited', prevBody: prev });
   });
 });
 

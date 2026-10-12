@@ -224,6 +224,24 @@ describe('planRunOutput · singletons', () => {
     expect(plan.events.map((e) => [e.kind, e.fromVersion, e.toVersion])).toEqual([['edited', 2, 3], ['reset', 3, 3]]);
   });
 
+  it('keeps the overwritten body on the edited event so it stays recoverable', () => {
+    const plan = planRunOutput(state, output({ run, drafts: [{ type: 'brief', body: briefBody('v2') }] }), ctx());
+    const [edited, reset] = plan.events;
+    expect(edited.prevBody).toEqual(brief.body);
+    expect(reset).not.toHaveProperty('prevBody');
+  });
+
+  it('does not attach prevBody when an echoed many-item is rewritten', () => {
+    const pending = makeItem({ id: 'per_p' });
+    const plan = planRunOutput(
+      { items: [pending], links: [] },
+      output({ drafts: [{ ref: 'per_p', type: 'persona', body: rawPersona('per_p', 'v2') }] }),
+      ctx(),
+    );
+    expect(plan.events).toHaveLength(1);
+    expect(plan.events[0]).not.toHaveProperty('prevBody');
+  });
+
   it('is a no-op when the AI returns an identical body', () => {
     const plan = planRunOutput(state, output({ run, drafts: [{ type: 'brief', body: briefBody('v1') }] }), ctx());
     expect([plan.created, plan.updated, plan.events]).toEqual([[], [], []]);
@@ -234,6 +252,45 @@ describe('planRunOutput · singletons', () => {
     const plan = planRunOutput(empty, output({ run, drafts }), ctx());
     expect(plan.created).toHaveLength(1);
     expect(plan.issues).toEqual([{ kind: 'duplicate_singleton', index: 1, type: 'brief' }]);
+  });
+});
+
+describe('planRunOutput · runs without valid output', () => {
+  const pendingPersona = makeItem({ id: 'per_old' });
+  const pendingJob = makeItem({ id: 'job_old', type: 'job', body: jobBody() });
+  const state: PlanState = { items: [pendingPersona, pendingJob], links: [] };
+  const both = [{ node: 'users' as const, type: 'persona' as const }, { node: 'users' as const, type: 'job' as const }];
+
+  it('fails the run and evicts nothing when every draft is invalid', () => {
+    const plan = planRunOutput(state, output({
+      run: runInput({ status: 'retried' }),
+      drafts: [{ type: 'persona', body: { name: 1 } }, { type: 'job', body: {} }],
+      replace: both,
+    }), ctx());
+    expect(plan.run).toMatchObject({ status: 'failed', error: 'run produced no valid items (2 drafts rejected)' });
+    expect([plan.created, plan.updated, plan.retired, plan.events, plan.linksAdded]).toEqual([[], [], [], [], []]);
+    expect(plan.issues.map((i) => i.kind)).toEqual(['invalid_body', 'invalid_body']);
+  });
+
+  it('fails a replacing run that returned no items at all', () => {
+    const plan = planRunOutput(state, output({ drafts: [], replace: both }), ctx());
+    expect(plan.run).toMatchObject({ status: 'failed', error: 'run produced no items' });
+    expect(plan.retired).toEqual([]);
+  });
+
+  it('records an output-less, non-replacing run as ok (e.g. a clarify run)', () => {
+    const plan = planRunOutput(state, output({ drafts: [], replace: [] }), ctx());
+    expect(plan.run.status).toBe('ok');
+  });
+
+  it('keeps pending items of a scope that got no valid draft while other scopes regenerate', () => {
+    const plan = planRunOutput(state, output({
+      drafts: [{ ref: 'p1', type: 'persona', body: rawPersona('p1') }, { ref: 'j1', type: 'job', body: { title: 1 } }],
+      replace: both,
+    }), ctx());
+    expect(plan.run.status).toBe('ok');
+    expect(plan.retired.map((i) => i.id)).toEqual(['per_old']);
+    expect(plan.issues).toContainEqual({ kind: 'empty_scope', node: 'users', type: 'job' });
   });
 });
 
