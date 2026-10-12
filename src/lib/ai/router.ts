@@ -80,8 +80,8 @@ async function pickModel(name: AiProviderName, hint?: string): Promise<string> {
   const preferred = [
     // Zhipu (glm-5.3 excluded: thinking cannot be disabled, but the zhipu adapter sends thinking:disabled for JSON tasks)
     'glm-5.2', 'glm-5.1', 'glm-5', 'glm-5-turbo',
-    // Claude (newest generation that still accepts the adapter's non-default temperature)
-    'claude-sonnet-4-6', 'claude-opus-4-6',
+    // Claude (request params are chosen per model family in providers/claude-params.ts)
+    'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-opus-5-5', 'claude-sonnet-4-6',
     // OpenAI
     'gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-terra', 'gpt-5.4',
     // Gemini
@@ -90,8 +90,10 @@ async function pickModel(name: AiProviderName, hint?: string): Promise<string> {
   for (const p of preferred) {
     if (models.some((m) => m.id === p)) return p;
   }
-  // listModels() already sorted latest-first.
-  return models[0].id;
+  // listModels() already sorted latest-first; never auto-pick a model the adapter cannot drive.
+  const drivable = models.find((m) => PROVIDERS[name].canDrive?.(m.id) !== false);
+  if (!drivable) throw new Error(`Provider "${name}" lists no model this adapter can drive.`);
+  return drivable.id;
 }
 
 export async function providerFor(task: AiTask, override?: string): Promise<Resolved> {

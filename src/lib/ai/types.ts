@@ -81,4 +81,6 @@ export interface AiProvider {
   /** Discover models from the provider at runtime. Cached by the router. */
   listModels(): Promise<ModelInfo[]>;
   complete(model: string, req: CompleteRequest): Promise<CompleteResult>;
+  /** False for a listed model this adapter's request params would make fail (auto-pick skips it). */
+  canDrive?(modelId: string): boolean;
 }

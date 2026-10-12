@@ -99,11 +99,27 @@ describe('providerFor resolution order', () => {
     expect(spies.zhipu).toHaveBeenCalledTimes(1);
   });
 
-  it('auto-pick prefers the curated model over a newer one the adapter cannot drive', async () => {
+  it('auto-pick prefers the curated Claude default (Sonnet 5.5) over newer or pricier models', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'k');
     vi.stubEnv('AI_MODEL_FREE_ASK', 'claude');
-    const { router } = await loadRouter({ claude: models('claude-fable-5-1', 'claude-sonnet-4-6', 'claude-opus-4-6') });
-    await expect(router.providerFor('FREE_ASK')).resolves.toEqual({ provider: 'claude', model: 'claude-sonnet-4-6' });
+    const { router } = await loadRouter({
+      claude: models('claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-sonnet-4-6'),
+    });
+    await expect(router.providerFor('FREE_ASK')).resolves.toEqual({ provider: 'claude', model: 'claude-sonnet-5-5' });
+  });
+
+  it('auto-pick never falls back to a listed model the adapter cannot drive', async () => {
+    vi.stubEnv('ZHIPU_API_KEY', 'k');
+    vi.stubEnv('AI_MODEL_FREE_ASK', 'zhipu');
+    const { router } = await loadRouter({ zhipu: models('glm-5.3', 'glm-5.3-flash', 'glm-4.7') });
+    await expect(router.providerFor('FREE_ASK')).resolves.toEqual({ provider: 'zhipu', model: 'glm-4.7' });
+  });
+
+  it('fails clearly when no listed model can be driven', async () => {
+    vi.stubEnv('ZHIPU_API_KEY', 'k');
+    vi.stubEnv('AI_MODEL_FREE_ASK', 'zhipu');
+    const { router } = await loadRouter({ zhipu: models('glm-5.3') });
+    await expect(router.providerFor('FREE_ASK')).rejects.toThrow(/can drive/);
   });
 
   it('auto-pick falls back to the latest-sorted model when no curated id is listed', async () => {

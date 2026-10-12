@@ -1,4 +1,4 @@
-import type { AiProvider, CompleteResult } from '../types';
+import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
 import { schemaInstruction } from '../json-schema';
 import { validateBaseUrl } from './validate-base-url';
 
@@ -13,9 +13,43 @@ const ZHIPU_FALLBACK = [
   { id: 'glm-4.7-flash', label: 'GLM-4.7 Flash · 免费' },
 ];
 
+/** OpenAI-compatible chat body (JSON mode + schema in a trailing system message). */
+function buildZhipuRequest(model: string, req: CompleteRequest): Record<string, unknown> {
+  const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
+  if (req.schema) messages.push({ role: 'system', content: schemaInstruction(req.schema) });
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature: req.temperature ?? 0.3,
+    max_tokens: req.maxTokens ?? 8000,
+    response_format: req.schema ? { type: 'json_object' } : undefined,
+    tools: req.webSearch ? [{ type: 'web_search', web_search: { enable: true } }] : undefined,
+    // GLM-4.5+ reasoning models burn huge token budgets in reasoning_content
+    // before emitting the actual answer. For structured-output tasks we
+    // always want the JSON, not the thinking trace — disable reasoning.
+    thinking: req.schema ? { type: 'disabled' } : undefined,
+  };
+  // When web search is enabled, override tools with the Zhipu-specific shape
+  // that also returns citations so the UI can attribute sources.
+  if (req.webSearch) {
+    body.tools = [
+      {
+        type: 'web_search',
+        web_search: { enable: true, search_result: true },
+      },
+    ];
+    // Web search dramatically increases output — give extra headroom.
+    body.max_tokens = Math.max(Number(body.max_tokens ?? 0), 12000);
+  }
+  return body;
+}
+
 export const zhipuProvider: AiProvider = {
   name: 'zhipu',
   isConfigured: () => !!process.env.ZHIPU_API_KEY,
+  // glm-5.3 family: thinking is always on and `thinking: disabled` (sent for JSON tasks) is an error.
+  canDrive: (id) => !/^glm-5\.3/i.test(id),
   async listModels() {
     if (!process.env.ZHIPU_API_KEY) return [];
     const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';
@@ -43,41 +77,13 @@ export const zhipuProvider: AiProvider = {
     const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';
     const started = Date.now();
 
-    const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
-    if (req.schema) messages.push({ role: 'system', content: schemaInstruction(req.schema) });
-
-    const body: Record<string, unknown> = {
-      model,
-      messages,
-      temperature: req.temperature ?? 0.3,
-      max_tokens: req.maxTokens ?? 8000,
-      response_format: req.schema ? { type: 'json_object' } : undefined,
-      tools: req.webSearch ? [{ type: 'web_search', web_search: { enable: true } }] : undefined,
-      // GLM-4.5+ reasoning models burn huge token budgets in reasoning_content
-      // before emitting the actual answer. For structured-output tasks we
-      // always want the JSON, not the thinking trace — disable reasoning.
-      thinking: req.schema ? { type: 'disabled' } : undefined,
-    };
-    // When web search is enabled, override tools with the Zhipu-specific shape
-    // that also returns citations so the UI can attribute sources.
-    if (req.webSearch) {
-      body.tools = [
-        {
-          type: 'web_search',
-          web_search: { enable: true, search_result: true },
-        },
-      ];
-      // Web search dramatically increases output — give extra headroom.
-      body.max_tokens = Math.max(Number(body.max_tokens ?? 0), 12000);
-    }
-
     const res = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(buildZhipuRequest(model, req)),
       signal: req.signal,
     });
     if (!res.ok) {

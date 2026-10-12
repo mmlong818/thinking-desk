@@ -1,6 +1,10 @@
-import type { AiProvider, CompleteResult, FinishReason } from '../types';
+import type { AiProvider, CompleteRequest, CompleteResult, FinishReason } from '../types';
 import { schemaInstruction } from '../json-schema';
+import { withReasoningHeadroom } from './budget';
 import { validateBaseUrl } from './validate-base-url';
+
+/** Stays below the smallest output limit of the reasoning families we drive (o-series: 100k). */
+const OPENAI_OUTPUT_CAP = 64_000;
 
 const OPENAI_FALLBACK = [
   { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
@@ -27,6 +31,33 @@ interface ChatResponse {
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
+/** Chat Completions body. JSON mode + schema in the prompt (json_schema strict mode would need
+ *  every property required; see docs/ai-providers.md). */
+export function buildOpenAIRequest(model: string, req: CompleteRequest): Record<string, unknown> {
+  const systemMessages = req.messages.filter((m) => m.role === 'system').map((m) => m.content);
+  if (req.schema) systemMessages.push(schemaInstruction(req.schema));
+  const messages = [
+    ...systemMessages.map((c) => ({ role: 'system' as const, content: c })),
+    ...req.messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+  ];
+
+  // GPT-5+ / GPT-6 / o-series only accept `max_completion_tokens` and reject
+  // `temperature`. Older 4.x families still use `max_tokens`.
+  const isNewFamily = /^(gpt-[5-9]|o\d|o-)/i.test(model);
+  const body: Record<string, unknown> = { model, messages };
+  if (isNewFamily) {
+    // Reasoning models: the cap includes reasoning tokens (see budget.ts).
+    body.max_completion_tokens = withReasoningHeadroom(req.maxTokens, OPENAI_OUTPUT_CAP);
+  } else {
+    body.max_tokens = req.maxTokens ?? 4096;
+    body.temperature = req.temperature ?? 0.3;
+  }
+  if (req.schema) body.response_format = { type: 'json_object' };
+  return body;
+}
+
 export const openaiProvider: AiProvider = {
   name: 'openai',
   isConfigured: () => !!process.env.OPENAI_API_KEY,
@@ -51,34 +82,13 @@ export const openaiProvider: AiProvider = {
 
   async complete(model, req): Promise<CompleteResult> {
     const started = Date.now();
-    const systemMessages = req.messages.filter((m) => m.role === 'system').map((m) => m.content);
-    if (req.schema) systemMessages.push(schemaInstruction(req.schema));
-    const messages = [
-      ...systemMessages.map((c) => ({ role: 'system' as const, content: c })),
-      ...req.messages
-        .filter((m) => m.role !== 'system')
-        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-    ];
-
-    // GPT-5+ / GPT-6 / o-series only accept `max_completion_tokens` and reject
-    // `temperature`. Older 4.x families still use `max_tokens`.
-    const isNewFamily = /^(gpt-[5-9]|o\d|o-)/i.test(model);
-    const body: Record<string, unknown> = { model, messages };
-    if (isNewFamily) {
-      body.max_completion_tokens = req.maxTokens ?? 4096;
-    } else {
-      body.max_tokens = req.maxTokens ?? 4096;
-      body.temperature = req.temperature ?? 0.3;
-    }
-    if (req.schema) body.response_format = { type: 'json_object' };
-
     const res = await fetch(`${getBase()}/chat/completions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${getKey()}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(buildOpenAIRequest(model, req)),
       signal: req.signal,
     });
     if (!res.ok) {
