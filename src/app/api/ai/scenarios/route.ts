@@ -34,6 +34,8 @@ export const POST = aiRoute({
   name: 'scenarios',
   body: Body,
   timeoutMs: 290_000,
+  // Streaming pilot (plan 1.3): the scenarios node shows live progress and can cancel.
+  stream: true,
   handle(body, opts) {
     const ctx = {
       brief: requireBrief(body.brief),
