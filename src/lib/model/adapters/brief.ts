@@ -1,9 +1,11 @@
 import type { BriefExtraction, ClarificationAnswer } from '../../ai/schemas/extract-brief';
 import type { ItemDraft } from '../repository';
-import { caution, recommend, scopes, type AdaptedOutput } from './common';
+import { caution, neutral, recommend, scopes, UNEXPLAINED_REASON, type AdaptedOutput } from './common';
 
 /** The brief completeness the methodology asks for before moving on. */
 export const BRIEF_COMPLETENESS_THRESHOLD = 70;
+
+export const RED_LINE_STATED_REASON = 'Brief 原文写明';
 
 export interface ExtractBriefContext {
   rawText: string;
@@ -20,7 +22,7 @@ function completenessStance(completeness: number) {
 
 /**
  * BRIEF_EXTRACT → the brief singleton (rewritten in place on re-runs), one `red_line` item per
- * red line, and one `assumption` item per assumption highlight, linked brief —assumes→ assumption.
+ * stated or inferred red line, and one `assumption` item per assumption highlight, linked brief —assumes→ assumption.
  */
 export function adaptExtractBrief(out: BriefExtraction, ctx: ExtractBriefContext): AdaptedOutput {
   const assumptions: ItemDraft[] = out.highlights
@@ -45,8 +47,19 @@ export function adaptExtractBrief(out: BriefExtraction, ctx: ExtractBriefContext
     aiStance: completenessStance(out.completeness),
     links: assumptions.map((a) => ({ ref: a.ref ?? '', rel: 'assumes', to: ['assumption'] })),
   };
-  const redLineDrafts: ItemDraft[] = redLines
-    .filter((text) => text.trim())
-    .map((text) => ({ type: 'red_line', body: { text }, aiStance: recommend('从需求中识别的道德红线 · 后续节点的伦理审查会引用') }));
-  return { drafts: [brief, ...redLineDrafts, ...assumptions], replace: scopes('brief', 'red_line', 'assumption') };
+  return { drafts: [brief, ...redLineDrafts(redLines, out.inferred_red_lines), ...assumptions], replace: scopes('brief', 'red_line', 'assumption') };
+}
+
+/**
+ * Red lines the brief states are recommended; the ones the AI inferred stay neutral with its own
+ * reason, so accepting them is the person's call. Both kinds are the same `red_line` item.
+ */
+function redLineDrafts(stated: readonly string[], inferred: BriefExtraction['inferred_red_lines']): ItemDraft[] {
+  const statedTexts = stated.map((t) => t.trim()).filter(Boolean);
+  const statedDrafts = statedTexts.map((text): ItemDraft => ({ type: 'red_line', body: { text }, aiStance: recommend(RED_LINE_STATED_REASON) }));
+  const inferredDrafts = inferred
+    .map((r) => ({ text: r.text.trim(), reason: r.reason.trim() }))
+    .filter((r) => r.text && !statedTexts.includes(r.text))
+    .map((r): ItemDraft => ({ type: 'red_line', body: { text: r.text }, aiStance: neutral(r.reason || UNEXPLAINED_REASON) }));
+  return [...statedDrafts, ...inferredDrafts];
 }
