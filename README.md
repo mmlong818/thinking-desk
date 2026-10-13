@@ -48,13 +48,17 @@ Brief → Users & Jobs → Stakeholders → Alternatives
 | 03 | Stakeholders | Surface hidden interests and tensions · 暴露隐藏的利益与张力 |
 | 04 | Alternatives | What already exists; what you're really up against · 现有方案；你真正面对的竞争 |
 | 05 | Scenarios | Concrete use moments — including pain points · 具体使用时刻，包括痛点 |
-| 06 | Feature List | The conventional market feature set, scored with Kano and RICE · 基于情景的功能草稿 |
+| 06 | Feature List | The conventional market feature set, scored with Kano and RICE · 市场常规功能集，用 Kano 与 RICE 评分 |
 | 07 | Creative Leap | Reframe via first principles, analogies and constraint flips · 用第一性原理、类比迁移与约束反转重构 |
 | 08 | Design Proposal | Turn features into a full design document · 把功能整合成完整设计案 |
 | 09 | Subfeature Split | Break the design into executable tasks · 把设计拆成可执行的子功能任务 |
 
 ### Judging aids · 裁决辅助
 
+- **The AI's stance on each item · AI 逐条表态** — every AI item carries the AI's own view — recommend, neutral or caution — with a reason; "✓ 采纳全部推荐" accepts only the recommended ones. Red lines the brief states are recommended; red lines the AI infers are neutral, with its reasoning shown under each one.
+  每条 AI 产出都带 AI 自己的态度——推荐、中立或谨慎——以及理由；「✓ 采纳全部推荐」只采纳标为推荐的条目。Brief 原文写明的红线标为推荐；AI 推断的红线标为中立，并在下方显示推断依据。
+- **Live progress · 实时进度** — the long steps (scenarios, feature list, creative leap, revision, design proposal, subtask split) show elapsed time and output received while the AI works, and can be cancelled. Gemini answers in one piece.
+  耗时长的步骤（情景、功能列表、创造性跃迁、功能修订、设计案、子任务拆分）运行时显示已用时间和已收到的输出，并可随时取消。Gemini 不支持流式，完成后一次显示。
 - **Upstream changes · 上游已变** — when something an item was built from changes later, the item is marked "⟳ 上游已变" with what changed (before / after). Confirm it still holds (no AI call), or let the AI redo that step with the new content; what you accepted stays, the AI proposes updated versions next to it.
   条目所依据的上游内容之后被改了，会标出「⟳ 上游已变」并显示改了什么（前后对比）。可以确认仍有效（不调用 AI），也可以让 AI 按新内容重做这一步；已采纳的内容保留，AI 给出更新版供你取舍。
 - **Links by hand · 手动关联** — edit subtask dependencies and which features a module implements; cycles are refused.
@@ -64,11 +68,15 @@ Brief → Users & Jobs → Stakeholders → Alternatives
 - **Source checks · 来源核实** — cited links are opened on the server (private addresses refused) to see whether they are reachable and whether the page title matches: 已核实 / 未核实 / 无法打开.
   引用的链接由服务端打开（拒绝内网地址），检查能否访问、页面标题是否对得上：已核实 / 未核实 / 无法打开。
 
-### Exports · 导出
+### Exports and branches · 导出与分支
 
 From the top bar: the whole graph as Markdown or JSON; a **PRD** in Markdown built from accepted items only, each line tagged with who produced it and the AI's stance; and the accepted subtasks as a **Jira CSV**, a **Linear CSV** or **GitHub issues** (JSON + `gh` commands). Files only — nothing is pushed to any service. Import steps: [docs/exports.md](docs/exports.md).
 
 顶栏可导出：整个项目的 Markdown 或 JSON；只含已采纳内容的 **PRD**（Markdown，每行标注来源与 AI 立场）；以及已采纳子任务的 **Jira CSV**、**Linear CSV**、**GitHub Issues**（JSON + `gh` 命令）。只生成文件，不会推送到任何服务。导入方法见 [docs/exports.md](docs/exports.md)。
+
+**Branch** copies a project — items, decisions, links and AI runs — so you can try another direction without touching the original.
+
+**分支**会复制整个项目（条目、裁决、关联和 AI 运行记录），方便尝试另一个方向而不影响原项目。
 
 ---
 
@@ -160,6 +168,17 @@ Checks run by CI (and worth running before a PR) · CI 会执行的检查：
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 
+Prompt evals · 提示词评测 — five golden briefs run through the whole chain. The offline half (every prompt rendered, schema fixtures, a `promptVersion` snapshot per prompt) runs in `pnpm test`; the online half calls a real model and costs money. Details: [evals/README.md](evals/README.md).
+
+五份标准 Brief 跑完整条链路。离线部分（渲染每个提示词、校验 schema 样例、每个提示词的 `promptVersion` 快照）包含在 `pnpm test` 里；在线部分调用真实模型，会产生费用。详见 [evals/README.md](evals/README.md)。
+
+```bash
+pnpm eval --model zhipu:glm-5.2 --dry-run          # call plan + token / cost budget, no API call
+pnpm eval --model zhipu:glm-5.2                    # real run: 5 briefs × 12 steps
+pnpm eval:consistency --model zhipu:glm-5.2 --from evals/results/<timestamp>/zhipu_glm-5.2
+                                                   # consistency check vs. a planted contradiction per brief
+```
+
 ### Option B: Docker · Docker 部署
 
 ```bash
@@ -242,15 +261,18 @@ src/
 │       └── providers/           # configured providers + models
 ├── middleware.ts                # optional bearer auth + per-IP rate limit for /api/ai and /api/sources
 ├── components/
-│   ├── shell/                   # TopBar · NavRail · Copilot · ModelPicker · ExportButton
-│   ├── project/                 # project store provider + hooks (items, AI actions, decisions)
-│   ├── shared/                  # node kit: decision controls, judge bar, upstream context …
+│   ├── home/                    # project list
+│   ├── shell/                   # TopBar · NavRail · Copilot · ModelPicker · ConsistencyButton · ExportButton · ForkButton
+│   ├── project/                 # project store provider + hooks (items, AI actions, decisions, stream progress)
+│   ├── shared/                  # node kit: decision controls, judge bar, upstream context, stream progress …
 │   └── nodes/                   # Per-node workspace UI
 ├── lib/
 │   ├── ai/
 │   │   ├── providers/           # claude.ts / openai.ts / gemini.ts / zhipu.ts adapters
 │   │   ├── router.ts            # task → provider:model routing
-│   │   ├── tasks/               # prompt + schema per AI task
+│   │   ├── run-task.ts          # one AI call: JSON schema, validated retry, deadline, streaming
+│   │   ├── schemas/             # Zod output schema per task (client-safe)
+│   │   ├── tasks/               # prompt builder per task (server only)
 │   │   └── types.ts
 │   ├── model/                   # items / links / runs / decisions, planners, LocalRepository, task adapters,
 │   │                            #   staleness, consistency rules
@@ -264,6 +286,8 @@ src/
 │       └── projects.ts
 └── data/
     └── nodes.ts                 # 9-node definitions
+evals/                           # golden briefs + prompt evals (offline in pnpm test, online by hand)
+docs/                            # architecture, data model, nodes, AI providers, exports
 ```
 
 ---
@@ -271,10 +295,13 @@ src/
 ## Adding a new AI task · 新增 AI 任务
 
 1. Add a literal to `AI_TASKS` in `src/lib/ai/types.ts`
-2. Write the Zod schema in `src/lib/ai/schemas/xxx.ts` and the prompt in `src/lib/ai/tasks/xxx.ts` (calls `runTask()`)
-3. Expose a server route at `src/app/api/ai/xxx/route.ts` with `aiRoute()`
-4. Write an output adapter in `src/lib/model/adapters/` (task output → items) and call the route from the node with `useAiAction()`
-5. Optionally pin a model: `AI_MODEL_XXX=provider:model` in `.env` (and document it in `.env.example`)
+2. Write the Zod schema in `src/lib/ai/schemas/xxx.ts` (client-safe) and the prompt in `src/lib/ai/tasks/xxx.ts` (calls `runTask()`, wraps request data in `dataBlock()`)
+3. Expose a server route at `src/app/api/ai/xxx/route.ts` with `aiRoute()`; add `stream: true` for a long call so the node can show progress and cancel
+4. Write an output adapter in `src/lib/model/adapters/` (task output → items, each with the AI's stance) and call the route from the node with `useAiAction()`
+5. Document `AI_MODEL_XXX` in `.env.example`; optionally pin a model in `.env`
+6. Add an output fixture to `evals/lib/fixtures.ts`, then `pnpm vitest run evals -u` to record the prompt's `promptVersion`
+
+The full checklist, with the files to copy from, is in [CLAUDE.md](CLAUDE.md) · 完整清单与参考文件见 [CLAUDE.md](CLAUDE.md)。
 
 ---
 
@@ -282,9 +309,18 @@ src/
 
 - **Next.js 15** (App Router + Turbopack) · React 19 · TypeScript 5
 - **Tailwind CSS 3**
-- **Postgres 16** (optional) — projects plus the Phase 1 data model (items, links, runs, decision events; see `docs/data-model.md`)
+- **Postgres 16** (optional) — projects plus the data model (items, links, runs, decision events; see [docs/data-model.md](docs/data-model.md))
+- **Zod 4** for AI output schemas (also sent to the models as JSON Schema)
 - **@anthropic-ai/sdk** for Claude; OpenAI, Gemini and Zhipu are called with plain `fetch`
-- **Vitest** for unit tests · **ESLint** (`next/core-web-vitals`) · GitHub Actions CI
+- **Vitest** for unit tests and offline prompt evals · **ESLint** (`next/core-web-vitals`) · GitHub Actions CI
+
+---
+
+## Contributing · 参与贡献
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Design notes live in [docs/](docs/): [architecture](docs/architecture.md), [data model](docs/data-model.md), [nodes](docs/nodes.md), [AI providers](docs/ai-providers.md), [exports](docs/exports.md).
+
+参见 [CONTRIBUTING.md](CONTRIBUTING.md)。设计说明在 [docs/](docs/)：架构、数据模型、节点、AI 供应商、导出。
 
 ---
 
