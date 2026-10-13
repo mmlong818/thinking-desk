@@ -1,12 +1,15 @@
 import type { RunTaskDeps, TaskOptions } from '../../src/lib/ai/run-task';
 import { generateMorePersonas, refineJobs } from '../../src/lib/ai/tasks/analyze-users';
 import { clarifyBrief } from '../../src/lib/ai/tasks/clarify-brief';
+import { consistencyCheck } from '../../src/lib/ai/tasks/consistency-check';
 import { generateMoreLeapItems } from '../../src/lib/ai/tasks/creative-leap';
 import { deriveFollowUps } from '../../src/lib/ai/tasks/derive-follow-ups';
 import { freeAsk } from '../../src/lib/ai/tasks/free-ask';
 import { probeBrief } from '../../src/lib/ai/tasks/probe-brief';
 import type { AiProvider, AiTask, CompleteRequest } from '../../src/lib/ai/types';
 import { validClarifyProceed } from '../../src/lib/ai/schemas/__fixtures__/clarify-brief';
+import { validConsistencyCheck } from '../../src/lib/ai/schemas/__fixtures__/consistency-check';
+import type { ConsistencyItem } from '../../src/lib/ai/schemas/consistency-check';
 import { validProbeDone } from '../../src/lib/ai/schemas/__fixtures__/probe-brief';
 import { validJobsRefinement, validPersonaBatch } from '../../src/lib/ai/schemas/__fixtures__/users';
 import { lockedJobs, type Outputs } from './chain';
@@ -54,6 +57,20 @@ function moreLeap(category: keyof typeof MORE_LEAP_FIXTURES): { output: unknown;
   };
 }
 
+const accepted = (id: string, type: string, node: string, text: string, links: string[] = []): ConsistencyItem =>
+  ({ id, type, node, decision: 'accepted', text, links });
+
+/** What the consistency check would read after the chain: the brief, red lines, revised features, subtasks. */
+export function consistencyItemsOf(out: Outputs): ConsistencyItem[] {
+  const f = out.brief.fields;
+  return [
+    accepted('brf_1', 'brief', 'brief', `problem_statement=${f.problem_statement ?? ''}；boundaries=${(f.boundaries ?? []).join(' / ')}`),
+    ...(f.red_lines ?? []).map((t, i) => accepted(`red_${i + 1}`, 'red_line', 'brief', `text=${t}`)),
+    ...out.revise.revised_features.map((x) => accepted(x.id, 'feature', 'final', `name=${x.name}；description=${x.description}`)),
+    ...out.split.splits.flatMap((s) => s.subfeatures.map((sf) => accepted(sf.id, 'subtask', 'split', `title=${sf.title}`, [`implements:${s.feature_id}`]))),
+  ];
+}
+
 /**
  * Prompt builders outside the main chain (process steps and "more" runs), rendered offline so a
  * change to any prompt shows up in the promptVersion snapshot. `output` is the canned answer.
@@ -75,6 +92,10 @@ export const EXTRA_PROMPTS: Record<string, { output: unknown; render: Render }> 
   more_analogies: moreLeap('analogies'),
   more_constraint_flips: moreLeap('constraint_flips'),
   follow_ups: { output: FOLLOW_UPS_FIXTURE, render: (_raw, out, opts) => deriveFollowUps({ nodeKind: 'scen', content: out.scen_deep }, opts) },
+  consistency: {
+    output: validConsistencyCheck,
+    render: (_raw, out, opts) => consistencyCheck({ items: consistencyItemsOf(out) }, opts),
+  },
   free_ask: {
     output: '你最担心的是哪一步？',
     render: (raw, _o, opts) => freeAsk({

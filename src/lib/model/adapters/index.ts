@@ -9,3 +9,4 @@ export { adaptFeatureList } from './features';
 export { adaptLeapAnalysis, adaptMoreLeapItems } from './leap';
 export { adaptDesignProposal, adaptFeatureRevision, type ReviseFeaturesContext } from './final';
 export { adaptSubfeatureBreakdown } from './split';
+export { adaptConsistencyCheck, CONSISTENCY_SCOPES, type ConsistencyContext } from './consistency';

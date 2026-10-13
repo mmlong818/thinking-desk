@@ -15,6 +15,7 @@ exports[`promptVersion > is the same for every brief (it hashes the template, no
   "chain:stake": "STAKE_MATRIX sha256:02643cc7f9bcf204",
   "chain:users": "USERS_JTBD sha256:afc6b492d5b3ecae",
   "extra:clarify": "BRIEF_CLARIFY sha256:d0b6eb5d473fe84b",
+  "extra:consistency": "CONSISTENCY_CHECK sha256:b23539e48d691b91",
   "extra:follow_ups": "FOLLOW_UPS sha256:5f01b8bd9a6c8a86",
   "extra:free_ask": "FREE_ASK sha256:8fd501dba689fd6f",
   "extra:more_analogies": "LEAP_ANALOGY sha256:a10378751407fb69",
