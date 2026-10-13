@@ -22,6 +22,8 @@ export const POST = aiRoute({
   name: 'features',
   body: Body,
   timeoutMs: 290_000,
+  // Long call (70-100 s): live progress and cancel for clients that ask for NDJSON.
+  stream: true,
   handle: (body, opts) =>
     draftFeatures(
       {

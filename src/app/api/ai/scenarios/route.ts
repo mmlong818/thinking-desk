@@ -34,7 +34,7 @@ export const POST = aiRoute({
   name: 'scenarios',
   body: Body,
   timeoutMs: 290_000,
-  // Streaming pilot (plan 1.3): the scenarios node shows live progress and can cancel.
+  // Long call (70-100 s): live progress and cancel for clients that ask for NDJSON.
   stream: true,
   handle(body, opts) {
     const ctx = {

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunMeta, RunTaskSpec } from './run-task';
 import type { AiTask } from './types';
+import { readNdjson } from './__fixtures__/streams';
+import { NDJSON_TYPE } from './stream-protocol';
 import { validAlternatives } from './schemas/__fixtures__/alternatives';
 import { validClarifyAsk } from './schemas/__fixtures__/clarify-brief';
 import { emptyConsistencyCheck, validConsistencyCheck } from './schemas/__fixtures__/consistency-check';
@@ -63,9 +65,11 @@ const ROUTES: Record<string, () => Promise<RouteModule>> = {
   'split-subfeatures': () => import('@/app/api/ai/split-subfeatures/route'),
 };
 
+const post = async (route: string, body: unknown, headers?: Record<string, string>) =>
+  (await ROUTES[route]()).POST(new Request(`http://localhost/api/ai/${route}`, { method: 'POST', body: JSON.stringify(body), headers }));
+
 async function call(route: string, body: unknown) {
-  const mod = await ROUTES[route]();
-  const res = await mod.POST(new Request(`http://localhost/api/ai/${route}`, { method: 'POST', body: JSON.stringify(body) }));
+  const res = await post(route, body);
   return { status: res.status, json: (await res.json()) as Record<string, unknown> };
 }
 
@@ -89,6 +93,7 @@ const CASES: Array<[string, AiTask, unknown, unknown]> = [
   ['scenarios', 'SCEN_FEED', { action: 'exhaust', ...ctx }, validDimensions],
   ['scenarios', 'SCEN_FEED', { action: 'combine', ...ctx, dimensions: validDimensions, selectedElementIds: ['a', 'b', 'c'] }, validScenarioDrafts],
   ['scenarios', 'SCEN_PAIN', { action: 'deep', ...ctx, scenarios: validScenarioDrafts.scenarios, pickedScenarioIds: ['sc-1'] }, validDeepAnalysis],
+  ['features', 'FEAT_DRAFT', ctx, validFeatureList],
   ['creative-leap', 'LEAP_FIRST_PRINCIPLES', { ...ctx, features: validFeatureList.features }, validLeap],
   ['creative-leap', 'LEAP_ANALOGY', { action: 'more', category: 'analogies', ...ctx, existing: [] }, { analogies: [validLeap.analogies[0], validLeap.analogies[1]] }],
   ['revise-features', 'FEAT_DRAFT', { ...ctx, original: validFeatureList, leaps: validLeap, selectedLeapIds: ['x'] }, validRevision],
@@ -141,6 +146,27 @@ describe('AI routes · { ok, data } contract', () => {
     });
     const emotional = (json.data as typeof validJobsRefinement).jobs.emotional as { id: string; suggested_priority?: boolean }[];
     expect(emotional[0]).toMatchObject({ id: 'j2', suggested_priority: true });
+  });
+});
+
+// The long steps (70-100 s) offer NDJSON progress and cancel; the short ones answer JSON only.
+const STREAMING = ['scenarios', 'features', 'creative-leap', 'revise-features', 'generate-design', 'split-subfeatures'];
+
+describe('AI routes · NDJSON streaming', () => {
+  it.each(CASES.filter(([route]) => STREAMING.includes(route)))('%s (%s) streams when the client asks for NDJSON', async (route, task, body, output) => {
+    canned.set(task, output);
+    const res = await post(route, body, { accept: NDJSON_TYPE });
+    expect(res.headers.get('content-type')).toContain(NDJSON_TYPE);
+    const events = await readNdjson(res.body);
+    expect(events.at(-1)).toMatchObject({ type: 'done', ok: true, run: { task, status: 'ok' } });
+    const plain = (await (await post(route, body)).json()) as { data: unknown };
+    expect(events.at(-1)).toMatchObject({ data: plain.data });
+  });
+
+  it.each(CASES.filter(([route]) => !STREAMING.includes(route)))('%s (%s) keeps answering JSON', async (route, task, body, output) => {
+    canned.set(task, output);
+    const res = await post(route, body, { accept: NDJSON_TYPE });
+    expect(res.headers.get('content-type')).toContain('application/json');
   });
 });
 
