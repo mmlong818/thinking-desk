@@ -137,7 +137,7 @@ function BreakdownView({ data, onRerun, rerunning }: { data: NodeData; onRerun: 
         </div>
         <button type="button" className="btn btn-ghost" onClick={onRerun} disabled={rerunning}>{rerunning ? '重新生成中…' : '重新拆分'}</button>
       </div>
-      {groups.map((g) => <FeatureSplitView key={g.key} group={g} links={data.links} titles={titles} />)}
+      {groups.map((g) => <FeatureSplitView key={g.key} group={g} links={data.links} titles={titles} subtasks={subtasks} />)}
     </>
   );
 }

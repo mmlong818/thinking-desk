@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { z } from 'zod';
 import type { NodeKind } from '@/data/nodes';
 import { useProject } from '@/components/project/ProjectStore';
@@ -22,16 +23,53 @@ import { handlerFor, useRedoHandlers, type RedoHandler } from './RedoContext';
 
 const REDO_HINT = '确认只记下"看过了、仍成立"，不调用 AI。重做会调用一次 AI：已采纳 / 改过的条目保留并标为待复核，AI 按新内容给出更新版，由你取舍。';
 
-export function StaleBadge({ item, open, onToggle }: { item: Item; open: boolean; onToggle: () => void }) {
+const POPOVER_WIDTH = 460;
+
+/** Fixed position under the anchor, kept in place while the work area scrolls or the window resizes. */
+function useAnchoredPosition(anchor: React.RefObject<HTMLElement | null>, open: boolean): CSSProperties {
+  const [style, setStyle] = useState<CSSProperties>({});
+  const place = useCallback(() => {
+    const rect = anchor.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - 16));
+    setStyle({ top: rect.bottom + 4, left, width: POPOVER_WIDTH });
+  }, [anchor]);
+  useEffect(() => {
+    if (!open) return;
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, place]);
+  return style;
+}
+
+/** The "⟳ 上游已变" badge; its panel opens as a popover (cards often sit in narrow, clipped columns). */
+export function StaleBadge({ item }: { item: Item }) {
   const { stale } = useProject();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+  const style = useAnchoredPosition(ref, open);
   const info = stale.get(item.id);
   if (!info) return null;
   const names = info.changes.map((c) => ITEM_TYPE_LABEL[c.upstream.type]).join('、');
   return (
-    <button type="button" className={`stale-badge ${open ? 'on' : ''}`} onClick={onToggle} aria-expanded={open}
-      title={`它依赖的上游（${names}）在它生成或确认之后改了`}>
-      ⟳ 上游已变
-    </button>
+    <>
+      <button ref={ref} type="button" className={`stale-badge ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)}
+        aria-expanded={open} title={`它依赖的上游（${names}）在它生成或确认之后改了`}>
+        ⟳ 上游已变
+      </button>
+      {open ? createPortal(
+        <div className="stale-popover" style={style} role="dialog" aria-label="上游变化">
+          <button type="button" className="stale-close" onClick={() => setOpen(false)} aria-label="关闭">×</button>
+          <StalePanel item={item} />
+        </div>,
+        document.body,
+      ) : null}
+    </>
   );
 }
 
