@@ -199,11 +199,11 @@ export function Home({ initialProjects, dbError }: Props) {
       </header>
 
       <section className="home-hero">
-        <h1 className="home-hero-title">AI 陪伴下的结构化设计思考</h1>
+        <h1 className="home-hero-title">AI 主导产出的结构化设计思考</h1>
         <p className="home-hero-lead">
           每个新项目走一遍 <em>9 节点方法论</em>——Brief、用户与任务、干系人、替代方案、情景、
-          功能列表、创造性跃迁、设计案、子功能拆分。我不替你出图、不替你做决定，
-          我陪你<em>把问题想透</em>。
+          功能列表、创造性跃迁、设计案、子功能拆分。每一步由 AI 给出分析、选项和理由，
+          由你来<em>判断与裁决</em>，最后得到一条可追溯、可导出的决策链。
         </p>
       </section>
 
