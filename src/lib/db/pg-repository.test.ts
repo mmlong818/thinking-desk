@@ -179,6 +179,47 @@ describe('PgRepository · decision follow-ups', () => {
     expect(SQL.insertEvents).toContain("e.v->'prevBody'");
   });
 
+  it('editLinks locks, loads state, then deletes, inserts and records events in one transaction', async () => {
+    const tsk = (id: string) => makeItem({
+      id, projectId: PID, node: 'split', type: 'subtask',
+      body: { title: id, description: 'd', layer: 'backend', estimate: '1d', acceptance_criteria: [], critical: false },
+    });
+    const links: LinkRow[] = [{ project_id: PID, id: 'lnk_1', from_id: 'tsk_a', to_id: 'tsk_b', rel: 'depends_on', to_version_seen: 1 }];
+    const db = fakeDb({ items: [tsk('tsk_a'), tsk('tsk_b'), tsk('tsk_c')], links });
+    const res = await db.repo.editLinks(PID, {
+      remove: ['lnk_1'], add: [{ from: 'tsk_a', to: 'tsk_c', rel: 'depends_on' }],
+    }, { actor: 'human' });
+    expect(res.removed).toEqual(['lnk_1']);
+    expect(db.transactions()).toBe(1);
+    expect(db.calls.map((c) => c.text)).toEqual([
+      SQL.lockProject, SQL.selectItems, SQL.selectLinks, SQL.deleteLinks, SQL.insertLinks, SQL.insertEvents,
+    ]);
+    const events = jsonParam(db.calls.find((c) => c.text === SQL.insertEvents)?.params[1]);
+    expect(events.map((e) => [e.kind, e.link])).toEqual([
+      ['link_removed', { id: 'lnk_1', to: 'tsk_b', rel: 'depends_on' }],
+      ['link_added', { id: res.added[0].id, to: 'tsk_c', rel: 'depends_on' }],
+    ]);
+    expect(SQL.insertEvents).toContain("e.v->'link'");
+    const cyc = fakeDb({ items: [tsk('tsk_a'), tsk('tsk_b')], links });
+    await expect(cyc.repo.editLinks(PID, { add: [{ from: 'tsk_b', to: 'tsk_a', rel: 'depends_on' }] }, { actor: 'human' }))
+      .rejects.toMatchObject({ code: 'conflict' });
+    expect(cyc.writes()).toEqual([]);
+  });
+
+  it('refreshLinks updates moved links and records link_confirmed events', async () => {
+    const job = makeItem({
+      id: 'job_1', projectId: PID, type: 'job', body: { title: 'J', reach: 1, impact: 1, source: 's', dimension: 'social' },
+    });
+    const links: LinkRow[] = [{ project_id: PID, id: 'lnk_1', from_id: 'job_1', to_id: 'per_1', rel: 'derived_from', to_version_seen: 1 }];
+    const db = fakeDb({ items: [makeItem({ id: 'per_1', projectId: PID, version: 3 }), job], links });
+    const [link] = await db.repo.refreshLinks(PID, ['lnk_1']);
+    expect(link.toVersionSeen).toBe(3);
+    expect(db.writes().map((c) => c.text)).toEqual([SQL.refreshLinks, SQL.insertEvents]);
+    expect(jsonParam(db.calls.find((c) => c.text === SQL.insertEvents)?.params[1])).toMatchObject([
+      { kind: 'link_confirmed', itemId: 'job_1', actor: 'human' },
+    ]);
+  });
+
   it('acceptRecommended locks, then writes items and events in one transaction', async () => {
     const recommend = { verdict: 'recommend' as const, reason: 'r' };
     const db = fakeDb({ items: [makeItem({ id: 'per_1', projectId: PID, aiStance: recommend }), makeItem({ id: 'per_2', projectId: PID })] });

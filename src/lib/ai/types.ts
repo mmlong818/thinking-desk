@@ -15,6 +15,7 @@ export const AI_TASKS = [
   'LEAP_CONSTRAINT_FLIP',
   'DESIGN_PROPOSAL',
   'SPLIT_SUBFEATURES',
+  'CONSISTENCY_CHECK',
   'FREE_ASK',
   'FOLLOW_UPS',
 ] as const;

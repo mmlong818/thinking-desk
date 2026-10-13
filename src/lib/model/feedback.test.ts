@@ -32,6 +32,6 @@ describe('itemSummary', () => {
     expect(itemSummary(makeItem({ id: 'j', type: 'job', body: jobBody('写作业') }))).toBe('[functional] 写作业');
     const long = makeItem({ id: 'p', body: personaBody('x'.repeat(300)) });
     expect(itemSummary(long).length).toBeLessThanOrEqual(120);
-    expect(ITEM_TYPES.length).toBe(31);
+    expect(ITEM_TYPES.length).toBe(32);
   });
 });

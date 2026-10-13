@@ -20,6 +20,7 @@ export const ITEM_TYPES = [
   'revision', 'design_section', 'module',
   'subtask',
   'summary', 'critique',
+  'finding',
 ] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
 export const ItemTypeSchema = z.enum(ITEM_TYPES);
@@ -31,7 +32,12 @@ export const LINK_RELS = [
   'mitigates', 'conflicts_with', 'assumes', 'depends_on',
 ] as const;
 export const RUN_STATUSES = ['ok', 'retried', 'failed'] as const;
-export const EVENT_KINDS = ['created', 'accepted', 'rejected', 'reset', 'edited', 'deleted'] as const;
+export const EVENT_KINDS = [
+  'created', 'accepted', 'rejected', 'reset', 'edited', 'deleted',
+  'link_added', 'link_removed', 'link_confirmed', 'evidence_updated',
+] as const;
+/** Event kinds about one outgoing Link of the item; they carry `link` and never change the item's version. */
+export const LINK_EVENT_KINDS = ['link_added', 'link_removed', 'link_confirmed'] as const;
 export const ACTORS = ['human', 'ai'] as const;
 
 export type Origin = (typeof ORIGINS)[number];
@@ -51,10 +57,27 @@ export const AiStanceSchema = z.object({
 });
 export type AiStance = z.infer<typeof AiStanceSchema>;
 
+export const SOURCE_STATUSES = ['title_match', 'reachable', 'unreachable', 'blocked'] as const;
+export type SourceStatus = (typeof SOURCE_STATUSES)[number];
+
+export const EvidenceSourceSchema = z.object({
+  title: z.string(),
+  url: z.string().optional(),
+  /** True only after a check found the page and its title matches (status `title_match`). */
+  verified: z.boolean(),
+  /** Result of the last server-side check (src/lib/sources); absent = never checked. */
+  status: z.enum(SOURCE_STATUSES).optional(),
+  checkedAt: Timestamp.optional(),
+  /** The page title the check found. */
+  pageTitle: z.string().optional(),
+});
+export type EvidenceSource = z.infer<typeof EvidenceSourceSchema>;
+
 export const EvidenceSchema = z.object({
   basis: z.enum(['web', 'model_knowledge', 'user_input']),
-  confidence: z.number().min(0).max(1),
-  sources: z.array(z.object({ title: z.string(), url: z.string().optional(), verified: z.boolean() })),
+  /** Optional: sources lifted from task output that states no confidence carry none rather than an invented one. */
+  confidence: z.number().min(0).max(1).optional(),
+  sources: z.array(EvidenceSourceSchema),
 });
 export type Evidence = z.infer<typeof EvidenceSchema>;
 
@@ -123,6 +146,10 @@ export const RunSchema = z.object({
 export type Run = z.infer<typeof RunSchema>;
 export type RunInput = Omit<Run, 'id' | 'projectId' | 'createdAt' | 'task'> & { task: AiTask };
 
+/** The Link a link_* event is about (`from` is the event's item). */
+export const EventLinkSchema = z.object({ id: Id, to: Id, rel: z.enum(LINK_RELS) });
+export type EventLink = z.infer<typeof EventLinkSchema>;
+
 export const DecisionEventSchema = z.object({
   id: Id,
   projectId: Id,
@@ -131,8 +158,10 @@ export const DecisionEventSchema = z.object({
   fromVersion: z.number().int().min(0),
   toVersion: Version,
   note: z.string().optional(),
-  /** Body before an AI run rewrote a singleton in place (`edited` events only), so it stays recoverable. */
+  /** Body before the edit (`edited` events; see PREV_BODY_MAX_CHARS), so older versions stay recoverable. */
   prevBody: z.unknown().optional(),
+  /** link_added / link_removed / link_confirmed: the link concerned. */
+  link: EventLinkSchema.optional(),
   actor: z.enum(ACTORS),
   at: Timestamp,
 });

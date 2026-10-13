@@ -32,7 +32,8 @@ export function EvidenceLine({ evidence }: { evidence?: Evidence }) {
   if (!evidence) return null;
   return (
     <div className="evidence-line">
-      依据：{BASIS_LABEL[evidence.basis]} · 置信度 {Math.round(evidence.confidence * 100)}%
+      依据：{BASIS_LABEL[evidence.basis]}
+      {evidence.confidence !== undefined ? ` · 置信度 ${Math.round(evidence.confidence * 100)}%` : ''}
       {evidence.sources.map((s, i) =>
         s.url ? (
           <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="evidence-source">

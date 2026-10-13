@@ -162,6 +162,51 @@ describe('LocalRepository', () => {
     const [refreshed] = await repo.refreshLinks(PROJECT, [link?.id ?? '']);
     expect(refreshed.toVersionSeen).toBe(2);
     expect((await repo.getGraph(PROJECT)).links.find((l) => l.id === link?.id)?.toVersionSeen).toBe(2);
+    const confirmed = (await repo.listEvents(PROJECT, { itemId: job.id })).filter((e) => e.kind === 'link_confirmed');
+    expect(confirmed).toMatchObject([{ actor: 'human', link: { id: link?.id, rel: 'derived_from' } }]);
+    await repo.refreshLinks(PROJECT, [link?.id ?? '']);
+    expect((await repo.listEvents(PROJECT)).filter((e) => e.kind === 'link_confirmed')).toHaveLength(1);
+  });
+
+  it('editLinks adds and removes links in one write, with link events; a refused edit writes nothing', async () => {
+    const { storage, repo } = setup();
+    const { created } = await repo.saveRunOutput(PROJECT, usersRun([
+      { ref: 'p1', type: 'persona', body: rawPersona('p1') },
+      { ref: 'j1', type: 'job', body: rawJob('j1', ['p1']) },
+      { ref: 'j2', type: 'job', body: rawJob('j2') },
+    ]));
+    const [persona, j1, j2] = created;
+    const [old] = (await repo.getGraph(PROJECT)).links;
+    const res = await repo.editLinks(PROJECT, {
+      remove: [old.id], add: [{ from: j2.id, to: persona.id, rel: 'derived_from' }],
+    }, { actor: 'human' });
+    expect(res.removed).toEqual([old.id]);
+    expect((await repo.getGraph(PROJECT)).links.map((l) => [l.from, l.to])).toEqual([[j2.id, persona.id]]);
+    expect((await repo.listEvents(PROJECT)).slice(-2).map((e) => [e.kind, e.itemId])).toEqual([
+      ['link_removed', j1.id], ['link_added', j2.id],
+    ]);
+    const before = storage.data.get(localProjectKey(PROJECT));
+    await expect(repo.editLinks(PROJECT, { add: [{ from: j1.id, to: j2.id, rel: 'depends_on' }] }, { actor: 'human' }))
+      .rejects.toMatchObject({ code: 'invalid' });
+    expect(storage.data.get(localProjectKey(PROJECT))).toBe(before);
+    expect(await repo.editLinks(PROJECT, { add: [{ from: j2.id, to: persona.id, rel: 'derived_from' }] }, { actor: 'human' }))
+      .toEqual({ added: [], removed: [] });
+    expect(storage.data.get(localProjectKey(PROJECT))).toBe(before);
+  });
+
+  it('updateItem stores evidence (no version bump) and keeps the previous body on human edits', async () => {
+    const { repo } = setup();
+    const { created } = await repo.saveRunOutput(PROJECT, usersRun());
+    const evidence = {
+      basis: 'web' as const,
+      sources: [{ title: 'Doc', url: 'https://example.org/', verified: false, status: 'reachable' as const }],
+    };
+    const item = await repo.updateItem(PROJECT, created[0].id, { evidence }, { actor: 'human' });
+    expect(item).toMatchObject({ version: 1, evidence });
+    await repo.updateItem(PROJECT, created[0].id, { body: personaBody('v2') }, { actor: 'human' });
+    const events = await repo.listEvents(PROJECT, { itemId: created[0].id });
+    expect(events.map((e) => e.kind)).toEqual(['created', 'evidence_updated', 'edited']);
+    expect(events[2].prevBody).toEqual(created[0].body);
   });
 
   it('lists runs newest first and filters them', async () => {

@@ -57,6 +57,7 @@ const SUMMARY: Summarizers = {
   subtask: (b) => b.title,
   summary: (b) => b.text,
   critique: (b) => b.title,
+  finding: (b) => b.title,
 };
 
 function designSectionSummary(b: ItemBody<'design_section'>): string {

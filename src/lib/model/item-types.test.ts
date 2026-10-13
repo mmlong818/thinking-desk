@@ -47,6 +47,10 @@ const SAMPLES: Record<ItemType, unknown> = {
   subtask: validBreakdown.splits[0].subfeatures[0],
   summary: { topic: 'leap_timing', text: 'r', verdict: 'selective' },
   critique: { kind: 'critique', title: 't', body: 'b' },
+  finding: {
+    item_ids: ['ftr_1', 'red_1'], title: 't', description: 'd', severity: 'high', suggested_fix: 'f',
+    stance: { verdict: 'recommend', reason: 'r' },
+  },
 };
 
 describe('ITEM_TYPE_DEFS', () => {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ACCEPT_RECOMMENDED_NOTE, planAcceptRecommended, planCreateItem, planItemUpdate, planRefreshLinks,
+  ACCEPT_RECOMMENDED_NOTE, planAcceptRecommended, planCreateItem, planItemUpdate,
 } from './plan-item';
+import { PREV_BODY_MAX_CHARS } from './events';
 import { RepositoryError } from './repository';
-import type { Link } from './types';
 import { briefBody, jobBody, makeItem, personaBody, PROJECT, seqIdSource, T1 } from './__fixtures__/model';
 
 const ctx = () => ({ projectId: PROJECT, now: T1, idSource: seqIdSource() });
@@ -27,6 +27,13 @@ describe('planCreateItem', () => {
   it('can create a pending draft (single created event)', () => {
     const p = planCreateItem({ items: [], links: [] }, { node: 'users', type: 'persona', body: personaBody(), decision: 'pending' }, ctx());
     expect(p.events.map((e) => e.kind)).toEqual(['created']);
+  });
+
+  it('refuses links the type registry does not allow', () => {
+    const p = () => planCreateItem({ items: [persona], links: [] }, {
+      node: 'users', type: 'job', body: jobBody(), links: [{ to: 'per_1', rel: 'depends_on' }],
+    }, ctx());
+    expect(p).toThrow(/not an allowed link/);
   });
 
   it('rejects bad input', () => {
@@ -107,21 +114,24 @@ describe('planItemUpdate', () => {
   it('validates the new body', () => {
     expect(() => planItemUpdate(item, { body: { name: 1 } }, human, ctx())).toThrow(RepositoryError);
   });
-});
 
-describe('planRefreshLinks', () => {
-  const to = makeItem({ id: 'per_1', version: 5 });
-  const from = makeItem({ id: 'job_1', type: 'job', body: jobBody() });
-  const link: Link = { id: 'lnk_1', projectId: PROJECT, from: 'job_1', to: 'per_1', rel: 'derived_from', toVersionSeen: 2 };
-
-  it('sets toVersionSeen to the current upstream version', () => {
-    expect(planRefreshLinks({ items: [to, from], links: [link] }, ['lnk_1'])).toEqual([{ ...link, toVersionSeen: 5 }]);
+  it('keeps the previous body on a human edit, unless it is too large', () => {
+    const p = planItemUpdate(item, { body: personaBody('v3') }, human, ctx());
+    expect(p.events[0]).toMatchObject({ kind: 'edited', fromVersion: 2, toVersion: 3, prevBody: item.body });
+    const huge = makeItem({ id: 'per_h', body: personaBody('x'.repeat(PREV_BODY_MAX_CHARS)) });
+    expect(planItemUpdate(huge, { body: personaBody('short') }, human, ctx()).events[0]).not.toHaveProperty('prevBody');
   });
 
-  it('rejects unknown links and links to deleted items', () => {
-    expect(() => planRefreshLinks({ items: [to, from], links: [link] }, ['nope'])).toThrow(/not found/);
-    const gone = makeItem({ id: 'per_1', version: 5, deletedAt: T1 });
-    expect(() => planRefreshLinks({ items: [gone, from], links: [link] }, ['lnk_1'])).toThrow(/deleted/);
+  it('replaces the evidence without a version bump: one evidence_updated event; identical evidence is a no-op', () => {
+    const evidence = {
+      basis: 'web' as const,
+      sources: [{ title: 'Notion', url: 'https://www.notion.so/', verified: true, status: 'title_match' as const, checkedAt: T1 }],
+    };
+    const p = planItemUpdate(item, { evidence }, { actor: 'human', note: '核实来源' }, ctx());
+    expect(p.item).toMatchObject({ version: 2, evidence });
+    expect(p.events.map((e) => [e.kind, e.fromVersion, e.toVersion, e.note])).toEqual([['evidence_updated', 2, 2, '核实来源']]);
+    expect(planItemUpdate(p.item, { evidence }, human, ctx()).events).toEqual([]);
+    expect(() => planItemUpdate(item, { evidence: { basis: 'web', sources: [{ title: 1 }] } as never }, human, ctx())).toThrow(RepositoryError);
   });
 });
 
@@ -134,9 +144,13 @@ describe('planAcceptRecommended', () => {
     makeItem({ id: 'per_done', aiStance: recommend, decision: 'rejected' }),
     makeItem({ id: 'per_gone', aiStance: recommend, deletedAt: T1 }),
     makeItem({ id: 'stk_other', node: 'stake', aiStance: recommend }),
+    makeItem({
+      id: 'fnd_1', type: 'finding', aiStance: recommend,
+      body: { title: 't', description: 'd', severity: 'high', suggested_fix: 'f' },
+    }),
   ];
 
-  it('accepts only live pending recommended items on the node, one human event each', () => {
+  it('accepts only live pending recommended items on the node (never consistency findings), one human event each', () => {
     const p = planAcceptRecommended({ items, links: [] }, 'users', ctx());
     expect(p.items.map((i) => [i.id, i.decision, i.version, i.updatedAt])).toEqual([
       ['per_r1', 'accepted', 1, T1], ['per_r2', 'accepted', 3, T1],

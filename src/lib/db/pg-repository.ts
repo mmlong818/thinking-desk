@@ -7,12 +7,13 @@ import type { NodeKind } from '../../data/nodes';
 import { liveGraph, type Graph } from '../model/graph';
 import type { IdSource } from '../model/ids';
 import type { Item } from '../model/item-types';
-import { planAcceptRecommended, planCreateItem, planItemUpdate, planRefreshLinks } from '../model/plan-item';
+import { planAcceptRecommended, planCreateItem, planItemUpdate } from '../model/plan-item';
+import { planEditLinks, planRefreshLinks } from '../model/plan-links';
 import { planRunOutput, toSaveRunResult, type PlanContext, type PlanState, type RunPlan } from '../model/plan-run';
 import {
   RepositoryError,
   type CreateItemInput, type EventFilter, type EventMeta, type ItemFilter, type ItemPatch,
-  type Repository, type RunFilter, type RunOutputInput, type SaveRunResult,
+  type LinkEdit, type LinkEditResult, type Repository, type RunFilter, type RunOutputInput, type SaveRunResult,
 } from '../model/repository';
 import type { DecisionEvent, Link, Run } from '../model/types';
 
@@ -63,9 +64,9 @@ export const SQL = {
     FROM jsonb_array_elements($2::jsonb) AS e(v)
     WHERE l.project_id = $1::uuid AND l.id = e.v->>'id'`,
   insertEvents: `INSERT INTO decision_events (project_id, id, item_id, kind, from_version, to_version, note, prev_body,
-                                   actor, at)
+                                   link, actor, at)
     SELECT $1::uuid, e.v->>'id', e.v->>'itemId', e.v->>'kind', (e.v->>'fromVersion')::int, (e.v->>'toVersion')::int,
-           e.v->>'note', e.v->'prevBody', e.v->>'actor', (e.v->>'at')::timestamptz
+           e.v->>'note', e.v->'prevBody', e.v->'link', e.v->>'actor', (e.v->>'at')::timestamptz
     FROM jsonb_array_elements($2::jsonb) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord`,
 } as const;
 
@@ -207,12 +208,23 @@ export class PgRepository implements Repository {
     });
   }
 
-  async refreshLinks(projectId: string, linkIds: readonly string[]): Promise<Link[]> {
+  async refreshLinks(projectId: string, linkIds: readonly string[], event: EventMeta = { actor: 'human' }): Promise<Link[]> {
     return this.tx(async (tx) => {
       await this.lock(tx, projectId);
-      const refreshed = planRefreshLinks(await this.state(tx, projectId), linkIds);
-      if (refreshed.length) await tx.query(SQL.refreshLinks, [projectId, JSON.stringify(refreshed)]);
-      return refreshed;
+      const plan = planRefreshLinks(await this.state(tx, projectId), linkIds, event, this.ctx(projectId));
+      if (plan.changed.length) await tx.query(SQL.refreshLinks, [projectId, JSON.stringify(plan.changed)]);
+      await writeEvents(tx, projectId, plan.events);
+      return plan.links;
+    });
+  }
+
+  async editLinks(projectId: string, edit: LinkEdit, event: EventMeta): Promise<LinkEditResult> {
+    return this.tx(async (tx) => {
+      await this.lock(tx, projectId);
+      const plan = planEditLinks(await this.state(tx, projectId), edit, event, this.ctx(projectId));
+      await writeLinks(tx, projectId, plan.added, plan.removed.map((l) => l.id));
+      await writeEvents(tx, projectId, plan.events);
+      return { added: plan.added, removed: plan.removed.map((l) => l.id) };
     });
   }
 

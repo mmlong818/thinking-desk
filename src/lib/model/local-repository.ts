@@ -3,7 +3,8 @@ import { liveGraph, type Graph } from './graph';
 import type { IdSource } from './ids';
 import type { Item } from './item-types';
 import { decodeDoc, hasLoss, type DecodeReport, type ProjectDoc } from './local-doc';
-import { planAcceptRecommended, planCreateItem, planItemUpdate, planRefreshLinks } from './plan-item';
+import { planAcceptRecommended, planCreateItem, planItemUpdate } from './plan-item';
+import { planEditLinks, planRefreshLinks } from './plan-links';
 import { planRunOutput, toSaveRunResult, type PlanContext, type PlanState, type RunPlan } from './plan-run';
 import {
   RepositoryError,
@@ -12,6 +13,8 @@ import {
   type EventMeta,
   type ItemFilter,
   type ItemPatch,
+  type LinkEdit,
+  type LinkEditResult,
   type Repository,
   type RunFilter,
   type RunOutputInput,
@@ -172,11 +175,27 @@ export class LocalRepository implements Repository {
     return plan.items;
   }
 
-  async refreshLinks(projectId: string, linkIds: readonly string[]): Promise<Link[]> {
+  async refreshLinks(projectId: string, linkIds: readonly string[], event: EventMeta = { actor: 'human' }): Promise<Link[]> {
     const doc = this.load(projectId);
-    const refreshed = planRefreshLinks(planState(doc), linkIds);
-    if (refreshed.length > 0) this.save(projectId, { ...doc, links: replaceById(doc.links, refreshed) });
-    return refreshed;
+    const plan = planRefreshLinks(planState(doc), linkIds, event, this.ctx(projectId));
+    if (plan.changed.length > 0) {
+      this.save(projectId, { ...doc, links: replaceById(doc.links, plan.changed), events: [...doc.events, ...plan.events] });
+    }
+    return plan.links;
+  }
+
+  async editLinks(projectId: string, edit: LinkEdit, event: EventMeta): Promise<LinkEditResult> {
+    const doc = this.load(projectId);
+    const plan = planEditLinks(planState(doc), edit, event, this.ctx(projectId));
+    if (plan.events.length > 0) {
+      const removed = new Set(plan.removed.map((l) => l.id));
+      this.save(projectId, {
+        ...doc,
+        links: [...doc.links.filter((l) => !removed.has(l.id)), ...plan.added],
+        events: [...doc.events, ...plan.events],
+      });
+    }
+    return { added: plan.added, removed: plan.removed.map((l) => l.id) };
   }
 
   async listRuns(projectId: string, filter: RunFilter = {}): Promise<Run[]> {

@@ -67,6 +67,7 @@ export interface EventRow {
   to_version: number;
   note: string | null;
   prev_body: unknown;
+  link: unknown;
   actor: string;
   at: Timestamp;
 }
@@ -112,7 +113,7 @@ export function rowToEvent(row: EventRow): DecisionEvent | null {
   const r = DecisionEventSchema.safeParse(compact({
     id: row.id, projectId: row.project_id, itemId: row.item_id, kind: row.kind,
     fromVersion: row.from_version, toVersion: row.to_version, note: row.note, prevBody: row.prev_body,
-    actor: row.actor, at: iso(row.at),
+    link: row.link, actor: row.actor, at: iso(row.at),
   }));
   return r.success ? r.data : null;
 }
