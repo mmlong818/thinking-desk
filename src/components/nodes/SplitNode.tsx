@@ -13,6 +13,7 @@ import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { MissingUpstream, NodeLink } from '@/components/shared/Navigation';
 import { ErrorCard, NodeFrame, NodeHat, StoreStatus } from '@/components/shared/NodeKit';
+import { StreamProgressCard } from '@/components/shared/StreamProgress';
 import { adaptSubfeatureBreakdown } from '@/lib/model/adapters';
 import { inputsOf } from '@/lib/model/context';
 import { buildFeedback } from '@/lib/model/feedback';
@@ -52,10 +53,10 @@ function useSplit(data: NodeData) {
     void ai.run('split', {
       route: '/api/ai/split-subfeatures',
       body: { projectSlug: slug, design: design.snapshot, feedback: buildFeedback(data.all, [{ node: 'split', type: 'subtask' }], data.links) },
-      node: 'split', inputs: design.inputs, adapt: adaptSubfeatureBreakdown,
+      node: 'split', inputs: design.inputs, adapt: adaptSubfeatureBreakdown, stream: true,
     });
   };
-  return { run, running: ai.running !== null, error: ai.error };
+  return { run, running: ai.running !== null, error: ai.error, progress: ai.progress, cancel: ai.cancel };
 }
 
 function copilotCards(data: NodeData, hasDesign: boolean, slug: string): CopilotCard[] {
@@ -77,7 +78,7 @@ export function SplitNode() {
   const { slug } = useProject();
   const data = useNodeData('split');
   const design = useMemo(() => designOf(data), [data]);
-  const { run, running, error } = useSplit(data);
+  const { run, running, error, progress, cancel } = useSplit(data);
   const subtasks = data.of('subtask');
   const copilot = (
     <Copilot projectSlug={slug} nodeKind="split" cards={copilotCards(data, !!design, slug)} pending={running}
@@ -98,13 +99,14 @@ export function SplitNode() {
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">把 08 设计案里的每个 feature → 立刻能开 ticket 的子任务。每条带 layer 标签、工作量估计、验收标准。</p>
       <StoreStatus data={data} />
+      {running ? <StreamProgressCard label="拆分子任务中 · 每个 feature 2-6 条" progress={progress} onCancel={cancel} /> : null}
       {subtasks.length === 0 && design ? (
         <div className="para-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <div className="dim" style={{ fontSize: 13 }}>
             输入：{design.snapshot.modules.length} 模块 · {design.snapshot.modules.reduce((n, m) => n + m.feature_ids.length, 0)} 功能
           </div>
           <button type="button" className="btn btn-accent" onClick={run} disabled={running}>
-            {running ? <><span className="ai-spinner" /> &nbsp;拆分中… 通常 60-120 秒</> : '拆分子任务 →'}
+            拆分子任务 →
           </button>
         </div>
       ) : subtasks.length > 0 ? (

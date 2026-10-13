@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import type { RevisionNote } from '@/lib/ai/schemas/revise-features';
 import type { ItemOfType } from '@/lib/model/context';
 import type { Link } from '@/lib/model/types';
@@ -23,9 +24,11 @@ interface Props {
   links: Link[];
   slug: string;
   onApply: () => void;
+  /** Live progress card of the revise call, shown at the end of the section while it runs. */
+  progress?: ReactNode;
 }
 
-export function ApplyLeapsSection({ leaps, revision, revising, hasOriginalFeat, links, slug, onApply }: Props) {
+export function ApplyLeapsSection({ leaps, revision, revising, hasOriginalFeat, links, slug, onApply, progress }: Props) {
   const selected = leaps.filter((l) => l.decision === 'accepted').length;
   return (
     <div className="para-section apply-leaps-section">
@@ -51,6 +54,7 @@ export function ApplyLeapsSection({ leaps, revision, revising, hasOriginalFeat, 
           )}
         </div>
       )}
+      {revising ? progress : null}
     </div>
   );
 }

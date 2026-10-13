@@ -16,10 +16,12 @@ interface SectionProps {
   regenerating: boolean;
   disabled: boolean;
   onRegenerate: () => void;
+  /** Live progress card of the "再补 3 条" call, shown under the candidates while it runs. */
+  progress?: ReactNode;
 }
 
 /** One leap method: its candidates (each judged), counts, and "⟳ 再补 3 条". */
-export function CategorySection({ num, title, hint, items, regenerating, disabled, onRegenerate }: SectionProps) {
+export function CategorySection({ num, title, hint, items, regenerating, disabled, onRegenerate, progress }: SectionProps) {
   const count = (d: LeapItem['decision']) => items.filter((it) => it.decision === d).length;
   return (
     <div className="para-section">
@@ -36,6 +38,7 @@ export function CategorySection({ num, title, hint, items, regenerating, disable
           </div>
         ))}
       </div>
+      {regenerating ? progress : null}
       <div className="cat-footer">
         <div className="cat-footer-stats">
           <span className="cat-stat total">{items.length} 条</span>

@@ -10,6 +10,7 @@ import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
 import { ErrorCard, NodeFrame, NodeHat, ParaHead, StoreStatus } from '@/components/shared/NodeKit';
+import { StreamProgressCard } from '@/components/shared/StreamProgress';
 import type { DesignProposal } from '@/lib/ai/schemas/generate-design';
 import { adaptDesignProposal } from '@/lib/model/adapters';
 import { briefRequestContext, inputsOf, type BriefRequestContext } from '@/lib/model/context';
@@ -47,9 +48,10 @@ function useGenerate(data: NodeData, brief: BriefRequestContext | null) {
       node: 'final',
       inputs: inputsOf(brief?.items ?? [], features, pillars),
       adapt: adaptDesignProposal,
+      stream: true,
     });
   };
-  return { generate, generating: ai.running !== null, error: ai.error };
+  return { generate, generating: ai.running !== null, error: ai.error, progress: ai.progress, cancel: ai.cancel };
 }
 
 function copilotCards(data: NodeData, slug: string): CopilotCard[] {
@@ -74,7 +76,7 @@ export function FinalFeaturesNode() {
   const { slug } = useProject();
   const data = useNodeData('final');
   const brief = useMemo(() => briefRequestContext(data.all), [data.all]);
-  const { generate, generating, error } = useGenerate(data, brief);
+  const { generate, generating, error, progress, cancel } = useGenerate(data, brief);
   const features = data.of('feature');
   const hasDesign = data.of('design_section').length > 0 || data.of('module').length > 0;
   const copilot = (
@@ -94,6 +96,7 @@ export function FinalFeaturesNode() {
       </p>
       <StoreStatus data={data} />
       {data.loading ? null : <FinalFeatureList data={data} />}
+      {generating ? <StreamProgressCard label="生成设计案中 · 信息架构 / 模块 / 用户流 / 数据模型 / 里程碑" progress={progress} onCancel={cancel} /> : null}
       {data.loading ? null : hasDesign ? (
         <DesignView data={data} onRegenerate={generate} regenerating={generating} />
       ) : (
@@ -143,7 +146,7 @@ function GenerateCta({ data, onGenerate, generating }: { data: NodeData; onGener
         输入：{data.context('final', 'feature').length} 个功能 · {data.of('pillar').filter((p) => p.decision !== 'rejected').length} 个支柱
       </div>
       <button type="button" className="btn btn-accent" onClick={onGenerate} disabled={generating}>
-        {generating ? <><span className="ai-spinner" /> &nbsp;生成中… 通常 60-120 秒</> : '生成完整设计案 →'}
+        生成完整设计案 →
       </button>
     </div>
   );
