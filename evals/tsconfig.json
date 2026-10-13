@@ -1,0 +1,15 @@
+{
+  // Builds the eval CLI (run-eval.ts and what it imports from src/) to CommonJS for plain node:
+  // `pnpm eval` compiles here, then runs node_modules/.cache/td-evals/evals/run-eval.js.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "node16",
+    "moduleResolution": "node16",
+    "rootDir": "..",
+    "outDir": "../node_modules/.cache/td-evals",
+    "incremental": false,
+    "plugins": []
+  },
+  "include": ["run-eval.ts"]
+}

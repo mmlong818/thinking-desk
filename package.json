@@ -6,9 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --dir src --dir evals",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "eval": "tsc -p evals/tsconfig.json && node node_modules/.cache/td-evals/evals/run-eval.js",
     "db:init": "psql $DATABASE_URL -f src/lib/db/schema.sql"
   },
   "dependencies": {

@@ -13,7 +13,8 @@ Alpha product-thinking tool. 9 sequential nodes walk a user through problem clar
 pnpm dev                # http://localhost:3000
 pnpm typecheck          # tsc --noEmit
 pnpm lint               # next lint (ESLint 9 flat config, eslint.config.mjs)
-pnpm test               # vitest run (unit tests live next to the code as *.test.ts)
+pnpm test               # vitest run (unit tests live next to the code as *.test.ts; offline prompt evals in evals/)
+pnpm eval --model openai:gpt-5.5-2026-04-23 --dry-run  # prompt eval plan + budget; drop --dry-run for a real (paid) run
 pnpm build              # next build — must pass without DATABASE_URL / API keys
 docker compose up -d db # optional Postgres (auto-runs schema.sql)
 ```
@@ -86,6 +87,7 @@ final → split
 3. Create `src/app/api/ai/your-task/route.ts` — `export const POST = aiRoute({ name, body, handle })` from `src/lib/ai/route.ts`; the task calls `runTask()` (`src/lib/ai/run-task.ts`) and wraps request data in `dataBlock()`. Routes answer JSON; `stream: true` additionally offers NDJSON progress to clients that ask (`Accept: application/x-ndjson`) — today only the scenarios route, whose node calls `useAiAction().run(key, { …, stream: true })` and shows `progress` / `cancel`.
 4. Write the output adapter in `src/lib/model/adapters/` (output → `ItemDraft[]` + replace scope; test it with the fixtures in `src/lib/ai/schemas/__fixtures__`) and call the route from the node with `useAiAction`.
 5. Document `AI_MODEL_YOUR_TASK` in `.env.example`.
+6. Add the output fixture to `evals/lib/fixtures.ts` (and a chain step or `EXTRA_PROMPTS` entry), then `pnpm vitest run evals -u` to record its `promptVersion`. Any prompt edit changes that snapshot — update it on purpose.
 
 ## AI Model Routing
 

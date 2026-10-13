@@ -25,7 +25,8 @@ Run the same checks as CI before committing:
 ```bash
 pnpm typecheck   # tsc --noEmit
 pnpm lint        # next lint (ESLint 9 flat config)
-pnpm test        # vitest run
+pnpm test        # vitest run (includes the offline prompt evals in evals/)
+pnpm eval --model <provider:model> --dry-run   # prompt eval budget; without --dry-run it calls the API (evals/README.md)
 pnpm build       # next build
 ```
 
