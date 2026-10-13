@@ -286,4 +286,6 @@ src/
 
 ## License
 
-[AGPL-3.0](LICENSE) — free to use and modify with attribution; commercial use requires the full source to remain open under the same license.
+[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify and share for any noncommercial purpose (personal use, research, education, charities, public institutions); commercial use is not permitted under this license. Keep the license and its `Required Notice:` line with every copy. For commercial use, contact the author.
+
+[PolyForm Noncommercial 1.0.0](LICENSE)——任何非商业用途（个人使用、研究、教育、公益组织、公共机构）都可以免费使用、修改和分发；本许可证不允许商业用途。分发时须附上许可证和其中的 `Required Notice:` 行。商业使用请联系作者。
