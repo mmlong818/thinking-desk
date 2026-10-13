@@ -286,6 +286,8 @@ src/
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify and share for any noncommercial purpose (personal use, research, education, charities, public institutions); commercial use is not permitted under this license. Keep the license and its `Required Notice:` line with every copy. For commercial use, contact the author.
+Copyright (C) 2026 mmlong818
 
-[PolyForm Noncommercial 1.0.0](LICENSE)——任何非商业用途（个人使用、研究、教育、公益组织、公共机构）都可以免费使用、修改和分发；本许可证不允许商业用途。分发时须附上许可证和其中的 `Required Notice:` 行。商业使用请联系作者。
+[GPL-3.0](LICENSE) — free to use, modify and distribute, including commercially. If you distribute this software or a modified version, you must provide its source under the same license.
+
+[GPL-3.0](LICENSE)——可以自由使用、修改和分发，包括商业用途；分发本软件或修改版时，须以同一许可证提供源代码。
