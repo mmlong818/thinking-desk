@@ -70,18 +70,35 @@ export const claudeProvider: AiProvider = {
   async complete(model, req): Promise<CompleteResult> {
     const started = Date.now();
     // A per-request timeout also lifts the SDK's non-streaming guard for large max_tokens.
-    const res = await getClient().messages.create(buildClaudeRequest(model, req), {
-      signal: req.signal,
-      ...(req.timeoutMs ? { timeout: req.timeoutMs } : {}),
-    });
-    return {
-      // Read blocks by type: adaptive thinking can put `thinking` blocks first.
-      text: res.content.map((b) => (b.type === 'text' ? b.text : '')).join(''),
-      provider: 'claude',
-      model,
-      latencyMs: Date.now() - started,
-      usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
-      finishReason: finishReason(res.stop_reason),
-    };
+    const res = await getClient().messages.create(buildClaudeRequest(model, req), requestOptions(req));
+    return claudeResult(res, model, started);
+  },
+
+  /**
+   * messages.stream() (claude-api skill, typescript/claude-api/streaming.md): `text` events carry
+   * the deltas; finalMessage() resolves with the full Message (or rejects on error / abort).
+   * output_config.format is a plain JSON schema here, so the SDK does not parse the answer.
+   */
+  async stream(model, req, onDelta): Promise<CompleteResult> {
+    const started = Date.now();
+    const stream = getClient().messages.stream(buildClaudeRequest(model, req), requestOptions(req));
+    stream.on('text', (delta) => onDelta(delta));
+    return claudeResult(await stream.finalMessage(), model, started);
   },
 };
+
+function requestOptions(req: CompleteRequest): Anthropic.RequestOptions {
+  return { signal: req.signal, ...(req.timeoutMs ? { timeout: req.timeoutMs } : {}) };
+}
+
+function claudeResult(res: Anthropic.Message, model: string, started: number): CompleteResult {
+  return {
+    // Read blocks by type: adaptive thinking can put `thinking` blocks first.
+    text: res.content.map((b) => (b.type === 'text' ? b.text : '')).join(''),
+    provider: 'claude',
+    model,
+    latencyMs: Date.now() - started,
+    usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
+    finishReason: finishReason(res.stop_reason),
+  };
+}

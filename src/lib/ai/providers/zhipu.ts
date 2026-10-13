@@ -1,5 +1,6 @@
 import type { AiProvider, CompleteRequest, CompleteResult, ModelInfo } from '../types';
 import { schemaInstruction } from '../json-schema';
+import { readChatStream } from './chat-stream';
 import { validateBaseUrl } from './validate-base-url';
 
 // Zhipu exposes an OpenAI-compatible Chat Completions endpoint. We call it
@@ -19,7 +20,7 @@ function offlineList(): ModelInfo[] {
 }
 
 /** OpenAI-compatible chat body (JSON mode + schema in a trailing system message). */
-function buildZhipuRequest(model: string, req: CompleteRequest): Record<string, unknown> {
+export function buildZhipuRequest(model: string, req: CompleteRequest): Record<string, unknown> {
   const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
   if (req.schema) messages.push({ role: 'system', content: schemaInstruction(req.schema) });
 
@@ -77,49 +78,67 @@ export const zhipuProvider: AiProvider = {
     }
   },
   async complete(model, req): Promise<CompleteResult> {
-    const apiKey = process.env.ZHIPU_API_KEY;
-    if (!apiKey) throw new Error('ZHIPU_API_KEY not configured');
-    const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';
     const started = Date.now();
-
-    const res = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(buildZhipuRequest(model, req)),
-      signal: req.signal,
-    });
-    if (!res.ok) {
-      throw new Error(`Zhipu ${res.status}: ${await res.text()}`);
-    }
+    const res = await postChat(buildZhipuRequest(model, req), req.signal);
     const json = (await res.json()) as {
       choices?: { message?: { content?: string }; finish_reason?: string }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const choice = json.choices?.[0];
-    const text = choice?.message?.content ?? '';
-    if (!text.trim()) {
-      const hint =
-        choice?.finish_reason === 'length'
-          ? '（finish_reason=length：模型未在预算内完成输出，考虑增大 maxTokens 或切换非推理模型）'
-          : '';
-      throw new Error(
-        `Zhipu returned empty content (finish_reason=${choice?.finish_reason ?? 'unknown'}) ${hint}. ` +
-          `Raw: ${JSON.stringify(json).slice(0, 500)}`,
-      );
-    }
-    return {
-      text,
-      provider: 'zhipu',
-      model,
-      latencyMs: Date.now() - started,
-      usage: {
-        inputTokens: json.usage?.prompt_tokens,
-        outputTokens: json.usage?.completion_tokens,
-      },
-      finishReason: choice?.finish_reason === 'length' ? 'length' : 'stop',
-    };
+    const usage = { inputTokens: json.usage?.prompt_tokens, outputTokens: json.usage?.completion_tokens };
+    return result(model, started, choice?.message?.content ?? '', choice?.finish_reason, usage, () => JSON.stringify(json));
+  },
+
+  /** Same request with `stream: true` (OpenAI-compatible SSE; usage comes with the last chunk). */
+  async stream(model, req, onDelta): Promise<CompleteResult> {
+    const started = Date.now();
+    const res = await postChat({ ...buildZhipuRequest(model, req), stream: true }, req.signal);
+    if (!res.body) throw new Error('Zhipu stream: empty response body');
+    const out = await readChatStream(res.body, onDelta);
+    return result(model, started, out.text, out.finishReason, out.usage ?? {}, () => '(streamed)');
   },
 };
+
+async function postChat(body: Record<string, unknown>, signal: AbortSignal | undefined): Promise<Response> {
+  const apiKey = process.env.ZHIPU_API_KEY;
+  if (!apiKey) throw new Error('ZHIPU_API_KEY not configured');
+  const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`Zhipu ${res.status}: ${await res.text()}`);
+  }
+  return res;
+}
+
+/** An empty answer is an error (reasoning models can spend the whole budget before answering). */
+function result(
+  model: string, started: number, text: string, finish: string | undefined,
+  usage: CompleteResult['usage'], raw: () => string,
+): CompleteResult {
+  if (!text.trim()) {
+    const hint =
+      finish === 'length'
+        ? '（finish_reason=length：模型未在预算内完成输出，考虑增大 maxTokens 或切换非推理模型）'
+        : '';
+    throw new Error(
+      `Zhipu returned empty content (finish_reason=${finish ?? 'unknown'}) ${hint}. ` +
+        `Raw: ${raw().slice(0, 500)}`,
+    );
+  }
+  return {
+    text,
+    provider: 'zhipu',
+    model,
+    latencyMs: Date.now() - started,
+    usage,
+    finishReason: finish === 'length' ? 'length' : 'stop',
+  };
+}

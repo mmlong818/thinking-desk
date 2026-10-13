@@ -81,6 +81,9 @@ export interface ModelInfo {
   };
 }
 
+/** Receives answer text as the provider streams it; the deltas concatenate to CompleteResult.text. */
+export type TextDeltaHandler = (delta: string) => void;
+
 export interface AiProvider {
   readonly name: AiProviderName;
   /** Returns true if the env is configured enough to call the provider. */
@@ -88,6 +91,12 @@ export interface AiProvider {
   /** Discover models from the provider at runtime. Cached by the router. */
   listModels(): Promise<ModelInfo[]>;
   complete(model: string, req: CompleteRequest): Promise<CompleteResult>;
+  /**
+   * Streaming variant of complete(): the same request and result, plus each text delta as it
+   * arrives. Optional — runTask() falls back to complete() — and used only when the caller
+   * asked for progress (TaskOptions.onProgress).
+   */
+  stream?(model: string, req: CompleteRequest, onDelta: TextDeltaHandler): Promise<CompleteResult>;
   /**
    * False for a listed model this adapter's request params would make fail on structured
    * (schema) tasks: auto-pick skips it and runTask() refuses it for schema tasks.

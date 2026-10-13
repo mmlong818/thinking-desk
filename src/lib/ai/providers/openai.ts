@@ -1,6 +1,7 @@
 import type { AiProvider, CompleteRequest, CompleteResult, FinishReason } from '../types';
 import { schemaInstruction } from '../json-schema';
 import { withReasoningHeadroom } from './budget';
+import { readChatStream } from './chat-stream';
 import { validateBaseUrl } from './validate-base-url';
 
 /** Stays below the smallest output limit of the reasoning families we drive (o-series: 100k). */
@@ -83,22 +84,9 @@ export const openaiProvider: AiProvider = {
 
   async complete(model, req): Promise<CompleteResult> {
     const started = Date.now();
-    const res = await fetch(`${getBase()}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${getKey()}`,
-      },
-      body: JSON.stringify(buildOpenAIRequest(model, req)),
-      signal: req.signal,
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      throw new Error(`OpenAI ${res.status}: ${detail.slice(0, 300)}`);
-    }
+    const res = await postChat(buildOpenAIRequest(model, req), req.signal);
     const json = (await res.json()) as ChatResponse;
     const choice = json.choices?.[0];
-
     return {
       text: choice?.message?.content ?? '',
       provider: 'openai',
@@ -111,7 +99,41 @@ export const openaiProvider: AiProvider = {
       finishReason: finishReason(choice?.finish_reason),
     };
   },
+
+  /** Same request with `stream: true`; usage arrives on a last chunk (stream_options.include_usage). */
+  async stream(model, req, onDelta): Promise<CompleteResult> {
+    const started = Date.now();
+    const body = { ...buildOpenAIRequest(model, req), stream: true, stream_options: { include_usage: true } };
+    const res = await postChat(body, req.signal);
+    if (!res.body) throw new Error('OpenAI stream: empty response body');
+    const out = await readChatStream(res.body, onDelta);
+    return {
+      text: out.text,
+      provider: 'openai',
+      model,
+      latencyMs: Date.now() - started,
+      usage: out.usage,
+      finishReason: finishReason(out.finishReason),
+    };
+  },
 };
+
+async function postChat(body: Record<string, unknown>, signal: AbortSignal | undefined): Promise<Response> {
+  const res = await fetch(`${getBase()}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${getKey()}`,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`OpenAI ${res.status}: ${detail.slice(0, 300)}`);
+  }
+  return res;
+}
 
 /** Chat Completions finish_reason: stop | length | content_filter | tool_calls | function_call. */
 function finishReason(raw: string | null | undefined): FinishReason {
