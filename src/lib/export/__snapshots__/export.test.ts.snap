@@ -1,0 +1,298 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PRD Markdown > matches the snapshot and leaves out pending and rejected items 1`] = `
+"# 学习陪练 · 产品需求文档（PRD）
+
+> 思考工作台根据已采纳的条目生成 · 2026-10-13 · 只收录已采纳的内容（待定与已否决的不收）
+> 来源标记〔来源·立场〕：AI = AI 产出 · AI·改 = AI 产出后经人修改 · 人 = 人工添加；荐 / 中 / 慎 = AI 当时的立场（推荐 / 中立 / 提醒谨慎）
+
+## 1. 背景与问题
+
+〔AI·荐〕 完整度 80/100
+
+- **问题陈述**：初中生课后卡题没人问
+- **目标用户**：初二学生
+- **使用情景**：晚上独自写作业
+- **价值主张**：卡住时即时讲解
+- **成功标准**：每周练习时长 +30%
+- **时间约束**：—
+- **明确边界**：不做家长监控
+
+### 道德红线
+- 不做班级排名羞辱 〔AI〕
+
+## 2. 用户与 Job
+
+### 用户画像
+- **小米 · 初二**（主要）：数学薄弱 〔AI·荐〕
+
+### Jobs-to-be-done
+- [功能性] 卡住时知道下一步（小米） 〔AI·荐〕
+- [情感性] 不被同学比下去（含家长期待）（小米） 〔AI·改〕
+
+## 3. 干系人
+
+- **教研组**（内容把关 · 影响力高 · 关注度高）：决定题库口径 〔AI〕
+
+### 沟通节奏
+- 重点管理：每周对齐题库
+- 令其满意：月报
+- 保持告知：上线通知
+- 持续关注：季度回访
+
+## 4. 替代方案与差异化
+
+- **作业帮**（直接 · 威胁高）：拍照搜题 〔AI〕
+- **问同学**（非消费 · 威胁中）：微信群里问 〔AI〕
+
+### 差异化假设
+> 只讲思路不给答案，家长才放心 〔AI〕
+- 关键威胁：搜题工具直接给答案
+
+## 5. 情景与洞察
+
+### 情景
+- **周三晚上的几何题**：小米卡在辅助线上，问同学没人回。 〔AI〕
+
+### 痛点
+- 想不出辅助线 → 根因：缺少可迁移的解题套路 〔AI〕
+
+### 设计启发
+- 在深夜卡题时，小米需要的是下一步提示而不是答案 → 提供分步提示 〔AI〕
+
+## 6. 功能（按 RICE 排序 · 来自 08 设计案的修订版）
+
+| # | 功能 | 支柱 | Kano | RICE | 优先级 | 核心假设 | 来源 |
+|---|---|---|---|---|---|---|---|
+| 1 | 分步提示 | 即时反馈 | must | 96.0 | AI 建议优先 | 分步提示能减少放弃 | 〔AI·荐〕 |
+| 2 | 错题本 | 即时反馈 | must | 40.0 |  | 错题本能减少放弃 | 〔AI·慎〕 |
+
+### 不做什么
+- **家长监控**：Brief 边界明确不做 〔AI〕
+
+## 7. 设计
+
+### 概述
+**AI 学习陪练** —— 卡住时的下一步
+
+让学生自己想出来
+  〔AI·荐〕
+
+### 设计原则
+- 只给提示不给答案
+- 三步内到达
+  〔AI·荐〕
+
+### 关键用户流
+- **卡题求助**：30 秒内拿到提示
+  1. 学生：拍题 → 识别题目
+  2. 学生：点「下一步」 → 给出提示
+  〔AI·荐〕
+
+### 数据模型
+- **Hint**：一条提示（id、step）
+  〔AI·荐〕
+
+### 指标
+- **提示采纳率**：看完提示后继续作答的比例 · 目标 ≥ 60%
+  〔AI·荐〕
+
+### 里程碑
+- **M1**（4w）：几何题跑通 · 交付 提示引擎
+  〔AI·荐〕
+
+## 8. 模块
+
+- **提示引擎**：生成分步提示 · 实现：分步提示 〔AI·荐〕
+- **错题管理**：收集错题 · 实现：错题本 · 依赖：提示引擎 〔AI·荐〕
+
+## 9. 风险与假设
+
+### 风险
+- 提示太直白变成给答案 → 缓解：人工抽检 〔AI·慎〕
+
+### 关键假设
+- 学生愿意晚上主动打开（未验证）〔AI〕
+
+## 10. 待决问题
+
+- 题库从哪来？ 〔AI·慎〕
+
+## 11. 一致性发现
+
+### 已确认的问题（AI 检查，经人确认）
+- [中等] **错题本会导出给家长**：错题本的分享设计接近「家长监控」 · 建议：去掉导出给家长 · 涉及 「错题本 · 错题本：卡住时给出分步提示」、「家长监控」 〔AI·荐〕
+
+另有 1 条 AI 发现尚未裁决，未收入。
+
+### 规则检查（自动）
+- 功能「错题本 · 错题本：卡住时给出分步提示」没有服务任何已采纳的 Job
+- 你确认了矛盾「错题本会导出给家长」，但涉及的条目仍都处于采纳状态
+"
+`;
+
+exports[`task exports > GitHub issues: labels to create first, then REST payloads in dependency order 1`] = `
+{
+  "format": "thinking-desk/github-issues",
+  "issues": [
+    {
+      "body": "实现提示接口，覆盖主流程
+
+验收标准：
+- 实现提示接口通过验收
+
+功能：分步提示 · 模块：提示引擎 · 层：backend · 估时：2d
+来源：思考工作台 T-1 · tsk_00000030 · 关键路径",
+      "depends_on": [],
+      "key": "T-1",
+      "labels": [
+        "layer-backend",
+        "critical-path",
+        "thinking-desk",
+      ],
+      "source_id": "tsk_00000030",
+      "title": "实现提示接口",
+    },
+    {
+      "body": "画提示页, 含 "下一步" 按钮，覆盖主流程
+
+验收标准：
+- 画提示页, 含 "下一步" 按钮通过验收
+
+功能：分步提示 · 层：backend · 估时：1.5d
+依赖：T-1 实现提示接口
+来源：思考工作台 T-2 · tsk_00000031 · 关键路径",
+      "depends_on": [
+        "T-1",
+      ],
+      "key": "T-2",
+      "labels": [
+        "layer-backend",
+        "critical-path",
+        "thinking-desk",
+      ],
+      "source_id": "tsk_00000031",
+      "title": "画提示页, 含 "下一步" 按钮",
+    },
+    {
+      "body": "错题导入，覆盖主流程
+
+验收标准：
+- 错题导入通过验收
+
+功能：错题本 · 模块：错题管理 · 层：backend · 估时：2-3d
+另依赖 1 条未导出（未采纳）的子任务
+来源：思考工作台 T-3 · tsk_00000032",
+      "depends_on": [],
+      "key": "T-3",
+      "labels": [
+        "layer-backend",
+        "thinking-desk",
+      ],
+      "source_id": "tsk_00000032",
+      "title": "错题导入",
+    },
+    {
+      "body": "记录提示采纳
+
+功能：分步提示 · 层：data · 估时：4h
+来源：思考工作台 T-4 · tsk_0000003j",
+      "depends_on": [],
+      "key": "T-4",
+      "labels": [
+        "layer-data",
+        "thinking-desk",
+      ],
+      "source_id": "tsk_0000003j",
+      "title": "埋点上报",
+    },
+  ],
+  "labels": [
+    {
+      "color": "b84a2b",
+      "description": "思考工作台导出",
+      "name": "critical-path",
+    },
+    {
+      "color": "c9c2b8",
+      "description": "子任务层：backend",
+      "name": "layer-backend",
+    },
+    {
+      "color": "c9c2b8",
+      "description": "子任务层：data",
+      "name": "layer-data",
+    },
+    {
+      "color": "3b5a4a",
+      "description": "思考工作台导出",
+      "name": "thinking-desk",
+    },
+  ],
+  "version": 1,
+}
+`;
+
+exports[`task exports > Jira CSV: repeated Labels columns, estimate in seconds, Blocks from the blocking row 1`] = `
+"Work item ID,Summary,Description,Work type,Priority,Labels,Labels,Labels,Original Estimate,Blocks
+1,实现提示接口,"实现提示接口，覆盖主流程
+
+验收标准：
+- 实现提示接口通过验收
+
+功能：分步提示 · 模块：提示引擎 · 层：backend · 估时：2d
+来源：思考工作台 T-1 · tsk_00000030 · 关键路径",Task,High,layer-backend,critical-path,thinking-desk,57600,2
+2,"画提示页, 含 ""下一步"" 按钮","画提示页, 含 ""下一步"" 按钮，覆盖主流程
+
+验收标准：
+- 画提示页, 含 ""下一步"" 按钮通过验收
+
+功能：分步提示 · 层：backend · 估时：1.5d
+依赖：T-1 实现提示接口
+来源：思考工作台 T-2 · tsk_00000031 · 关键路径",Task,High,layer-backend,critical-path,thinking-desk,43200,
+3,错题导入,"错题导入，覆盖主流程
+
+验收标准：
+- 错题导入通过验收
+
+功能：错题本 · 模块：错题管理 · 层：backend · 估时：2-3d
+另依赖 1 条未导出（未采纳）的子任务
+来源：思考工作台 T-3 · tsk_00000032",Task,Medium,layer-backend,thinking-desk,,,
+4,埋点上报,"记录提示采纳
+
+功能：分步提示 · 层：data · 估时：4h
+来源：思考工作台 T-4 · tsk_0000003j",Task,Medium,layer-data,thinking-desk,,14400,
+"
+`;
+
+exports[`task exports > Linear CSV: its own column set, labels in one cell, dependencies in the description 1`] = `
+"Title,Description,Priority,Status,Assignee,Created,Completed,Labels,Estimate
+实现提示接口,"实现提示接口，覆盖主流程
+
+验收标准：
+- 实现提示接口通过验收
+
+功能：分步提示 · 模块：提示引擎 · 层：backend · 估时：2d
+来源：思考工作台 T-1 · tsk_00000030 · 关键路径",,,,,,"layer-backend,critical-path,thinking-desk",
+"画提示页, 含 ""下一步"" 按钮","画提示页, 含 ""下一步"" 按钮，覆盖主流程
+
+验收标准：
+- 画提示页, 含 ""下一步"" 按钮通过验收
+
+功能：分步提示 · 层：backend · 估时：1.5d
+依赖：T-1 实现提示接口
+来源：思考工作台 T-2 · tsk_00000031 · 关键路径",,,,,,"layer-backend,critical-path,thinking-desk",
+错题导入,"错题导入，覆盖主流程
+
+验收标准：
+- 错题导入通过验收
+
+功能：错题本 · 模块：错题管理 · 层：backend · 估时：2-3d
+另依赖 1 条未导出（未采纳）的子任务
+来源：思考工作台 T-3 · tsk_00000032",,,,,,"layer-backend,thinking-desk",
+埋点上报,"记录提示采纳
+
+功能：分步提示 · 层：data · 估时：4h
+来源：思考工作台 T-4 · tsk_0000003j",,,,,,"layer-data,thinking-desk",
+"
+`;

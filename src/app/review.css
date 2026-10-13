@@ -73,3 +73,6 @@
 .cons-sev.medium { background: var(--warn); }
 .cons-finding-desc, .cons-finding-fix { line-height: 1.6; }
 .cons-finding .cons-finding-refs { margin-left: 0; }
+
+/* ---- export menu ---- */
+.export-menu-note { padding: 8px 14px 10px; font-size: 11px; color: var(--ink-4); border-top: 1px solid var(--rule); line-height: 1.5; }
