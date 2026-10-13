@@ -1,9 +1,10 @@
 import type { z } from 'zod';
 
 // Per-browser UI conveniences that are not project content: the brief draft typed before the
-// first analysis, derived copilot follow-up questions and their answers, a one-shot import
-// notice. localStorage, keyed `td:ui:<projectId>:<key>`; every access tolerates a missing or
-// throwing storage, and reads are validated so stale shapes are ignored rather than crashing.
+// first analysis, derived copilot follow-up questions and their answers (or the last failed
+// derivation), a one-shot import notice. localStorage, keyed `td:ui:<projectId>:<key>`; every
+// access tolerates a missing or throwing storage, and reads are validated so stale shapes are
+// ignored rather than crashing.
 
 const PREFIX = 'td:ui:';
 
@@ -15,6 +16,8 @@ export const UI_KEY = {
   importNotice: 'import-warning',
   /** Derived copilot follow-ups and their answers for one node. */
   followUps: (node: string) => `followups:${node}`,
+  /** The last failed follow-up derivation of one node (no automatic retry for the same inputs). */
+  followUpsFailure: (node: string) => `followups-failed:${node}`,
 } as const;
 
 const keyOf = (projectId: string, key: string) => `${PREFIX}${projectId}:${key}`;

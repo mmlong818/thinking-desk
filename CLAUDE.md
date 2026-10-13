@@ -56,7 +56,7 @@ Every node reads and writes items through one `Repository` (`docs/data-model.md`
 - Human writes: `useItemActions()` (accept / reject with note / reset / edit body / create / delete / accept recommended).
 - Upstream context for prompts: `contextItems(items, node, type)` — accepted items once any is accepted, otherwise every non-rejected one.
 - Completion is derived (`completedNodes(items)`); in pure-local mode it is mirrored into the `td-done:<slug>` cookie (`writeCompletionCookie`, long slugs → `td-done-h:<hash>`, `cookieNameCandidates(slug)` to read) so the SSR lock screen works. The provider refreshes the page when the derived set changes.
-- UI conveniences that are not content (brief draft, derived follow-ups + answers, import notice) live in `src/lib/store/ui-cache.ts` (`td:ui:<projectId>:<key>`).
+- UI conveniences that are not content (brief draft, derived follow-ups + answers, import notice) live in `src/lib/store/ui-cache.ts` (`td:ui:<projectId>:<key>`). A failed follow-up derivation is remembered per node until its inputs change or the person presses retry (`follow-ups-state.ts`) — no automatic re-derivation on every visit.
 
 Gotcha: two tabs writing the same local project — last write wins.
 

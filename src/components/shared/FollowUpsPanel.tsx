@@ -1,65 +1,82 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { z } from 'zod';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NodeKind } from '@/data/nodes';
-import { FollowUpItemSchema, type FollowUpItem } from '@/lib/ai/follow-ups';
+import type { FollowUpItem } from '@/lib/ai/follow-ups';
 import { inputsOf } from '@/lib/model/context';
 import type { Item } from '@/lib/model/item-types';
-import { readUi, UI_KEY, writeUi } from '@/lib/store/ui-cache';
+import {
+  failureRecord, FollowUpsCacheSchema, FollowUpsFailureSchema, planFollowUps, type FollowUpsCache,
+} from '@/lib/store/follow-ups-state';
+import { readUi, removeUi, UI_KEY, writeUi } from '@/lib/store/ui-cache';
 import { useProject } from '@/components/project/ProjectStore';
 import { useAiAction } from '@/components/project/useAiAction';
 import { NodeFollowUpsRunner } from './NodeFollowUpsRunner';
 
 // Copilot follow-up questions derived from a node's output (not items: regenerable prompts).
-// Derived once per node and kept with their answers in the browser's UI cache.
-
-const FollowUpsCache = z.object({
-  items: z.array(FollowUpItemSchema),
-  answers: z.record(z.string(), z.string()).default({}),
-});
-type FollowUps = z.output<typeof FollowUpsCache>;
+// Derived once per node and kept with their answers in the browser's UI cache. A failed
+// derivation is remembered for the node's current inputs and offered as a manual retry instead
+// of calling the AI again on every visit (src/lib/store/follow-ups-state.ts).
 
 function contentOf(items: readonly Item[]) {
   return { items: items.map((i) => ({ type: i.type, decision: i.decision, body: i.body })) };
 }
 
-export function FollowUpsPanel({ node, items }: { node: NodeKind; items: readonly Item[] }) {
+function useFollowUps(node: NodeKind, items: readonly Item[]) {
   const { store } = useProject();
-  const ai = useAiAction();
-  const key = UI_KEY.followUps(node);
-  const [state, setState] = useState<FollowUps | null>(null);
-  const triedRef = useRef(false);
-  const hasContent = items.length > 0;
+  const { projectId } = store;
+  const { run, running } = useAiAction();
+  const [cache, setCache] = useState<FollowUpsCache | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const startedRef = useRef(false);
+  const inputs = useMemo(() => inputsOf(items), [items]);
+
+  const derive = useCallback(async () => {
+    setFailed(null);
+    removeUi(projectId, UI_KEY.followUpsFailure(node));
+    const res = await run<{ follow_ups: FollowUpItem[] }>('derive', {
+      route: '/api/ai/derive-follow-ups', body: { nodeKind: node, content: contentOf(items) }, node, inputs,
+    });
+    if (res.ok) {
+      const next = { items: res.data.follow_ups, answers: {} };
+      writeUi(projectId, UI_KEY.followUps(node), next);
+      setCache(next);
+    } else if (!res.aborted) {
+      writeUi(projectId, UI_KEY.followUpsFailure(node), failureRecord(inputs, res.message));
+      setFailed(res.message);
+    }
+  }, [run, projectId, node, items, inputs]);
 
   useEffect(() => {
-    const cached = readUi(store.projectId, key, FollowUpsCache);
-    if (cached) return setState(cached);
-    if (!hasContent || triedRef.current) return;
-    triedRef.current = true;
-    void ai.run<{ follow_ups: FollowUpItem[] }>('derive', {
-      route: '/api/ai/derive-follow-ups', body: { nodeKind: node, content: contentOf(items) }, node, inputs: inputsOf(items),
-    }).then((res) => {
-      if (!res.ok) return;
-      const next = { items: res.data.follow_ups, answers: {} };
-      writeUi(store.projectId, key, next);
-      setState(next);
+    const plan = planFollowUps({
+      cache: readUi(projectId, UI_KEY.followUps(node), FollowUpsCacheSchema),
+      failure: readUi(projectId, UI_KEY.followUpsFailure(node), FollowUpsFailureSchema),
+      inputs,
     });
-    // Derive once per mount when content exists; later edits do not re-derive.
+    if (plan.kind === 'show') setCache(plan.cache);
+    if (plan.kind === 'failed') setFailed(plan.message);
+    if (plan.kind !== 'derive' || startedRef.current) return;
+    startedRef.current = true;
+    void derive();
+    // Planned once per mount when content exists; later edits do not re-derive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.projectId, key, hasContent]);
+  }, [projectId, node, inputs.length > 0]);
 
-  const applyAnswer = (field: string, answer: string) => {
-    if (!state) return;
-    const next = { ...state, answers: { ...state.answers, [field]: answer } };
-    writeUi(store.projectId, key, next);
-    setState(next);
+  const answer = (field: string, value: string) => {
+    if (!cache) return;
+    const next = { ...cache, answers: { ...cache.answers, [field]: value } };
+    writeUi(projectId, UI_KEY.followUps(node), next);
+    setCache(next);
   };
+  return { cache, failed, running: running !== null, retry: () => void derive(), answer };
+}
 
-  if (ai.running) return <DerivingCard />;
-  if (ai.error) return <DeriveError message={ai.error} />;
-  if (!state || state.items.length === 0) return null;
-  return <NodeFollowUpsRunner items={state.items} answers={state.answers} onAnswer={applyAnswer} />;
+export function FollowUpsPanel({ node, items }: { node: NodeKind; items: readonly Item[] }) {
+  const f = useFollowUps(node, items);
+  if (f.running) return <DerivingCard />;
+  if (f.failed) return <DeriveError message={f.failed} onRetry={f.retry} />;
+  if (!f.cache || f.cache.items.length === 0) return null;
+  return <NodeFollowUpsRunner items={f.cache.items} answers={f.cache.answers} onAnswer={f.answer} />;
 }
 
 function DerivingCard() {
@@ -71,11 +88,13 @@ function DerivingCard() {
   );
 }
 
-function DeriveError({ message }: { message: string }) {
+function DeriveError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="cop-runner" style={{ borderColor: 'var(--danger)' }}>
       <div className="cop-runner-tag" style={{ background: 'var(--warn-soft)', color: 'var(--danger)' }}>追问派生失败</div>
       <div style={{ fontSize: 12, color: 'var(--danger)', fontFamily: 'var(--mono)' }}>{message}</div>
+      <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 6 }}>不会自动重试；本节点产出变化后会重新派生。</div>
+      <button type="button" className="btn btn-ghost btn-xs" style={{ marginTop: 8 }} onClick={onRetry}>重试派生</button>
     </div>
   );
 }
