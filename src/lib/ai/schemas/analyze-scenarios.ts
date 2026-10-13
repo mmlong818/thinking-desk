@@ -1,6 +1,7 @@
 // Client-safe task contract: Zod schemas, types and UI constants only. Never import the router,
 // providers or tasks here (enforced by client-safety.test.ts).
 import { z } from 'zod';
+import { StanceField } from './stance';
 
 export const DIMENSION_KEYS = [
   'time',
@@ -128,11 +129,12 @@ export type DesignInsight = z.infer<typeof DesignInsightSchema>;
 
 export const ScenarioDeepAnalysisSchema = z.object({
   matrix: z.array(MatrixCellSchema),
-  extremes: z.array(ExtremeScenarioSchema).min(3).max(8),
-  hostiles: z.array(HostileScenarioSchema).min(2).max(6),
-  pain_points: z.array(PainPointSchema).min(3),
+  // Extremes, hostiles, pain points and insights carry the AI's verdict; the item bodies above stay stance-free.
+  extremes: z.array(ExtremeScenarioSchema.extend({ stance: StanceField })).min(3).max(8),
+  hostiles: z.array(HostileScenarioSchema.extend({ stance: StanceField })).min(2).max(6),
+  pain_points: z.array(PainPointSchema.extend({ stance: StanceField })).min(3),
   delight_points: z.array(DelightPointSchema),
-  design_insights: z.array(DesignInsightSchema).min(3).max(10),
+  design_insights: z.array(DesignInsightSchema.extend({ stance: StanceField })).min(3).max(10),
   critiques: z
     .array(
       z.object({

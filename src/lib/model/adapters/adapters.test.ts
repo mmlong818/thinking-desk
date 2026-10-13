@@ -24,6 +24,7 @@ import { jobBody, makeItem, PROJECT, runInput, seqIdSource, T1 } from '../__fixt
 import type { Item } from '../item-types';
 import { planRunOutput, type RunPlan } from '../plan-run';
 import type { AiTask } from '../../ai/types';
+import { briefRequestContext } from '../context';
 import { NO_STANCE_REASON, UNEXPLAINED_REASON, type AdaptedOutput } from './common';
 import {
   adaptAlternatives, adaptDeepAnalysis, adaptDesignProposal, adaptDimensions, adaptExtractBrief,
@@ -64,6 +65,47 @@ describe('brief adapter', () => {
     const [asm] = ofType(plan, 'assumption');
     expect(asm.body).toMatchObject({ statement: '学生愿意每天用', rationale: '没有数据', status: 'untested' });
     expect(linksFrom(plan, brief.id)).toEqual([expect.objectContaining({ to: asm.id, rel: 'assumes' })]);
+  });
+
+  it('red lines the brief states are recommended; the ones the AI inferred are neutral with its own reason', () => {
+    const inferred = BriefExtractionSchema.parse({
+      ...validBrief,
+      fields: { ...validBrief.fields, red_lines: ['不收集生物信息'] },
+      inferred_red_lines: [
+        { text: '不向未成年人推送付费内容', reason: 'K12 场景 · 原文没提' },
+        { text: '不收集生物信息', reason: '与原文重复' },
+        { text: '不使用虚假紧迫感', reason: ' ' },
+      ],
+    });
+    const plan = ingest(adaptExtractBrief(inferred, { rawText: 'r', answers: [] }), 'brief', 'BRIEF_EXTRACT');
+    expect(blocking(plan)).toEqual([]);
+    expect(ofType(plan, 'red_line').map((r) => [r.body, r.aiStance])).toEqual([
+      [{ text: '不收集生物信息' }, { verdict: 'recommend', reason: 'Brief 原文写明' }],
+      [{ text: '不向未成年人推送付费内容' }, { verdict: 'neutral', reason: 'K12 场景 · 原文没提' }],
+      [{ text: '不使用虚假紧迫感' }, { verdict: 'neutral', reason: UNEXPLAINED_REASON }],
+    ]);
+  });
+
+  it('an output without inferred red lines (the shape before the split) still adapts', () => {
+    expect(out.inferred_red_lines).toEqual([]);
+    const plan = ingest(adaptExtractBrief(out, { rawText: 'r', answers: [] }), 'brief', 'BRIEF_EXTRACT');
+    expect(ofType(plan, 'red_line')).toHaveLength(1);
+  });
+
+  it('downstream reads stated and inferred red lines alike, and never a rejected one', () => {
+    const inferred = BriefExtractionSchema.parse({
+      ...validBrief,
+      fields: { ...validBrief.fields, red_lines: ['A 原文'] },
+      inferred_red_lines: [{ text: 'B 推断', reason: 'r' }, { text: 'C 推断', reason: 'r' }],
+    });
+    const plan = ingest(adaptExtractBrief(inferred, { rawText: 'r', answers: [] }), 'brief', 'BRIEF_EXTRACT');
+    const decide = (decisions: Record<string, 'accepted' | 'rejected'>): Item[] =>
+      plan.created.map((i) => (i.type === 'red_line' ? { ...i, decision: decisions[i.body.text.slice(0, 1)] ?? 'pending' } : i));
+    const lines = (items: Item[]) => briefRequestContext(items)?.brief.fields.red_lines;
+    expect(lines(decide({}))).toEqual(['A 原文', 'B 推断', 'C 推断']);
+    expect(lines(decide({ A: 'accepted', B: 'accepted' }))).toEqual(['A 原文', 'B 推断']);
+    expect(lines(decide({ B: 'accepted' }))).toEqual(['B 推断']);
+    expect(lines(decide({ C: 'rejected' }))).toEqual(['A 原文', 'B 推断']);
   });
 
   it('recommends the brief once completeness reaches the threshold', () => {
@@ -154,6 +196,15 @@ describe('alternatives adapter', () => {
     expect(alts.every((a) => a.aiStance?.verdict === 'recommend')).toBe(true);
   });
 
+  it("the hypothesis takes the model's own verdict; a missing one is neutral, never recommend", () => {
+    const stanced = AlternativesAnalysisSchema.parse({ ...validAlternatives, differentiation_stance: { verdict: 'caution', reason: '"更懂学生"经不起三问' } });
+    const [h] = ofType(ingest(adaptAlternatives(stanced), 'alt', 'ALT_SCAN'), 'diff_hypothesis');
+    expect(h.aiStance).toEqual({ verdict: 'caution', reason: '"更懂学生"经不起三问' });
+    expect('differentiation_stance' in h.body).toBe(false);
+    const bare = AlternativesAnalysisSchema.parse(validAlternatives);
+    expect(ofType(ingest(adaptAlternatives(bare), 'alt', 'ALT_SCAN'), 'diff_hypothesis')[0].aiStance).toEqual({ verdict: 'neutral', reason: NO_STANCE_REASON });
+  });
+
   it('moves the cited URLs into evidence.sources (web basis, unchecked, no invented confidence)', () => {
     const data = AlternativesAnalysisSchema.parse(validAlternatives);
     const withUrls = { ...data, alternatives: data.alternatives.map((a, i) => (i === 0 ? { ...a, sources: ['https://example.org/a', 'https://example.org/b'] } : a)) };
@@ -204,7 +255,27 @@ describe('scenario adapters', () => {
     const pain = ofType(plan, 'pain_point')[0];
     const [insight] = ofType(plan, 'insight');
     expect(linksFrom(plan, insight.id).map((l) => [l.to, l.rel])).toEqual([['scn_1', 'derived_from'], [pain.id, 'addresses']]);
-    expect(ofType(plan, 'hostile').every((h) => h.aiStance?.verdict === 'recommend')).toBe(true);
+  });
+
+  it("deep: extremes, hostiles, pain points and insights take the model's own verdict; missing is neutral", () => {
+    const stance = (verdict: 'recommend' | 'neutral' | 'caution', reason: string) => ({ verdict, reason });
+    const first = <T extends object>(xs: T[], extra: object) => xs.map((x, i) => (i === 0 ? { ...x, ...extra } : x));
+    const data = ScenarioDeepAnalysisSchema.parse({
+      ...validDeepAnalysis,
+      extremes: first(validDeepAnalysis.extremes, { stance: stance('recommend', '直接击中核心流程') }),
+      hostiles: first(validDeepAnalysis.hostiles, { stance: stance('caution', '缓解措施依赖人工审核') }),
+      pain_points: first(validDeepAnalysis.pain_points, { stance: stance('recommend', '三层追问都有依据') }),
+      design_insights: first(validDeepAnalysis.design_insights, { stance: stance('neutral', '取决于团队取舍') }),
+    });
+    const plan = ingest(adaptDeepAnalysis(data), 'scen', 'SCEN_PAIN');
+    const missing = { verdict: 'neutral', reason: NO_STANCE_REASON };
+    const stances = (type: Item['type']) => ofType(plan, type).map((i) => i.aiStance);
+    expect(stances('extreme')).toEqual([stance('recommend', '直接击中核心流程'), missing, missing]);
+    expect(stances('hostile')).toEqual([stance('caution', '缓解措施依赖人工审核'), missing]);
+    expect(stances('pain_point')[0]).toEqual(stance('recommend', '三层追问都有依据'));
+    expect(stances('pain_point')[1]).toEqual(missing);
+    expect(stances('insight')[0]).toEqual(stance('neutral', '取决于团队取舍'));
+    expect(plan.created.some((i) => 'stance' in (i.body as object))).toBe(false);
   });
 });
 
