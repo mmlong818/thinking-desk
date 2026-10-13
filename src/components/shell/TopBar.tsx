@@ -3,6 +3,7 @@ import { getNode, nextNodeKind, type NodeKind } from '@/data/nodes';
 import type { StoreRef } from '@/lib/store/store-ref';
 import { ModelPicker } from './ModelPicker';
 import { ClientProjectName } from './ClientProjectName';
+import { ConsistencyButton } from './ConsistencyButton';
 import { ExportButton } from './ExportButton';
 
 interface Props {
@@ -43,6 +44,7 @@ export function TopBar({ projectName, projectSlug, nodeKind, currentLocked, curr
       <div className="top-actions">
         <ModelPicker />
         <div className="sep-v" style={{ margin: '0 4px' }} />
+        <ConsistencyButton node={nodeKind} />
         <ExportButton projectSlug={projectSlug} projectName={projectName} store={store} />
         <div style={{ width: 8 }} />
         <NextButton

@@ -5,6 +5,7 @@ import type { Item } from '@/lib/model/item-types';
 import { useItemActions } from '@/components/project/useItemActions';
 import { useNodeData } from '@/components/project/useNodeData';
 import { ITEM_TYPE_LABEL } from './item-labels';
+import { ConsistencyNotice } from './ConsistencyViews';
 import { StaleNotice } from './StaleContent';
 
 // Node-level judging aids: how many items wait for a decision, what completes the node,
@@ -75,6 +76,7 @@ export function JudgeBar({ node, judged }: { node: NodeKind; judged?: readonly I
         <AcceptRecommendedButton node={node} />
       </div>
       <StaleNotice node={node} />
+      <ConsistencyNotice node={node} />
       <NodeHints node={node} />
     </div>
   );

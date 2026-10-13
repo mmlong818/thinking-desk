@@ -107,37 +107,38 @@ export default async function NodePage({ params }: { params: Promise<{ id: strin
   const next = NODES.find((n) => n.num > def.num);
   const nextMissing = next ? missingDeps(next.kind, completedSet) : [];
 
+  // The provider wraps the whole page: the top bar's consistency panel reads the project too, and
+  // on the lock screen it re-derives completion from localStorage (pure-local mode) and refreshes
+  // the page when the cookie was stale or missing.
   return (
-    <div className="app">
-      <TopBar
-        projectName={project.name}
-        projectSlug={project.slug}
-        nodeKind={def.kind}
-        currentLocked={currentLocked}
-        currentMissing={currentMissing}
-        nextLockedReason={nextMissing.length ? nextMissing : null}
-        store={project.store}
-      />
-      <div className="main">
-        <NavRail
-          projectSlug={project.slug}
+    <ProjectStoreProvider store={project.store} slug={project.slug} initial={graph} completed={completed}>
+      <div className="app">
+        <TopBar
           projectName={project.name}
-          active={def.kind}
-          completed={completed}
-          lockedKinds={lockedKinds}
+          projectSlug={project.slug}
+          nodeKind={def.kind}
+          currentLocked={currentLocked}
+          currentMissing={currentMissing}
+          nextLockedReason={nextMissing.length ? nextMissing : null}
           store={project.store}
         />
-        {/* The provider also wraps the lock screen: in pure-local mode it re-derives completion
-            from localStorage and refreshes the page when the cookie was stale or missing. */}
-        <ProjectStoreProvider store={project.store} slug={project.slug} initial={graph} completed={completed}>
+        <div className="main">
+          <NavRail
+            projectSlug={project.slug}
+            projectName={project.name}
+            active={def.kind}
+            completed={completed}
+            lockedKinds={lockedKinds}
+            store={project.store}
+          />
           {currentLocked ? (
             <LockedNode projectSlug={project.slug} current={def.kind} missing={currentMissing} />
           ) : (
             NODE_COMPONENTS[def.kind]()
           )}
-        </ProjectStoreProvider>
+        </div>
       </div>
-    </div>
+    </ProjectStoreProvider>
   );
 }
 
