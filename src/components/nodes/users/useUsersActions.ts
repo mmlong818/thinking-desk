@@ -30,7 +30,7 @@ function refine(ctx: Ctx, personas: readonly PersonaItem[]) {
       ...base(ctx),
       selectedPersonas: personas.map(personaPayload),
       existingJobs: jobsByDimension(jobs, data.links),
-      feedback: buildFeedback(data.all, [{ node: 'users', type: 'job' }]),
+      feedback: buildFeedback(data.all, [{ node: 'users', type: 'job' }], data.links),
     },
     node: 'users', inputs: inputsOf(brief?.items ?? [], personas, jobs), adapt: adaptJobsRefinement,
   });
@@ -47,7 +47,7 @@ async function addMore(ctx: Ctx) {
       ...base(ctx),
       existing: existing.map(personaPayload),
       lockedIds: existing.filter((p) => p.decision === 'accepted').map((p) => p.id),
-      feedback: buildFeedback(data.all, [{ node: 'users', type: 'persona' }]),
+      feedback: buildFeedback(data.all, [{ node: 'users', type: 'persona' }], data.links),
     },
     node: 'users', inputs: inputsOf(brief.items, existing), adapt: adaptPersonaBatch,
   });
@@ -68,7 +68,7 @@ export function useUsersActions(data: NodeData, brief: BriefRequestContext | nul
     if (!brief) return;
     void ai.run('analyze', {
       route: '/api/ai/analyze-users',
-      body: { ...base(ctx), feedback: buildFeedback(data.all, [{ node: 'users', type: 'persona' }, { node: 'users', type: 'job' }]) },
+      body: { ...base(ctx), feedback: buildFeedback(data.all, [{ node: 'users', type: 'persona' }, { node: 'users', type: 'job' }], data.links) },
       node: 'users', inputs: inputsOf(brief.items), adapt: adaptUsersAnalysis,
     });
   };

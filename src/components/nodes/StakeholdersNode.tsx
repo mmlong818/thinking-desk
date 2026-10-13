@@ -43,7 +43,7 @@ function useStakeAnalysis(data: NodeData, brief: BriefRequestContext | null) {
         ...briefPayload(brief),
         personas: personas.map(personaPayload),
         lockedJobs: jobs.map((j) => jobPayload(j, data.links)),
-        feedback: buildFeedback(data.all, [{ node: 'stake', type: 'stakeholder' }]),
+        feedback: buildFeedback(data.all, [{ node: 'stake', type: 'stakeholder' }], data.links),
       },
       node: 'stake',
       inputs: inputsOf(brief.items, personas, jobs),
@@ -101,6 +101,7 @@ export function StakeholdersNode() {
   return (
     <NodeFrame
       wide
+      redo={[{ label: '重新分析干系人', types: ['stakeholder', 'engagement_plan'], run: analyze, busy: running }]}
       copilot={
         <Copilot
           projectSlug={slug} nodeKind="stake" cards={cards} pending={stage === 'analyzing'}

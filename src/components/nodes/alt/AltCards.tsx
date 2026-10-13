@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import type { ItemOfType } from '@/lib/model/context';
 import type { Link } from '@/lib/model/types';
 import { linkedIds } from '@/lib/store/request-context';
+import { checkableEvidence } from '@/lib/store/source-check';
 import { EditableItemFields } from '@/components/shared/EditableItemFields';
 import { EvidenceLine, ItemDecision, RejectionNote, StanceBadge } from '@/components/shared/ItemDecision';
 import { CATEGORY_META, MOAT_META, THREAT_META, type AltItem } from './alt-meta';
@@ -47,14 +48,7 @@ function AltCard({ item }: { item: AltItem }) {
       </div>
       <div className="alt-card-desc">{a.description}</div>
       <div className="alt-card-job"><b>用户为什么用它：</b>{a.why_users_use}</div>
-      {a.sources.length > 0 ? (
-        <div className="alt-card-sources">
-          {a.sources.slice(0, 3).map((s, i) => (
-            <a key={i} href={s} target="_blank" rel="noopener noreferrer" className="alt-source-link">[source {i + 1}]</a>
-          ))}
-        </div>
-      ) : null}
-      <EvidenceLine evidence={item.evidence} />
+      <EvidenceLine evidence={checkableEvidence(item) ?? item.evidence} />
       <div className="alt-card-judge">
         <StanceBadge stance={item.aiStance} />
         <ItemDecision item={item} onToggleEdit={() => setEditing((v) => !v)} editing={editing} showNote={false} />

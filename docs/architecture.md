@@ -12,9 +12,11 @@ Browser
   │       completion derived from items); otherwise pure-local mode (completion from the td-done
   │       cookie). Renders the node or the lock screen inside a ProjectStoreProvider
   │
-  ├─ GET|POST|PATCH /api/projects/[id]/{graph,runs,items,items/[itemId],accept-recommended,fork}
+  ├─ GET|POST|PATCH /api/projects/[id]/{graph,runs,items,items/[itemId],accept-recommended,fork,links,links/refresh,events}
   ├─ DELETE /api/projects/[id]  (whole project, one transaction)
   │    └─ Postgres mode only: PgRepository behind Zod-validated handlers (src/lib/api/project-api.ts)
+  │
+  ├─ POST /api/sources/verify   (server-side check of cited URLs, SSRF-guarded; src/lib/sources/)
   │
   └─ POST /api/ai/<task>
        └─ aiRoute() (src/lib/ai/route.ts) validates the body and upstream snapshots (Zod)
@@ -29,7 +31,9 @@ Browser
 
 Most routes answer plain JSON from a single `complete()` call. The scenarios route is the streaming pilot (`aiRoute({ stream: true })`): a client that sends `Accept: application/x-ndjson` gets NDJSON events — `attempt` (provider, model, whether it streams, and on a retry why), `delta` (answer text), then exactly one `done` (the same `{ ok, data, run }` body) or `error` (the error body plus its HTTP status). Validation and the one retry stay in `runTask()`, so a retry is a new `attempt` whose text starts over. Wire format: `src/lib/ai/stream-protocol.ts`; server side `stream-route.ts`; browser side `src/lib/store/ai-stream.ts`. Closing the page or pressing 取消 cancels the body, which aborts the task's signal and the provider call. `run` is the run metadata (provider, model, promptVersion, usage, latency, status) shaped for the `Run` record of the data model. AI routes stay stateless (they work from the snapshots in the request body); the browser persists the run and its output through the project's repository (`runAiAction()` in `src/lib/store/ai-action.ts`), so pure-local and Postgres mode share one code path.
 
-`src/middleware.ts` sits in front of `/api/*`: optional bearer-token auth (`REQUIRE_AUTH`) and a per-IP in-memory rate limit on `/api/ai/*`.
+`src/middleware.ts` sits in front of `/api/*`: optional bearer-token auth (`REQUIRE_AUTH`) and a per-IP in-memory rate limit on `/api/ai/*` and, in its own bucket, `/api/sources/*`.
+
+Exports (PRD Markdown, Jira / Linear CSV, GitHub issues JSON) are built in the browser from the items (`src/lib/export/`) and downloaded; nothing is sent to an external service ([exports.md](exports.md)).
 
 ## Persistence Layers
 
@@ -87,10 +91,12 @@ Adding a provider: implement the `AiProvider` interface and register it in the `
 
 ```
 app/project/[id]/[node]/page.tsx
-  └─ shell/TopBar              ← ModelPicker, ExportButton (Markdown / JSON of the graph)
-  └─ shell/NavRail             ← ForkButton
-  └─ project/ProjectStoreProvider
-       └─ <NodeComponent>     ← one of: BriefNode, UsersNode, …, SplitNode (or LockedNode)
-            ├─ shared/JudgeBar, ItemDecision / JudgeStrip, UpstreamContext, …
-            └─ shell/Copilot  ← AI cards, follow-ups, free-form questions
+  └─ project/ProjectStoreProvider   (wraps the whole page: the top bar reads the project too)
+       ├─ shell/TopBar              ← ModelPicker, ConsistencyButton (rule + AI findings panel), ExportButton
+       ├─ shell/NavRail             ← ForkButton
+       └─ <NodeComponent>          ← one of: BriefNode, UsersNode, …, SplitNode (or LockedNode)
+            └─ shared/NodeFrame (redo handlers for "让 AI 按新内容重做")
+                 ├─ shared/JudgeBar  ← counts, accept-all, 上游变化 notice, consistency notice, source checks, hints
+                 ├─ ItemDecision / JudgeStrip (+ "上游已变" badge), LinkPicker, UpstreamContext, …
+                 └─ shell/Copilot    ← AI cards, follow-ups, free-form questions
 ```

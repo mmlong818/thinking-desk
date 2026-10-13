@@ -4,6 +4,7 @@ import { DimensionsResultSchema, ScenarioDeepAnalysisSchema, ScenarioDraftsSchem
 import { StakeholdersAnalysisSchema } from '../../src/lib/ai/schemas/analyze-stakeholders';
 import { JobsRefinementSchema, PersonaBatchSchema, UsersAnalysisSchema } from '../../src/lib/ai/schemas/analyze-users';
 import { ClarifyResultSchema } from '../../src/lib/ai/schemas/clarify-brief';
+import { ConsistencyCheckSchema } from '../../src/lib/ai/schemas/consistency-check';
 import { CreativeLeapAnalysisSchema, MORE_ITEMS_SCHEMAS } from '../../src/lib/ai/schemas/creative-leap';
 import { DeriveFollowUpsResultSchema } from '../../src/lib/ai/schemas/derive-follow-ups';
 import { FeatureListSchema } from '../../src/lib/ai/schemas/draft-features';
@@ -14,6 +15,7 @@ import { FeatureRevisionSchema } from '../../src/lib/ai/schemas/revise-features'
 import { SubfeatureBreakdownSchema } from '../../src/lib/ai/schemas/split-subfeatures';
 import { validAlternatives } from '../../src/lib/ai/schemas/__fixtures__/alternatives';
 import { validClarifyAsk, validClarifyProceed } from '../../src/lib/ai/schemas/__fixtures__/clarify-brief';
+import { emptyConsistencyCheck, validConsistencyCheck } from '../../src/lib/ai/schemas/__fixtures__/consistency-check';
 import { validLeap, validMoreItems } from '../../src/lib/ai/schemas/__fixtures__/creative-leap';
 import { validFeatureList } from '../../src/lib/ai/schemas/__fixtures__/draft-features';
 import { validBrief } from '../../src/lib/ai/schemas/__fixtures__/extract-brief';
@@ -96,5 +98,6 @@ export const SCHEMA_FIXTURES: ReadonlyArray<{ task: AiTask; name: string; schema
   { task: 'LEAP_CONSTRAINT_FLIP', name: 'MoreItems.constraint_flips', schema: MORE_ITEMS_SCHEMAS.constraint_flips, fixtures: [moreConstraintFlips] },
   { task: 'DESIGN_PROPOSAL', name: 'DesignProposal', schema: DesignProposalSchema, fixtures: [validDesign, designWithStances] },
   { task: 'SPLIT_SUBFEATURES', name: 'SubfeatureBreakdown', schema: SubfeatureBreakdownSchema, fixtures: [validBreakdown, breakdownWithStances] },
+  { task: 'CONSISTENCY_CHECK', name: 'ConsistencyCheck', schema: ConsistencyCheckSchema, fixtures: [validConsistencyCheck, emptyConsistencyCheck] },
   { task: 'FOLLOW_UPS', name: 'DeriveFollowUpsResult', schema: DeriveFollowUpsResultSchema, fixtures: [FOLLOW_UPS_FIXTURE] },
 ];

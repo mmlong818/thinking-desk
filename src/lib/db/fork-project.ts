@@ -25,8 +25,8 @@ export const FORK_SQL = {
   copyLinks: `INSERT INTO links (project_id, id, from_id, to_id, rel, to_version_seen, created_at)
     SELECT $2, id, from_id, to_id, rel, to_version_seen, created_at FROM links WHERE project_id = $1`,
   copyEvents: `INSERT INTO decision_events (project_id, id, item_id, kind, from_version, to_version, note, prev_body,
-                               actor, at)
-    SELECT $2, id, item_id, kind, from_version, to_version, note, prev_body, actor, at
+                               link, actor, at)
+    SELECT $2, id, item_id, kind, from_version, to_version, note, prev_body, link, actor, at
     FROM decision_events WHERE project_id = $1 ORDER BY seq`,
 } as const;
 

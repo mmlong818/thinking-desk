@@ -85,7 +85,13 @@ export function LeapNode() {
   );
   if (!data.loading && !brief) return <NodeFrame copilot={copilot}><MissingLeapUpstream /></NodeFrame>;
   return (
-    <NodeFrame wide copilot={copilot}>
+    <NodeFrame wide copilot={copilot} redo={[
+      { label: '重新跃迁分析', types: LEAP_TYPES, run: actions.run, busy: actions.running !== null },
+      {
+        label: '重新应用跃迁', node: 'final', types: ['feature', 'pillar', 'not_doing', 'revision'],
+        run: actions.revise, busy: actions.running !== null,
+      },
+    ]}>
       <NodeHat kind="leap" chip={STAGE_CHIP[stage]} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">

@@ -39,7 +39,7 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 **Section:** Four-Dimensional Analysis  
 **Deps:** `brief`  
 **Purpose:** Scan competitive landscape — direct alternatives, indirect alternatives, and non-consumption (doing nothing / workarounds).  
-**Primary AI task:** `ALT_SCAN`  
+**Primary AI task:** `ALT_SCAN` (cited URLs become evidence sources; “核实本节点来源” checks them on the server)  
 **Component:** `AlternativesNode.tsx`
 
 ---
@@ -88,7 +88,7 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 
 **Section:** Start Designing  
 **Deps:** `final`  
-**Purpose:** Break the design proposal into concrete, executable subfeatures/tasks ready for a sprint backlog.  
+**Purpose:** Break the design proposal into concrete, executable subfeatures/tasks ready for a sprint backlog. Dependencies between subtasks are editable by hand (no cycles); accepted subtasks export as Jira / Linear CSV or GitHub issues ([exports.md](exports.md)).  
 **AI task:** `SPLIT_SUBFEATURES`  
 **Component:** `SplitNode.tsx`
 

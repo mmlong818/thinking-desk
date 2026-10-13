@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import type { NodeKind } from '@/data/nodes';
 import type { ProjectRepository } from '@/lib/api/project-api';
 import { completedNodes, completionCookieValue } from '@/lib/model/completion';
+import { liveGraph } from '@/lib/model/graph';
 import type { Item } from '@/lib/model/item-types';
+import { staleIndex, type StaleInfo } from '@/lib/model/staleness';
 import type { Link, Run } from '@/lib/model/types';
 import { writeCompletionCookie } from '@/lib/store/completion-cookie';
 import { createClientRepository, type StoreRef } from '@/lib/store/store-ref';
@@ -27,6 +29,8 @@ export interface ProjectStoreValue {
   repo: ProjectRepository;
   /** Null until the first load finishes. */
   snapshot: ProjectSnapshot | null;
+  /** Live items whose upstream changed after their Link was made or confirmed, by item id. */
+  stale: ReadonlyMap<string, StaleInfo>;
   loadError: string | null;
   reload: () => Promise<void>;
   /** Runs one repository write, then reloads. Errors propagate to the caller. */
@@ -88,9 +92,13 @@ export function ProjectStoreProvider({ store, slug, initial, completed, children
     }
   }, [repo, projectId, reload]);
 
+  const stale = useMemo(
+    () => (snapshot ? staleIndex(liveGraph(snapshot.items, snapshot.links)) : new Map<string, StaleInfo>()),
+    [snapshot],
+  );
   const value = useMemo<ProjectStoreValue>(
-    () => ({ store, slug, repo, snapshot, loadError, reload, write }),
-    [store, slug, repo, snapshot, loadError, reload, write],
+    () => ({ store, slug, repo, snapshot, stale, loadError, reload, write }),
+    [store, slug, repo, snapshot, stale, loadError, reload, write],
   );
   return <ProjectStoreContext.Provider value={value}>{children}</ProjectStoreContext.Provider>;
 }

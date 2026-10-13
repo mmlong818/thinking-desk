@@ -49,7 +49,7 @@ function combine(ctx: Ctx, setError: (m: string) => void) {
     route: '/api/ai/scenarios',
     body: {
       action: 'combine', ...body, dimensions: dimensionsPayload(elements), selectedElementIds: picked.map((e) => e.id),
-      feedback: buildFeedback(ctx.data.all, [{ node: 'scen', type: 'scenario' }]),
+      feedback: buildFeedback(ctx.data.all, [{ node: 'scen', type: 'scenario' }], ctx.data.links),
     },
     node: 'scen', inputs: [...inputs, ...inputsOf(picked)], adapt: adaptScenarioDrafts, stream: true,
   });
@@ -69,7 +69,7 @@ function deep(ctx: Ctx, setError: (m: string) => void) {
       action: 'deep', ...body,
       scenarios: scenarios.filter((s) => s.decision !== 'rejected').map((s) => scenarioPayload(s, ctx.data.links, jobIds)),
       pickedScenarioIds: picked.map((s) => s.id),
-      feedback: buildFeedback(ctx.data.all, scope),
+      feedback: buildFeedback(ctx.data.all, scope, ctx.data.links),
     },
     node: 'scen', inputs: [...inputs, ...inputsOf(picked)], adapt: adaptDeepAnalysis, stream: true,
   });
@@ -97,7 +97,7 @@ export function useScenActions(data: NodeData, brief: BriefRequestContext | null
     exhaust: () => {
       if (!ctx) return;
       const { body, inputs } = common(ctx);
-      const feedback = buildFeedback(data.all, [{ node: 'scen', type: 'scenario_element' }]);
+      const feedback = buildFeedback(data.all, [{ node: 'scen', type: 'scenario_element' }], data.links);
       void finish(ai.run('exhaust', {
         route: '/api/ai/scenarios', body: { action: 'exhaust', ...body, feedback }, node: 'scen', inputs, adapt: adaptDimensions, stream: true,
       }));

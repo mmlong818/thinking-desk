@@ -73,7 +73,7 @@ function revise(ctx: Ctx) {
       },
       leaps: leapSnapshot(liveLeaps(data)),
       selectedLeapIds: picked.map((l) => l.id),
-      feedback: buildFeedback(data.all, scope),
+      feedback: buildFeedback(data.all, scope, data.links),
     },
     node: 'final',
     inputs: [...inputs, ...inputsOf(picked)],
@@ -94,7 +94,7 @@ export function useLeapActions(data: NodeData, brief: BriefRequestContext | null
       if (!ctx) return;
       const { body, inputs } = leapContext(ctx);
       void ai.run('analyze', {
-        route: '/api/ai/creative-leap', body: { action: 'initial', ...body, feedback: buildFeedback(data.all, types) },
+        route: '/api/ai/creative-leap', body: { action: 'initial', ...body, feedback: buildFeedback(data.all, types, data.links) },
         node: 'leap', inputs, adapt: adaptLeapAnalysis,
       });
     },
@@ -104,7 +104,7 @@ export function useLeapActions(data: NodeData, brief: BriefRequestContext | null
       const existing = data.of(type).filter((l) => l.decision !== 'rejected').map((l) => ({ id: l.id, ...l.body }));
       void ai.run(`more:${type}`, {
         route: '/api/ai/creative-leap',
-        body: { action: 'more', category: CATEGORY_OF[type], existing, ...body, feedback: buildFeedback(data.all, [{ node: 'leap', type }]) },
+        body: { action: 'more', category: CATEGORY_OF[type], existing, ...body, feedback: buildFeedback(data.all, [{ node: 'leap', type }], data.links) },
         node: 'leap', inputs, adapt: adaptMoreLeapItems,
       });
     },

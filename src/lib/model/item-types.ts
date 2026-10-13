@@ -26,6 +26,7 @@ import {
   UserFlowSchema,
 } from '../ai/schemas/generate-design';
 import { SubFeatureSchema } from '../ai/schemas/split-subfeatures';
+import { ConsistencyFindingSchema } from '../ai/schemas/consistency-check';
 import type { ItemEnvelope, ItemRecord, ItemType, LinkRel } from './types';
 
 // Per-type body registry. Bodies are derived from the task response schemas:
@@ -110,6 +111,15 @@ const SummaryBody = z.object({
 });
 
 const FEATURE_NODES: readonly NodeKind[] = ['feat', 'final'];
+
+/** What a consistency finding may point at: every content type (not run prose, not other findings). */
+export const FINDING_TARGET_TYPES = [
+  'brief', 'assumption', 'red_line', 'persona', 'job', 'stakeholder', 'engagement_plan',
+  'alternative', 'alt_profile', 'alt_breakdown', 'diff_hypothesis',
+  'scenario_element', 'scenario', 'matrix_cell', 'extreme', 'hostile', 'pain_point', 'delight_point', 'insight',
+  'pillar', 'feature', 'not_doing', 'first_principle', 'analogy', 'constraint_flip',
+  'revision', 'design_section', 'module', 'subtask',
+] as const satisfies readonly ItemType[];
 
 export const ITEM_TYPE_DEFS = {
   brief: def({ prefix: 'brf', nodes: ['brief'], cardinality: 'one', body: BriefBody, refs: [] }),
@@ -241,6 +251,11 @@ export const ITEM_TYPE_DEFS = {
   }),
   summary: def({ prefix: 'sum', nodes: 'any', cardinality: 'many', body: SummaryBody, refs: [] }),
   critique: def({ prefix: 'crt', nodes: 'any', cardinality: 'many', body: CritiqueBody, refs: [] }),
+  finding: def({
+    prefix: 'fnd', nodes: 'any', cardinality: 'many',
+    body: ConsistencyFindingSchema.omit({ item_ids: true, stance: true }),
+    refs: [ref('item_ids', 'conflicts_with', [...FINDING_TARGET_TYPES])],
+  }),
 } satisfies Record<ItemType, ItemTypeDef>;
 
 export type ItemBody<T extends ItemType> = z.output<(typeof ITEM_TYPE_DEFS)[T]['body']>;

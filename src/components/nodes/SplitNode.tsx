@@ -51,7 +51,7 @@ function useSplit(data: NodeData) {
     if (!design) return;
     void ai.run('split', {
       route: '/api/ai/split-subfeatures',
-      body: { projectSlug: slug, design: design.snapshot, feedback: buildFeedback(data.all, [{ node: 'split', type: 'subtask' }]) },
+      body: { projectSlug: slug, design: design.snapshot, feedback: buildFeedback(data.all, [{ node: 'split', type: 'subtask' }], data.links) },
       node: 'split', inputs: design.inputs, adapt: adaptSubfeatureBreakdown,
     });
   };
@@ -93,7 +93,7 @@ export function SplitNode() {
     );
   }
   return (
-    <NodeFrame wide copilot={copilot}>
+    <NodeFrame wide copilot={copilot} redo={[{ label: '重新拆分子任务', types: ['subtask'], run, busy: running }]}>
       <NodeHat kind="split" chip={CHIP} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">把 08 设计案里的每个 feature → 立刻能开 ticket 的子任务。每条带 layer 标签、工作量估计、验收标准。</p>
@@ -137,7 +137,7 @@ function BreakdownView({ data, onRerun, rerunning }: { data: NodeData; onRerun: 
         </div>
         <button type="button" className="btn btn-ghost" onClick={onRerun} disabled={rerunning}>{rerunning ? '重新生成中…' : '重新拆分'}</button>
       </div>
-      {groups.map((g) => <FeatureSplitView key={g.key} group={g} links={data.links} titles={titles} />)}
+      {groups.map((g) => <FeatureSplitView key={g.key} group={g} links={data.links} titles={titles} subtasks={subtasks} />)}
     </>
   );
 }

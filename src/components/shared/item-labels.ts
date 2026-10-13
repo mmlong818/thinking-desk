@@ -33,6 +33,7 @@ export const ITEM_TYPE_LABEL: Record<ItemType, string> = {
   subtask: '子任务',
   summary: '总结',
   critique: '挑战',
+  finding: '一致性发现',
 };
 
 export interface FieldSpec {

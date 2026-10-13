@@ -18,6 +18,8 @@ export const UI_KEY = {
   followUps: (node: string) => `followups:${node}`,
   /** The last failed follow-up derivation of one node (no automatic retry for the same inputs). */
   followUpsFailure: (node: string) => `followups-failed:${node}`,
+  /** Changed run inputs of one node the person marked "still holds" (changedInputsKey string). */
+  staleAck: (node: string) => `stale-ack:${node}`,
 } as const;
 
 const keyOf = (projectId: string, key: string) => `${PREFIX}${projectId}:${key}`;

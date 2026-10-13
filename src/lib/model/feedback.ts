@@ -1,12 +1,14 @@
 import { z } from 'zod';
+import { indexById, isStale } from './graph';
 import type { Item, ItemBody } from './item-types';
 import { inScope } from './regenerate';
 import type { ReplaceScope } from './repository';
-import { ItemTypeSchema, type ItemType } from './types';
+import { ItemTypeSchema, type ItemType, type Link } from './types';
 
 // Feedback a regenerating run hands the AI (docs/data-model.md § "Regeneration"): what the person
-// kept or touched — don't duplicate it, refer to it by id — and what they rejected, with their
-// reason, so the next output steers away from it.
+// kept or touched — don't duplicate it, refer to it by id — what they rejected, with their
+// reason, so the next output steers away from it, and what they kept but whose upstream has
+// changed since (stale Links), so the AI may propose an updated version next to it.
 
 const FeedbackEntry = z.object({
   id: z.string().min(1).max(100),
@@ -17,6 +19,8 @@ const FeedbackEntry = z.object({
 export const RegenerationFeedbackSchema = z.object({
   keep: z.array(FeedbackEntry).max(60).default([]),
   avoid: z.array(FeedbackEntry.extend({ note: z.string().max(1000).optional() })).max(60).default([]),
+  /** Kept items whose upstream changed after they were made: `changed` names the new upstream. */
+  revisit: z.array(FeedbackEntry.extend({ changed: z.string().max(600) })).max(60).default([]),
 });
 export type RegenerationFeedback = z.output<typeof RegenerationFeedbackSchema>;
 
@@ -57,6 +61,7 @@ const SUMMARY: Summarizers = {
   subtask: (b) => b.title,
   summary: (b) => b.text,
   critique: (b) => b.title,
+  finding: (b) => b.title,
 };
 
 function designSectionSummary(b: ItemBody<'design_section'>): string {
@@ -82,20 +87,44 @@ export function itemSummary(item: Item): string {
   return clip(fn(item.body));
 }
 
-/** Kept = accepted or human-touched (not rejected); avoided = rejected, with the decision note. */
-export function buildFeedback(items: readonly Item[], scopes: readonly ReplaceScope[]): RegenerationFeedback {
+/** "<type> <summary>" of each upstream item whose change made `item` stale, or '' when it is not stale. */
+function changedUpstream(item: Item, links: readonly Link[], byId: ReadonlyMap<string, Item>): string {
+  const changed = links
+    .filter((l) => l.from === item.id && isStale(l, byId))
+    .map((l) => byId.get(l.to))
+    .filter((to): to is Item => !!to)
+    .map((to) => `${to.type} [${to.id}] ${itemSummary(to)}`);
+  return changed.slice(0, 4).join('；');
+}
+
+/**
+ * Kept = accepted or human-touched (not rejected); avoided = rejected, with the decision note.
+ * With `links`, a kept item whose upstream changed since its Link was made goes to `revisit`
+ * instead of `keep` (it still survives the run; the AI is asked to check it against the change).
+ */
+export function buildFeedback(
+  items: readonly Item[], scopes: readonly ReplaceScope[], links: readonly Link[] = [],
+): RegenerationFeedback {
   const live = items.filter((i) => !i.deletedAt && inScope(i, scopes));
-  const keep = live
+  const byId = indexById(items);
+  const kept = live
     .filter((i) => i.decision !== 'rejected' && (i.decision === 'accepted' || i.origin !== 'ai'))
+    .map((i) => ({ item: i, changed: changedUpstream(i, links, byId) }));
+  const keep = kept
+    .filter((k) => !k.changed)
     .slice(0, MAX_ENTRIES)
-    .map((i) => ({ id: i.id, type: i.type, summary: itemSummary(i) }));
+    .map(({ item: i }) => ({ id: i.id, type: i.type, summary: itemSummary(i) }));
+  const revisit = kept
+    .filter((k) => k.changed)
+    .slice(0, MAX_ENTRIES)
+    .map(({ item: i, changed }) => ({ id: i.id, type: i.type, summary: itemSummary(i), changed }));
   const avoid = live
     .filter((i) => i.decision === 'rejected')
     .slice(0, MAX_ENTRIES)
     .map((i) => ({ id: i.id, type: i.type, summary: itemSummary(i), ...(i.decisionNote ? { note: i.decisionNote } : {}) }));
-  return { keep, avoid };
+  return { keep, avoid, revisit };
 }
 
 export function isEmptyFeedback(fb: RegenerationFeedback | undefined): boolean {
-  return !fb || (fb.keep.length === 0 && fb.avoid.length === 0);
+  return !fb || (fb.keep.length === 0 && fb.avoid.length === 0 && fb.revisit.length === 0);
 }

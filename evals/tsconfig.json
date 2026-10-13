@@ -11,5 +11,5 @@
     "incremental": false,
     "plugins": []
   },
-  "include": ["run-eval.ts"]
+  "include": ["run-eval.ts", "run-consistency.ts"]
 }

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "eval": "tsc -p evals/tsconfig.json && node node_modules/.cache/td-evals/evals/run-eval.js",
+    "eval:consistency": "tsc -p evals/tsconfig.json && node node_modules/.cache/td-evals/evals/run-consistency.js",
     "db:init": "psql $DATABASE_URL -f src/lib/db/schema.sql"
   },
   "dependencies": {

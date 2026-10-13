@@ -7,8 +7,9 @@ import { NextResponse, type NextRequest } from 'next/server';
  *     `/api/**` 请求必须带 `Authorization: Bearer <REQUIRE_AUTH_TOKEN>`。
  *     适合自托管把实例放公网的场景；本地默认不开。
  *
- *  2. **per-IP 频控**（H1）— 仅作用于 `/api/ai/**`，防止开源自托管者把
- *     供应商 API key 在几分钟内被刷光。窗口式计数（in-memory），单进程
+ *  2. **per-IP 频控**（H1）— 作用于 `/api/ai/**`（防止开源自托管者把供应商
+ *     API key 在几分钟内被刷光）和 `/api/sources/**`（来源核实会让服务端去
+ *     访问外部网址），两者各自一个计数桶。窗口式计数（in-memory），单进程
  *     有效；多实例部署需要替换为 Redis 实现，但单机够用。
  *
  *  设计取舍：
@@ -40,11 +41,14 @@ function clientKey(req: NextRequest): string {
   return 'anon';
 }
 
-function rateLimit(ip: string): { ok: true } | { ok: false; retryAfter: number } {
+/** Path prefixes that are rate-limited, each with its own bucket per client. */
+const LIMITED_PREFIXES = ['/api/ai/', '/api/sources/'];
+
+function rateLimit(key: string): { ok: true } | { ok: false; retryAfter: number } {
   const now = Date.now();
-  const b = buckets.get(ip);
+  const b = buckets.get(key);
   if (!b || now >= b.resetAt) {
-    buckets.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    buckets.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
     return { ok: true };
   }
   if (b.count >= RATE_MAX) {
@@ -84,11 +88,11 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // 2. 频控：仅 /api/ai/*
-  if (pathname.startsWith('/api/ai/')) {
+  // 2. 频控：/api/ai/* 与 /api/sources/*，各自一个桶
+  const limited = LIMITED_PREFIXES.find((prefix) => pathname.startsWith(prefix));
+  if (limited) {
     maybeSweep();
-    const ip = clientKey(req);
-    const r = rateLimit(ip);
+    const r = rateLimit(`${limited}${clientKey(req)}`);
     if (!r.ok) {
       return NextResponse.json(
         { error: 'rate_limited', detail: `try again in ${r.retryAfter}s` },

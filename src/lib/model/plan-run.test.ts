@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validFeature } from '../ai/schemas/__fixtures__/draft-features';
 import { validLeap } from '../ai/schemas/__fixtures__/creative-leap';
+import { PREV_BODY_MAX_CHARS } from './events';
 import { isStale } from './graph';
 import { planRunOutput, type PlanState } from './plan-run';
 import { RepositoryError, type ItemDraft } from './repository';
@@ -231,7 +232,7 @@ describe('planRunOutput · singletons', () => {
     expect(reset).not.toHaveProperty('prevBody');
   });
 
-  it('does not attach prevBody when an echoed many-item is rewritten', () => {
+  it('attaches prevBody when an echoed many-item is rewritten, unless the old body is too large', () => {
     const pending = makeItem({ id: 'per_p' });
     const plan = planRunOutput(
       { items: [pending], links: [] },
@@ -239,7 +240,25 @@ describe('planRunOutput · singletons', () => {
       ctx(),
     );
     expect(plan.events).toHaveLength(1);
-    expect(plan.events[0]).not.toHaveProperty('prevBody');
+    expect(plan.events[0].prevBody).toEqual(pending.body);
+
+    const huge = makeItem({ id: 'per_h', body: personaBody('x'.repeat(PREV_BODY_MAX_CHARS)) });
+    const big = planRunOutput(
+      { items: [huge], links: [] },
+      output({ drafts: [{ ref: 'per_h', type: 'persona', body: rawPersona('per_h', 'v2') }] }),
+      ctx(),
+    );
+    expect(big.events[0]).not.toHaveProperty('prevBody');
+  });
+
+  it('keeps a huge singleton body anyway (an AI rewrite of a judged singleton must stay recoverable)', () => {
+    const brief = makeItem({ id: 'brf_big', node: 'brief', type: 'brief', body: briefBody('p', 'r'.repeat(PREV_BODY_MAX_CHARS)) });
+    const plan = planRunOutput(
+      { items: [brief], links: [] },
+      output({ run: runInput({ task: 'BRIEF_EXTRACT', node: 'brief' }), drafts: [{ type: 'brief', body: briefBody('p2') }] }),
+      ctx(),
+    );
+    expect(plan.events[0].prevBody).toEqual(brief.body);
   });
 
   it('is a no-op when the AI returns an identical body', () => {
@@ -301,5 +320,51 @@ describe('planRunOutput · validation', () => {
 
   it('accepts a persona body built by an adapter (fixture sanity)', () => {
     expect(planRunOutput(empty, output({ drafts: [{ type: 'persona', body: personaBody() }] }), ctx()).created).toHaveLength(1);
+  });
+});
+
+describe('planRunOutput · exhaustive scopes (an empty answer is valid)', () => {
+  const finding = (id: string, node: 'feat' | 'final', decision: 'pending' | 'accepted' = 'pending') => makeItem({
+    id, node, type: 'finding', decision,
+    body: { title: id, description: 'd', severity: 'medium', suggested_fix: 'f' },
+  });
+  const scopes = [
+    { node: 'feat' as const, type: 'finding' as const, exhaustive: true },
+    { node: 'final' as const, type: 'finding' as const, exhaustive: true },
+  ];
+  const state: PlanState = {
+    items: [finding('fnd_a', 'feat'), finding('fnd_b', 'final'), finding('fnd_kept', 'final', 'accepted')],
+    links: [],
+  };
+  const consistencyRun = runInput({ task: 'CONSISTENCY_CHECK', node: 'final' });
+
+  it('retires every pending finding when the check finds nothing, and the run is ok', () => {
+    const plan = planRunOutput(state, output({ run: consistencyRun, drafts: [], replace: scopes }), ctx());
+    expect(plan.run.status).toBe('ok');
+    expect(plan.retired.map((i) => i.id).sort()).toEqual(['fnd_a', 'fnd_b']);
+    expect(plan.issues).toEqual([]);
+  });
+
+  it('retires pending findings on a node that got no new finding', () => {
+    const drafts: ItemDraft[] = [{
+      type: 'finding', node: 'final',
+      body: { item_ids: [], title: 'new', description: 'd', severity: 'low', suggested_fix: 'f' },
+    }];
+    const plan = planRunOutput(state, output({ run: consistencyRun, drafts, replace: scopes }), ctx());
+    expect(plan.retired.map((i) => i.id).sort()).toEqual(['fnd_a', 'fnd_b']);
+    expect(plan.created).toHaveLength(1);
+    expect(plan.issues.filter((i) => i.kind === 'empty_scope')).toEqual([]);
+  });
+
+  it('still fails a run whose drafts were all invalid', () => {
+    const drafts: ItemDraft[] = [{ type: 'finding', node: 'final', body: { title: 1 } }];
+    const plan = planRunOutput(state, output({ run: consistencyRun, drafts, replace: scopes }), ctx());
+    expect(plan.run.status).toBe('failed');
+    expect(plan.retired).toEqual([]);
+  });
+
+  it('keeps the old rule for non-exhaustive scopes: no drafts at all is a failed run', () => {
+    const plan = planRunOutput(state, output({ run: consistencyRun, drafts: [], replace: [{ node: 'feat', type: 'finding' }] }), ctx());
+    expect(plan.run).toMatchObject({ status: 'failed', error: 'run produced no items' });
   });
 });

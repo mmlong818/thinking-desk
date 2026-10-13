@@ -23,7 +23,8 @@ import {
 /** The Repository surface the UI uses (pure-local LocalRepository or the HTTP client). */
 export type ProjectRepository = Pick<
   Repository,
-  'getGraph' | 'listRuns' | 'saveRunOutput' | 'updateItem' | 'createItem' | 'acceptRecommended'
+  | 'getGraph' | 'listRuns' | 'saveRunOutput' | 'updateItem' | 'createItem' | 'acceptRecommended'
+  | 'refreshLinks' | 'editLinks' | 'listEvents'
 >;
 
 const Note = z.string().trim().max(2000);
@@ -43,7 +44,21 @@ export const UpdateItemBodySchema = z.object({
     decision: z.enum(DECISIONS).optional(),
     decisionNote: Note.nullable().optional(),
     deleted: z.literal(true).optional(),
+    evidence: EvidenceSchema.optional(),
   }),
+  note: Note.optional(),
+});
+
+const LinkId = z.string().min(1).max(100);
+
+export const EditLinksBodySchema = z.object({
+  add: z.array(z.object({ from: LinkId, to: LinkId, rel: z.enum(LINK_RELS) })).max(100).default([]),
+  remove: z.array(LinkId).max(100).default([]),
+  note: Note.optional(),
+}).refine((b) => b.add.length + b.remove.length > 0, { message: 'nothing to change' });
+
+export const RefreshLinksBodySchema = z.object({
+  linkIds: z.array(LinkId).min(1).max(200),
   note: Note.optional(),
 });
 
@@ -69,7 +84,7 @@ export const SaveRunBodySchema = z.object({
       links: z.array(DraftLinkSchema).max(50).optional(),
     }))
     .max(500),
-  replace: z.array(z.object({ node: NodeKindSchema, type: ItemTypeSchema })).max(30),
+  replace: z.array(z.object({ node: NodeKindSchema, type: ItemTypeSchema, exhaustive: z.boolean().optional() })).max(30),
 });
 
 const STATUS: Record<RepositoryErrorCode, number> = { not_found: 404, invalid: 400, conflict: 409, storage: 503 };
@@ -125,6 +140,32 @@ export function updateItem(repo: ProjectRepository, projectId: string, itemId: s
   return handle('update-item', async () => {
     const { patch, note } = await readJson(req, UpdateItemBodySchema);
     return { item: await repo.updateItem(projectId, itemId, patch, { actor: 'human', ...(note ? { note } : {}) }) };
+  });
+}
+
+const human = (note?: string) => ({ actor: 'human' as const, ...(note ? { note } : {}) });
+
+/** Hand edit of Links (remove, then add); the type registry and the no-cycle rule decide what is allowed. */
+export function editLinks(repo: ProjectRepository, projectId: string, req: Request) {
+  return handle('edit-links', async () => {
+    const { add, remove, note } = await readJson(req, EditLinksBodySchema);
+    return { result: await repo.editLinks(projectId, { add, remove }, human(note)) };
+  });
+}
+
+/** "Still holds": the links' upstream changes are reviewed (toVersionSeen := current version). */
+export function refreshLinks(repo: ProjectRepository, projectId: string, req: Request) {
+  return handle('refresh-links', async () => {
+    const { linkIds, note } = await readJson(req, RefreshLinksBodySchema);
+    return { links: await repo.refreshLinks(projectId, linkIds, human(note)) };
+  });
+}
+
+/** Decision events, oldest first; `?itemId=` filters (the UI reads an upstream's earlier body from them). */
+export function listEvents(repo: ProjectRepository, projectId: string, url: URL) {
+  return handle('events', async () => {
+    const itemId = url.searchParams.get('itemId');
+    return { events: await repo.listEvents(projectId, itemId ? { itemId } : {}) };
   });
 }
 

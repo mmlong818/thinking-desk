@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { formatNodeNum, type NodeKind } from '@/data/nodes';
 import type { Item } from '@/lib/model/item-types';
+import { RedoProvider, type RedoHandler } from './RedoContext';
 
 // Small building blocks every node page shares.
 
@@ -17,15 +18,25 @@ export function NodeHat({ kind, chip }: { kind: NodeKind; chip: string }) {
   );
 }
 
-/** Work area + copilot column. */
-export function NodeFrame({ wide, copilot, children }: { wide?: boolean; copilot: ReactNode; children: ReactNode }) {
+/**
+ * Work area + copilot column. `redo` = the node's regenerate actions, offered on stale items
+ * ("让 AI 按新内容重做").
+ */
+export function NodeFrame({ wide, copilot, redo, children }: {
+  wide?: boolean;
+  copilot: ReactNode;
+  redo?: readonly RedoHandler[];
+  children: ReactNode;
+}) {
   return (
-    <div className="main">
-      <main className={wide ? 'work wide' : 'work'}>
-        <div className="work-inner">{children}</div>
-      </main>
-      {copilot}
-    </div>
+    <RedoProvider handlers={redo}>
+      <div className="main">
+        <main className={wide ? 'work wide' : 'work'}>
+          <div className="work-inner">{children}</div>
+        </main>
+        {copilot}
+      </div>
+    </RedoProvider>
   );
 }
 

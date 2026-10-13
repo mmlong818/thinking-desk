@@ -25,14 +25,16 @@ docker compose up -d db # optional Postgres (auto-runs schema.sql)
 src/
 ├── app/
 │   ├── api/ai/              # AI route handlers (one dir per task, JSON responses)
-│   ├── api/projects/        # project list/create; DELETE [id]; [id]/{graph,runs,items,accept-recommended,fork} = PgRepository over HTTP
+│   ├── api/projects/        # project list/create; DELETE [id]; [id]/{graph,runs,items,accept-recommended,fork,links,links/refresh,events} = PgRepository over HTTP
+│   ├── api/sources/verify/  # server-side check of cited URLs (SSRF guard, redirects, title match); rate-limited
 │   ├── api/providers/       # configured providers + models (structured-task support per model)
 │   └── project/[id]/[node]/ # SSR node page: picks the store (Postgres row found → pg, else local), lock state
 ├── components/
 │   ├── nodes/               # BriefNode, UsersNode, … SplitNode (one container per kind + a <kind>/ folder of parts)
 │   ├── project/             # ProjectStoreProvider, useNodeData, useAiAction, useItemActions, useNodeStage
-│   ├── shared/              # node kit: NodeHat, ItemDecision, JudgeStrip, JudgeBar (采纳全部推荐 + hints), UpstreamContext, …
-│   └── shell/               # TopBar, NavRail, Copilot, ModelPicker, ExportButton, ForkButton
+│   ├── shared/              # node kit: NodeHat, NodeFrame (redo handlers), ItemDecision (+ 上游已变), JudgeStrip, JudgeBar
+│   │                        # (采纳全部推荐, stale / consistency notices, source checks, hints), LinkPicker, UpstreamContext, …
+│   └── shell/               # TopBar, NavRail, Copilot, ModelPicker, ConsistencyButton, ExportButton, ForkButton
 ├── data/nodes.ts            # Source of truth: NODES array, deps, completion rules, formatNodeNum()
 └── lib/
     ├── ai/
@@ -41,8 +43,11 @@ src/
     │   ├── schemas/         # client-safe Zod output schemas, types, UI constants (no router/provider imports)
     │   ├── tasks/           # server-only prompt builders that call the AI (import their schema from schemas/)
     │   └── types.ts         # AI_TASKS / AiTask — add new tasks here first
-    ├── model/               # Item/Link/Run/DecisionEvent, item-type registry, pure planners, LocalRepository,
-    │                        # adapters/ (task output → item drafts), context (upstream selection), feedback (docs/data-model.md)
+    ├── model/               # Item/Link/Run/DecisionEvent, item-type registry, pure planners (plan-run/-item/-links), link-rules,
+    │                        # LocalRepository, adapters/ (task output → item drafts), context (upstream selection), feedback,
+    │                        # staleness, consistency (rules) + consistency-context (AI check input) (docs/data-model.md)
+    ├── export/              # PRD Markdown + Jira / Linear CSV + GitHub issues from accepted items (docs/exports.md)
+    ├── sources/             # URL verifier (server only: verify.ts, ip-guard.ts, title.ts) + client-safe protocol.ts
     ├── store/               # browser side: StoreRef + HttpRepository, runAiAction, completion cookie, UI cache, request payloads
     ├── api/project-api.ts   # handlers behind /api/projects/[id]/* (Zod-validated, repository injected)
     ├── client-model.ts      # client-side model picker helpers
@@ -53,7 +58,9 @@ src/
 
 Every node reads and writes items through one `Repository` (`docs/data-model.md`). The node page picks the store the way the app always decided whether a DB exists: the project row is found in Postgres → **pg** (projectId = row UUID; the browser's `HttpRepository` calls `/api/projects/[id]/*`, backed by `PgRepository`); otherwise → **local** (`LocalRepository`, one `localStorage` value `td:v2:<decoded slug>`).
 
-- AI calls: `useAiAction().run(key, { route, body, node, inputs, adapt })` → POST the `/api/ai/*` route → `adapt(data)` (a `src/lib/model/adapters` function) → `saveRunOutput` with the returned run metadata. Failed calls are recorded as failed runs. Regenerating calls send `feedback: buildFeedback(items, scopes)`.
+- AI calls: `useAiAction().run(key, { route, body, node, inputs, adapt })` → POST the `/api/ai/*` route → `adapt(data)` (a `src/lib/model/adapters` function) → `saveRunOutput` with the returned run metadata. Failed calls are recorded as failed runs. Regenerating calls send `feedback: buildFeedback(items, scopes, links)` — pass the links, so kept items whose upstream changed go to the prompt as `revisit`.
+- Stale content: a node passes its regenerate actions to `NodeFrame` as `redo={[{ label, types, node?, run, busy }]}`; the "上游已变" badge / node notice offer them as "让 AI 按新内容重做". A new node with AI steps should do the same.
+- Link edits: `useItemActions().editLinks({ add, remove })` / `confirmLinks(linkIds)`; allowed pairs come from `LINK_RULES` (the type registry's ref fields + adapter links) — adding a ref field is enough to make a new pair editable.
 - Human writes: `useItemActions()` (accept / reject with note / reset / edit body / create / delete / accept recommended).
 - Upstream context for prompts: `contextItems(items, node, type)` — accepted items once any is accepted, otherwise every non-rejected one.
 - Completion is derived (`completedNodes(items)`); in pure-local mode it is mirrored into the `td-done:<slug>` cookie (`writeCompletionCookie`, long slugs → `td-done-h:<hash>`, `cookieNameCandidates(slug)` to read) so the SSR lock screen works. The provider refreshes the page when the derived set changes.
@@ -106,6 +113,8 @@ final → split
 - **Turbopack** (`pnpm dev --turbopack`) is the default dev server. If you hit a Turbopack-specific build error, try `pnpm dev` without `--turbopack` to isolate.
 - **`src/lib/db/`** — `query()` throws when `DATABASE_URL` is unset or the DB is unreachable (the pool is created lazily on first query, 3 s connect timeout). Every caller must wrap DB calls in try/catch and degrade, so pure-local mode works.
 - **No `any`** — TypeScript strict mode. Use `unknown` + type guards or Zod parsing.
+- **Styles for the phase-3 review aids** live in `src/app/review.css` (imported after `globals.css`), not in the already very long `globals.css`.
+- **`src/lib/sources/verify.ts` is server-only** (node:dns / node:net); the browser uses `src/lib/sources/protocol.ts` and `src/lib/store/source-check.ts`.
 
 ## Environment Variables
 
@@ -119,5 +128,5 @@ final → split
 | `AI_MODEL_DEFAULT` | No | Fallback routing (`provider` or `provider:model`) |
 | `AI_MODEL_<TASK>` | No | Per-task override; task names from `AI_TASKS` |
 | `REQUIRE_AUTH` / `REQUIRE_AUTH_TOKEN` | No | `middleware.ts`: require `Authorization: Bearer <token>` on `/api/*` |
-| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | No | `middleware.ts`: per-IP in-memory limit on `/api/ai/*` (default 20 / 60 s) |
+| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | No | `middleware.ts`: per-IP in-memory limit on `/api/ai/*` and, in a separate bucket, `/api/sources/*` (default 20 / 60 s) |
 | `*_BASE_URL`, `ALLOW_CUSTOM_AI_BASE_URL` | No | Provider endpoints; non-vendor hosts are rejected unless `ALLOW_CUSTOM_AI_BASE_URL=true` |

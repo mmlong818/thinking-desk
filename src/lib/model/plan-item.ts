@@ -1,8 +1,9 @@
 import type { NodeKind } from '../../data/nodes';
 import { indexById } from './graph';
-import { decisionEventKind, makeEvent, type EventSpec } from './events';
+import { decisionEventKind, keptPrevBody, makeEvent, type EventSpec } from './events';
 import { deepEqual } from './json';
 import { asItem, isSingletonType, parseBody, typeAllowedOn, typeDef, type Item } from './item-types';
+import { linkAllowed } from './link-rules';
 import { allocatorFor, type PlanContext, type PlanState } from './plan-run';
 import {
   RepositoryError,
@@ -10,9 +11,10 @@ import {
   type EventMeta,
   type ItemPatch,
 } from './repository';
-import type { DecisionEvent, Link, Origin } from './types';
+import { EvidenceSchema, type DecisionEvent, type Link, type Origin } from './types';
 
-// Pure planners for human-side writes: createItem, updateItem, refreshLinks.
+// Pure planners for human-side item writes: createItem, updateItem, acceptRecommended
+// (Link writes: ./plan-links.ts).
 
 export interface ItemWritePlan {
   item: Item;
@@ -31,6 +33,9 @@ function linksFor(input: CreateItemInput, itemId: string, state: PlanState, ctx:
   return (input.links ?? []).map((l): Link => {
     const to = liveById.get(l.to);
     if (!to) throw new RepositoryError('invalid', `link target ${l.to} does not exist`);
+    if (!linkAllowed(input, l.rel, to)) {
+      throw new RepositoryError('invalid', `${input.type}@${input.node} —${l.rel}→ ${to.type}@${to.node} is not an allowed link`);
+    }
     return { id: alloc('lnk'), projectId: ctx.projectId, from: itemId, to: to.id, rel: l.rel, toVersionSeen: to.version };
   });
 }
@@ -71,9 +76,13 @@ function applyBody(step: Step, raw: unknown, event: EventMeta, now: string): Ste
   const body = validBody(item.type, raw);
   if (deepEqual(body, item.body)) return step;
   const v = item.version;
+  const prevBody = keptPrevBody(item.body);
   const specs: EventSpec[] = [
     ...step.specs,
-    { itemId: item.id, kind: 'edited', fromVersion: v, toVersion: v + 1, actor: event.actor, note: event.note },
+    {
+      itemId: item.id, kind: 'edited', fromVersion: v, toVersion: v + 1, actor: event.actor, note: event.note,
+      ...(prevBody !== undefined ? { prevBody } : {}),
+    },
   ];
   const next = asItem({ ...item, body, version: v + 1, origin: editedOrigin(item.origin, event.actor), updatedAt: now });
   if (event.actor === 'human' || next.decision === 'pending') return { item: next, specs };
@@ -99,6 +108,18 @@ function applyDecision(step: Step, patch: ItemPatch, event: EventMeta, now: stri
   return { item: next, specs: [...step.specs, spec] };
 }
 
+function applyEvidence(step: Step, raw: unknown, event: EventMeta, now: string): Step {
+  const parsed = EvidenceSchema.safeParse(raw);
+  if (!parsed.success) throw new RepositoryError('invalid', `invalid evidence: ${parsed.error.message}`);
+  const { item } = step;
+  if (deepEqual(parsed.data, item.evidence)) return step;
+  const spec: EventSpec = {
+    itemId: item.id, kind: 'evidence_updated', fromVersion: item.version, toVersion: item.version,
+    actor: event.actor, note: event.note,
+  };
+  return { item: asItem({ ...item, evidence: parsed.data, updatedAt: now }), specs: [...step.specs, spec] };
+}
+
 /** Returns the item unchanged and no events when the patch is a no-op. */
 export function planItemUpdate(
   item: Item,
@@ -119,16 +140,21 @@ export function planItemUpdate(
   } else {
     if (patch.body !== undefined) step = applyBody(step, patch.body, event, ctx.now);
     if (patch.decision !== undefined || patch.decisionNote !== undefined) step = applyDecision(step, patch, event, ctx.now);
+    if (patch.evidence !== undefined) step = applyEvidence(step, patch.evidence, event, ctx.now);
   }
   return { item: step.item, events: step.specs.map((s) => makeEvent(s, ctx.projectId, ctx.now, alloc)) };
 }
 
 export const ACCEPT_RECOMMENDED_NOTE = 'accept all recommended';
 
-/** Live, pending items on `node` that the AI recommends (aiStance.verdict === 'recommend'). */
+/**
+ * Live, pending items on `node` that the AI recommends (aiStance.verdict === 'recommend').
+ * Consistency findings are judged in the consistency panel, never in a node's bulk accept.
+ */
 export function recommendedPending(items: readonly Item[], node: NodeKind): Item[] {
   return items.filter(
-    (i) => !i.deletedAt && i.node === node && i.decision === 'pending' && i.aiStance?.verdict === 'recommend',
+    (i) => !i.deletedAt && i.node === node && i.decision === 'pending' && i.aiStance?.verdict === 'recommend'
+      && i.type !== 'finding',
   );
 }
 
@@ -150,17 +176,4 @@ export function planAcceptRecommended(
     events.push(...plan.events);
   }
   return { items, events };
-}
-
-/** toVersionSeen := current version of `to`. Unknown link ids are rejected. */
-export function planRefreshLinks(state: PlanState, linkIds: readonly string[]): Link[] {
-  const links = indexById(state.links);
-  const items = indexById(state.items.filter((i) => !i.deletedAt));
-  return linkIds.map((id) => {
-    const link = links.get(id);
-    if (!link) throw new RepositoryError('not_found', `link ${id} not found`);
-    const to = items.get(link.to);
-    if (!to) throw new RepositoryError('conflict', `link ${id} points to a deleted item`);
-    return { ...link, toVersionSeen: to.version };
-  });
 }

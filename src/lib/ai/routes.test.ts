@@ -3,6 +3,7 @@ import type { RunMeta, RunTaskSpec } from './run-task';
 import type { AiTask } from './types';
 import { validAlternatives } from './schemas/__fixtures__/alternatives';
 import { validClarifyAsk } from './schemas/__fixtures__/clarify-brief';
+import { emptyConsistencyCheck, validConsistencyCheck } from './schemas/__fixtures__/consistency-check';
 import { validLeap } from './schemas/__fixtures__/creative-leap';
 import { validFeatureList } from './schemas/__fixtures__/draft-features';
 import { validBrief } from './schemas/__fixtures__/extract-brief';
@@ -48,6 +49,7 @@ const ROUTES: Record<string, () => Promise<RouteModule>> = {
   'analyze-stakeholders': () => import('@/app/api/ai/analyze-stakeholders/route'),
   'analyze-users': () => import('@/app/api/ai/analyze-users/route'),
   'clarify-brief': () => import('@/app/api/ai/clarify-brief/route'),
+  'consistency-check': () => import('@/app/api/ai/consistency-check/route'),
   'creative-leap': () => import('@/app/api/ai/creative-leap/route'),
   'derive-follow-ups': () => import('@/app/api/ai/derive-follow-ups/route'),
   'extract-brief': () => import('@/app/api/ai/extract-brief/route'),
@@ -72,6 +74,11 @@ beforeEach(() => {
   specs.length = 0;
 });
 
+const consistencyItems = [
+  { id: 'red_1', type: 'red_line', node: 'brief', decision: 'accepted', text: 'text=不做排名羞辱' },
+  { id: 'ftr_1', type: 'feature', node: 'final', decision: 'accepted', text: 'name=班级排行榜', links: ['serves:job_1'] },
+];
+
 const CASES: Array<[string, AiTask, unknown, unknown]> = [
   ['clarify-brief', 'BRIEF_CLARIFY', { rawText: 'x' }, validClarifyAsk],
   ['extract-brief', 'BRIEF_EXTRACT', { projectSlug: 'demo', rawText: 'x', answers: [] }, validBrief],
@@ -88,7 +95,9 @@ const CASES: Array<[string, AiTask, unknown, unknown]> = [
   ['generate-design', 'DESIGN_PROPOSAL', { projectSlug: 'demo', brief, features: validFeatureList.features, pillars: validFeatureList.pillars }, validDesign],
   ['split-subfeatures', 'SPLIT_SUBFEATURES', { projectSlug: 'demo', design: validDesign }, validBreakdown],
   ['derive-follow-ups', 'FOLLOW_UPS', { nodeKind: 'users', content: validUsers }, { follow_ups: [] }],
+  ['consistency-check', 'CONSISTENCY_CHECK', { projectSlug: 'demo', items: consistencyItems }, validConsistencyCheck],
 ];
+
 
 describe('AI routes · { ok, data } contract', () => {
   it.each(CASES)('%s runs %s and returns the validated task output', async (route, task, body, output) => {
@@ -172,6 +181,27 @@ describe('AI routes · request validation', () => {
     const full = Array.from({ length: 10 }, (_, i) => ({ ...validUsers.personas[0], id: `p${i}` }));
     expect((await call('add-personas', { ...ctx, existing: full, lockedIds: [] })).status).toBe(409);
     expect((await call('derive-follow-ups', { nodeKind: 'nope', content: {} })).status).toBe(400);
+  });
+});
+
+describe('AI routes · consistency check', () => {
+  it('lists the items by node inside one data block, with their links, and accepts an empty answer', async () => {
+    canned.set('CONSISTENCY_CHECK', emptyConsistencyCheck);
+    const { status, json } = await call('consistency-check', { projectSlug: 'demo', items: consistencyItems });
+    expect(status).toBe(200);
+    expect(json.data).toEqual({ findings: [] });
+    const user = specs[0].messages.at(-1)?.content ?? '';
+    expect(user).toContain('<data name="project_items">');
+    expect(user.indexOf('## 01 Brief')).toBeLessThan(user.indexOf('## 08 设计案'));
+    expect(user).toContain('- [ftr_1] feature（已采纳）：name=班级排行榜\n  关联：serves:job_1');
+  });
+
+  it('rejects an empty item list, unknown decisions and oversized texts', async () => {
+    expect((await call('consistency-check', { projectSlug: 'demo', items: [] })).status).toBe(400);
+    const bad = [{ ...consistencyItems[0], decision: 'rejected' }];
+    expect((await call('consistency-check', { projectSlug: 'demo', items: bad })).status).toBe(400);
+    const long = [{ ...consistencyItems[0], text: 'x'.repeat(1201) }];
+    expect((await call('consistency-check', { projectSlug: 'demo', items: long })).status).toBe(400);
   });
 });
 

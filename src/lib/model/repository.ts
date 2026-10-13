@@ -50,6 +50,12 @@ export interface ItemDraft {
 export interface ReplaceScope {
   node: NodeKind;
   type: ItemType;
+  /**
+   * The run's output is the complete current set for this scope, so an empty result is a valid
+   * answer (the consistency check finding nothing): its pending items are retired even when the
+   * run returned nothing for it, and a run with no drafts at all is not failed.
+   */
+  exhaustive?: boolean;
 }
 
 export interface RunOutputInput {
@@ -99,6 +105,26 @@ export interface ItemPatch {
   /** null clears the note. */
   decisionNote?: string | null;
   deleted?: true;
+  /** Replaces the evidence (e.g. after a source check): no version bump, one `evidence_updated` event. */
+  evidence?: Evidence;
+}
+
+export interface LinkSpec {
+  from: string;
+  to: string;
+  rel: LinkRel;
+}
+
+/** A hand edit of Links: `remove` (link ids) is applied before `add`. */
+export interface LinkEdit {
+  add?: readonly LinkSpec[];
+  remove?: readonly string[];
+}
+
+export interface LinkEditResult {
+  added: Link[];
+  /** Ids of the removed links. */
+  removed: string[];
 }
 
 export interface EventMeta {
@@ -130,8 +156,16 @@ export interface Repository {
    * one `accepted` event each (actor human). Returns the accepted items (empty when none qualify).
    */
   acceptRecommended(projectId: string, node: NodeKind, meta?: { note?: string }): Promise<Item[]>;
-  /** Marks links as reviewed: toVersionSeen := current version of `to`. */
-  refreshLinks(projectId: string, linkIds: readonly string[]): Promise<Link[]>;
+  /**
+   * Marks links as reviewed ("still holds"): toVersionSeen := current version of `to`, one
+   * `link_confirmed` event per link that moved (actor human unless `event` says otherwise).
+   */
+  refreshLinks(projectId: string, linkIds: readonly string[], event?: EventMeta): Promise<Link[]>;
+  /**
+   * Atomic hand edit of Links (remove, then add), validated against the type registry, without
+   * depends_on cycles; one `link_added` / `link_removed` event per change.
+   */
+  editLinks(projectId: string, edit: LinkEdit, event: EventMeta): Promise<LinkEditResult>;
   /** Newest first. */
   listRuns(projectId: string, filter?: RunFilter): Promise<Run[]>;
   /** Oldest first (append order). */

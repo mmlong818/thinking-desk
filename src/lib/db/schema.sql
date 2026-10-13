@@ -104,18 +104,24 @@ CREATE TABLE IF NOT EXISTS decision_events (
   id           TEXT NOT NULL,
   seq          BIGINT GENERATED ALWAYS AS IDENTITY,
   item_id      TEXT NOT NULL,
-  kind         TEXT NOT NULL CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted')),
+  kind         TEXT NOT NULL CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted','link_added','link_removed','link_confirmed','evidence_updated')),
   from_version INTEGER NOT NULL CHECK (from_version >= 0),
   to_version   INTEGER NOT NULL CHECK (to_version >= 1),
   note         TEXT,
-  prev_body    JSONB,                                -- body before an AI run rewrote a singleton
+  prev_body    JSONB,                                -- body before an edit (size-capped; always kept for AI singleton rewrites)
+  link         JSONB,                                -- link_* events: { id, to, rel }
   actor        TEXT NOT NULL CHECK (actor IN ('human','ai')),
   at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (project_id, id),
   FOREIGN KEY (project_id, item_id) REFERENCES items (project_id, id) ON DELETE CASCADE
 );
--- Databases initialised before prev_body existed.
+-- Databases initialised before prev_body / link and the link_* / evidence_updated kinds existed.
+-- (Postgres names the column CHECK above decision_events_kind_check.)
 ALTER TABLE decision_events ADD COLUMN IF NOT EXISTS prev_body JSONB;
+ALTER TABLE decision_events ADD COLUMN IF NOT EXISTS link JSONB;
+ALTER TABLE decision_events DROP CONSTRAINT IF EXISTS decision_events_kind_check;
+ALTER TABLE decision_events ADD CONSTRAINT decision_events_kind_check
+  CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted','link_added','link_removed','link_confirmed','evidence_updated'));
 CREATE INDEX IF NOT EXISTS decision_events_item_idx ON decision_events (project_id, item_id, seq);
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$

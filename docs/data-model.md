@@ -4,7 +4,7 @@ Thinking Desk is AI-led and human-judged: the AI produces the breadth (options, 
 
 Code: `src/lib/model/` (pure domain + `LocalRepository`), `src/lib/db/pg-repository.ts` (`PgRepository`), `src/lib/db/schema.sql`. Completion rules: `src/data/nodes.ts`.
 
-Status: every node reads and writes items through the repositories (milestone 3a, see [Migration status](#migration-status)); how the UI uses the model is in [UI on the model](#ui-on-the-model).
+Status: every node reads and writes items through the repositories (milestone 3a, see [Migration status](#migration-status)); how the UI uses the model is in [UI on the model](#ui-on-the-model). Phase 3 added staleness UI, hand-edited Links, consistency findings and source checks (sections below); exports are described in [exports.md](exports.md).
 
 ## Entities
 
@@ -23,7 +23,7 @@ Every unit of content — a persona, a job, a feature, a design section — is a
 | `decision` | `pending` \| `accepted` \| `rejected` | The human judgment. |
 | `decisionNote?` | string | Reason for the current decision; rejected notes feed the next prompt. |
 | `aiStance?` | `{ verdict: recommend\|neutral\|caution, reason }` | The AI's own recommendation (e.g. today's `suggested_priority`). |
-| `evidence?` | `{ basis: web\|model_knowledge\|user_input, confidence: 0..1, sources: {title, url?, verified}[] }` | |
+| `evidence?` | `{ basis: web\|model_knowledge\|user_input, confidence?: 0..1, sources: {title, url?, verified, status?, checkedAt?, pageTitle?, detail?}[] }` | `confidence` is optional: sources lifted from output that states none carry none. `status` = last [source check](#source-checks) (`title_match` \| `reachable` \| `unreachable` \| `blocked`); `verified` is true only for `title_match`. |
 | `version` | int ≥ 1 | Bumped only when the body changes. |
 | `runId?` | string | The run that last wrote the body. Absent for human items. |
 | `createdAt`, `updatedAt`, `deletedAt?` | ISO timestamp | `deletedAt` = soft delete. Items are never hard-deleted. |
@@ -40,7 +40,9 @@ The TypeScript `Item` type is a union discriminated on `type`, so narrowing `ite
 | `rel` | `derived_from` \| `serves` \| `addresses` \| `implements` \| `mitigates` \| `conflicts_with` \| `assumes` \| `depends_on` |
 | `toVersionSeen` | Version of `to` when the link was made or last reviewed. |
 
-Staleness is computed, never stored: a link is stale when `to.version > toVersionSeen`. `refreshLinks()` marks a link reviewed (`toVersionSeen := to.version`).
+Staleness is computed, never stored: a link is stale when `to.version > toVersionSeen`. `refreshLinks()` marks a link reviewed (`toVersionSeen := to.version`, one `link_confirmed` event per link that moved).
+
+Links come from AI runs (the ref fields below) and from hand edits (`editLinks`). Which (from type, rel, to type) pairs may exist is one table, `LINK_RULES` in `src/lib/model/link-rules.ts`: the type registry's ref fields plus the links adapters supply (brief —assumes→ assumption, feature@final —derived_from→ feature@feat). Hand edits and human-created items are held to it, and `depends_on` links may not close a cycle.
 
 | rel | Meaning | Example |
 |---|---|---|
@@ -49,7 +51,7 @@ Staleness is computed, never stored: a link is stale when `to.version > toVersio
 | `addresses` | responds to a problem | insight → pain_point |
 | `implements` | realizes | module → feature, subtask → feature |
 | `mitigates` | reduces a risk | (reserved for risk items) |
-| `conflicts_with` | in tension with | feature → red_line (reserved) |
+| `conflicts_with` | in tension with | finding → each item it involves |
 | `assumes` | relies on an assumption | brief → assumption |
 | `depends_on` | ordering between peers | module → module, subtask → subtask |
 
@@ -68,21 +70,26 @@ One record per AI call; replaces the `ai_exchanges` log. Append-only.
 
 ### DecisionEvent
 
-Append-only audit trail: `id, projectId, itemId, kind, fromVersion, toVersion, note?, prevBody?, actor (human|ai), at`.
+Append-only audit trail: `id, projectId, itemId, kind, fromVersion, toVersion, note?, prevBody?, link?, actor (human|ai), at`.
 
-`prevBody` is set only on the `edited` event of an AI run that rewrites a **singleton** in place: it holds the body before the rewrite, so a judged brief / engagement plan / differentiation hypothesis that a re-run overwrote stays recoverable without a snapshot table.
+`prevBody` holds the body before an `edited` event — human edits and AI rewrites alike — when it serializes to at most 16,000 characters (`PREV_BODY_MAX_CHARS`); an AI run that rewrites a **singleton** in place always keeps it, whatever the size, so a judged brief / engagement plan / differentiation hypothesis that a re-run overwrote stays recoverable without a snapshot table. `bodyAtVersion(events, itemId, v)` reads the body an item had at version `v` (the upstream before / after view of the staleness UI). Events written before phase 3 have `prevBody` only on singleton rewrites.
+
+`link` (`{ id, to, rel }`) is set on the three link kinds: `link_added`, `link_removed`, `link_confirmed` — the event's item is the link's `from`; they never change a version.
 
 | Operation | Events |
 |---|---|
 | AI run creates an item | `created` 0→1, actor ai |
-| AI run rewrites an echoed AI-pending item | `edited` v→v+1, actor ai |
+| AI run rewrites an echoed AI-pending item | `edited` v→v+1 with `prevBody` (size-capped), actor ai |
 | AI run rewrites a singleton | `edited` v→v+1 with `prevBody`, actor ai; plus `reset` if it was accepted/rejected |
 | AI run retires a superseded pending item | `deleted`, actor ai, note `superseded by run <id>` |
 | Human creates an item | `created` 0→1, plus `accepted`/`rejected` if not pending |
-| Human edits the body | `edited` v→v+1 (origin `ai` → `ai_edited`; decision unchanged) |
+| Human edits the body | `edited` v→v+1 with `prevBody` (size-capped) (origin `ai` → `ai_edited`; decision unchanged) |
 | Human accepts / rejects / resets | `accepted` / `rejected` / `reset`, from = to = current version |
 | Human "accept all recommended" on a node | one `accepted` per item, actor human, note `accept all recommended` |
 | Human changes only the note | the current decision's event again, with the new note |
+| Human adds / removes a Link (`editLinks`) | `link_added` / `link_removed` on the `from` item, with `link` |
+| Human confirms an item still holds after its upstream changed (`refreshLinks`) | `link_confirmed` per link that moved, with `link` |
+| Evidence replaced (`patch.evidence`, e.g. a source check) | `evidence_updated`, from = to = current version |
 | Soft delete | `deleted` |
 
 A no-op patch writes nothing.
@@ -100,7 +107,7 @@ Bodies are derived from the task response schemas in `src/lib/ai/schemas/`: `id`
 | users | `job` (job) | `JobSchema` + `dimension` (functional/emotional/social) | `persona_ids` → derived_from persona |
 | stake | `stakeholder` (stk) | `StakeholderSchema` | — |
 | stake | `engagement_plan` (eng) **singleton** | `EngagementPlanSchema` | — |
-| alt | `alternative` (alt) | `AlternativeSchema` (keeps `sources` until ALT_SCAN emits `evidence`) | — |
+| alt | `alternative` (alt) | `AlternativeSchema`; the cited URLs move to `evidence.sources` (basis `web`, unchecked) and `body.sources` stays empty — alternatives saved before keep their body URLs (a source check reads them) | — |
 | alt | `alt_profile` (apf) | `StrategicProfileSchema` | `alt_id` → derived_from alternative |
 | alt | `alt_breakdown` (abd) | `FeatureBreakdownSchema` | `alt_id` → derived_from alternative |
 | alt | `diff_hypothesis` (dif) **singleton** | `{ statement, key_threats[] }` | — |
@@ -119,6 +126,7 @@ Bodies are derived from the task response schemas in `src/lib/ai/schemas/`: `id`
 | split | `subtask` (tsk) | `SubFeatureSchema` + `feature_name?`, `critical` | `feature_id` → implements; `module_id` → derived_from module; `dependencies` → depends_on subtask |
 | any | `summary` (sum) | `{ topic: priority\|differentiation_echo\|leap_timing\|revision\|split, text, verdict? }` | — |
 | any | `critique` (crt) | `{ kind: check\|critique\|ask, title, body }` | — |
+| any | `finding` (fnd) | `{ title, description, severity: high\|medium\|low, suggested_fix }` (CONSISTENCY_CHECK) | `item_ids` → conflicts_with any content type (`FINDING_TARGET_TYPES`) |
 
 Rule of thumb: an item is something a person can judge on its own. Run-level AI prose (priority summaries, echoes, timing verdicts) becomes `summary` items so it is versioned and exportable, but never gates completion. Process artefacts (clarify questionnaires, interview turns, derived follow-up questions) are not items; their answers land in item bodies (`brief.answers`, `brief.follow_up_answers`).
 
@@ -151,7 +159,7 @@ The rules stay deliberately minimal. What a good node *should* also have is repo
 | scen | no `hostile` scenario (`scen.no_hostile`) |
 | feat | no `not_doing` (`feat.no_not_doing`) |
 
-AI items are created `pending`. `acceptRecommended(projectId, node)` accepts, atomically, every live pending item on the node whose `aiStance.verdict` is `recommend` (one `accepted` event each, actor human) — the "✓ 采纳全部推荐（N）" button of every node's judge bar, disabled when N = 0. Hints are shown under it as non-blocking notices.
+AI items are created `pending`. `acceptRecommended(projectId, node)` accepts, atomically, every live pending item on the node whose `aiStance.verdict` is `recommend` (one `accepted` event each, actor human) — the "✓ 采纳全部推荐（N）" button of every node's judge bar, disabled when N = 0. Consistency findings never take part (they are judged in the consistency panel). Hints are shown under it as non-blocking notices.
 
 ## AI temp ids → permanent ids and Links
 
@@ -176,6 +184,7 @@ Per-item stance from the model: DESIGN_PROPOSAL (every part: `overview_stance`, 
 - **Kept**: accepted and rejected items, items with origin `human` or `ai_edited`, and anything the new output echoed.
 - **Retired**: AI-pending items in the scope that the new output did not echo — soft-deleted with a `deleted` event (actor ai). Links touching them are removed; new refs to them are dropped.
 - **Additive runs** ("give me 3 more personas", leap "more items") pass `replace: []`.
+- **Exhaustive scopes** (`{ node, type, exhaustive: true }`, today only the consistency check's `finding` on every node): the output is the complete current set, so an empty answer is valid — the scope's pending items are retired even when the run returned nothing for it, and a run with no drafts at all is recorded `ok` when all its scopes are exhaustive. A run whose drafts were all invalid still fails.
 - **Failed runs** are recorded (status `failed`, `error`) and change nothing else.
 - **Runs without valid output**: a run that has drafts or a replace scope but yields no valid item (empty output, or every draft rejected) is recorded as `failed` with `error` (`run produced no items` / `run produced no valid items (N drafts rejected)`), whatever status the caller passed, and changes nothing — the pending items it would have replaced stay. A run with neither drafts nor scope (e.g. a clarify run) is recorded as passed.
 - **Empty scope**: when a run does yield items but one of its replace scopes got no valid draft, that scope's pending items are kept (not retired) and an `empty_scope` issue is reported; the other scopes regenerate normally.
@@ -189,15 +198,36 @@ interface RegenerationFeedback {
   keep: Array<{ id: string; type: ItemType; summary: string }>;
   /** Rejected items in scope with the human's reason: steer away from these. */
   avoid: Array<{ id: string; type: ItemType; summary: string; note?: string }>;
+  /** Kept items whose upstream changed since their Link was made: kept, but the AI may propose an updated version. */
+  revisit: Array<{ id: string; type: ItemType; summary: string; changed: string }>;
 }
 ```
+
+`buildFeedback(items, scopes, links)` — every regenerating call passes the links — puts a kept item into `revisit` instead of `keep` when one of its Links is stale; `changed` names the new upstream (type, id, summary). The prompt says: these stay, but they were made from the old upstream; produce an updated item (new id) where the change matters, and do not repeat the ones that still hold. Accepted items are never rewritten by a run, so the person then keeps the old one, the new one, or both.
 
 `summary` is a per-type one-liner (`itemSummary`: persona name + one-liner, job title, …). It replaced the ad-hoc `userLockedJobIds` (refine-jobs now derives its locked list from `feedback.keep`), `locked_ids` and `rejected_ids` request fields, and keeps rejected leaps as data instead of dropping them.
 
 ## Staleness
 
-- **Link level** — `isStale(link, items)`, `staleItems(graph)`: items whose upstream changed after the link was made or reviewed.
-- **Run level** — `staleRuns(runs, items)`: runs whose `inputs` changed or were deleted since. This covers outputs without explicit refs (e.g. personas are generated from the brief but carry no brief ref), and is meant for a node-level "inputs changed" banner.
+- **Link level** — `isStale(link, items)`, `staleItems(graph)`, `staleIndex(graph)` (`src/lib/model/staleness.ts`): items whose upstream changed after the link was made or reviewed.
+- **Run level** — `staleRuns(runs, items)`: runs whose `inputs` changed or were deleted since. `nodeRunStaleness(runs, items, node)` narrows it to what the node notice shows: the newest non-failed **generating** run per task on the node (clarify / probe / free-ask / follow-ups / consistency-check runs are process runs and do not count), and only inputs that live on another node and still exist (inputs on the node itself are covered by item Links). This covers outputs without explicit refs (e.g. personas are generated from the brief but carry no brief ref).
+
+In the UI (`src/components/shared/StaleContent.tsx`): a stale item shows "⟳ 上游已变" next to its decision buttons; its popover lists each changed upstream (`v seen → v now`) with a field-level before / after when the edited event kept the earlier body (`bodyAtVersion`, `bodyDiff`), and two actions — "✓ 确认仍有效" (`refreshLinks`, no AI call) and "⟳ 让 AI 按新内容重做 · <step>" (re-runs the node's existing task: each node page hands its regenerate actions to `NodeFrame` as `redo` handlers keyed by item type; the run uses the usual regeneration semantics and `revisit` feedback). The judge bar of each node shows "上游有 N 处变化" (distinct changed upstream items, item and run level) with the bulk versions of both actions. Confirming run-level changes has no Link to refresh: the confirmation is remembered per browser in the UI cache (`td:ui:<projectId>:stale-ack:<node>`, keyed by the changed inputs and their versions), so it shows again when they change again.
+
+## Consistency checks
+
+Two layers, both non-blocking:
+
+- **Rules** (`ruleFindings(graph)`, `src/lib/model/consistency.ts`) — deterministic, no AI, recomputed whenever the project changes; judged on live accepted items: `feature.no_job` (feature serving no accepted job, info), `module.no_feature` (module implementing no accepted feature), `subtask.no_target` (subtask on no accepted feature or module), `feature.no_subtask` (feature of the revised list on node `final` that no accepted subtask reaches, directly or through an accepted module; info; silent until some subtask is accepted), `feature.red_line_risk` (feature the AI flagged with `red_line_risk`), `finding.unresolved` (an accepted AI finding whose involved items are all still accepted), `link.to_rejected` (accepted item depending on a rejected one). Links into soft-deleted items are not in the live graph; that case shows up through the rules that ask for an accepted target.
+- **AI** (`CONSISTENCY_CHECK`, started by hand only) — `consistencyInput(items, links)` (`consistency-context.ts`) digests the downstream context of every node (per node and type the accepted items, or every non-rejected one while none is accepted; never rejected; the feat feature list is left out once node `final` has its own) as one-line `key=value` texts with their Links; the prompt reads them in one `<data>` block and returns 0–12 findings (involved ids, title, description, severity, suggested fix, stance). `adaptConsistencyCheck` turns each into a `finding` item on the most downstream node it cites, linked `conflicts_with` to the cited items; findings citing no known id are dropped. The replace scope is `finding` on every node, exhaustive, so a re-run replaces every pending finding and an empty answer clears them; accepted / rejected findings stay and go back as feedback (keep = do not repeat, avoid = steer away). The run is recorded on the node page it was started from.
+
+UI: under each node's judge bar the rule findings and open AI findings touching the node; the top bar's "一致性 (N)" opens a panel with every rule finding by node and the AI check (button, last run, findings to accept / reject).
+
+## Source checks
+
+`POST /api/sources/verify` (`src/lib/sources/`) checks up to 20 cited URLs per request, 4 at a time: http(s) on default ports, no credentials; local hostnames and private / loopback / link-local / reserved addresses are refused after DNS resolution and again on each of at most 3 redirects; one 8-second budget per URL (DNS, request, body); at most 256 KB read; charset from the header or `<meta>`. The page title is matched loosely against the cited title — or, without one, against what the source is cited for (the alternative's name). Result: `title_match` (verified) / `reachable` / `unreachable` / `blocked`, with a short `detail`. It uses the global fetch, so `NODE_USE_ENV_PROXY` and a proxy dispatcher apply like for AI calls; a DNS-rebinding window between the check's lookup and fetch's own remains. `middleware.ts` rate-limits `/api/sources/*` per IP in its own bucket.
+
+The browser (`src/lib/store/source-check.ts`) collects a node's URLs (`evidence.sources`, or a legacy alternative's body URLs), asks the route, and writes the results onto each item's evidence with `updateItem(…, { evidence })` — no version bump, one `evidence_updated` event. Each source then reads 已核实 / 未核实 / 无法打开 in the UI; the node's judge bar offers "核实本节点来源（N 个链接）".
 
 ## Repository
 
@@ -210,15 +240,18 @@ interface Repository {
              event: { actor, note? }): Promise<Item>;
   createItem(projectId, { node, type, body, decision?, decisionNote?, links? }): Promise<Item>;
   acceptRecommended(projectId, node, meta?: { note? }): Promise<Item[]>;  // atomic
-  refreshLinks(projectId, linkIds): Promise<Link[]>;
+  refreshLinks(projectId, linkIds, event?: { actor, note? }): Promise<Link[]>;   // + link_confirmed events
+  editLinks(projectId, { add?: {from, to, rel}[], remove?: linkId[] }, event): Promise<{ added, removed }>;  // atomic
   listRuns(projectId, filter?): Promise<Run[]>;        // newest first
   listEvents(projectId, filter?): Promise<DecisionEvent[]>;  // append order
 }
 ```
 
+`ItemPatch` = `{ body?, decision?, decisionNote?, deleted?, evidence? }`. `editLinks` removes, then adds (so one edit can move a link); adding an existing (from, to, rel) is a no-op; a pair outside `LINK_RULES` or a self-link is `invalid`, a `depends_on` cycle is `conflict`, an unknown or deleted item / link is `not_found`.
+
 `SaveRunResult` = `{ run, created, updated, retired (ids), links, idMap, issues }`; `issues` covers `invalid_body`, `node_not_allowed`, `duplicate_singleton`, `duplicate_ref`, `unresolved_ref` and `empty_scope`. Errors are `RepositoryError` with `code: not_found | invalid | conflict | storage`. Human items default to `accepted`; creating a second live singleton is a `conflict`.
 
-Both implementations delegate every decision to the same pure planners (`planRunOutput`, `planItemUpdate`, `planCreateItem`, `planRefreshLinks`) and only apply the resulting plan, so they behave identically — an integration test runs the same write sequence against both and compares the results.
+Both implementations delegate every decision to the same pure planners (`planRunOutput`, `planItemUpdate`, `planCreateItem`, `planRefreshLinks`, `planEditLinks`) and only apply the resulting plan, so they behave identically — an integration test runs the same write sequence against both and compares the results.
 
 **LocalRepository** (pure-local mode, browser): one `localStorage` value per project, `td:v2:<projectId>` → `{ v: 1, items, links, runs, events }`. In pure-local mode the projectId is the **decoded URL slug** — `localProjectId(slug)` applies the same `decodeURIComponent` normalisation as the completion cookie, so encoded and decoded URLs of one project share a key. Each method is a synchronous read-modify-write ending in a single `setItem`, so a failed write (quota) leaves the stored value untouched. Reads validate every record with Zod; invalid records and dangling links are dropped, the original value is copied once to `td:v2-corrupt:<projectId>` and `onCorrupt` is called. A value written by a newer format version is refused rather than overwritten. Storage, clock and id source are injectable. Two tabs writing the same project: last write wins.
 
@@ -231,7 +264,10 @@ Both implementations delegate every decision to the same pure planners (`planRun
 | `GET /api/projects/[id]/graph` | `getGraph` |
 | `GET /api/projects/[id]/runs?node=` · `POST …/runs` `{ run, drafts, replace }` | `listRuns` · `saveRunOutput` |
 | `POST /api/projects/[id]/items` | `createItem` |
-| `PATCH /api/projects/[id]/items/[itemId]` `{ patch, note? }` | `updateItem` (actor human) |
+| `PATCH /api/projects/[id]/items/[itemId]` `{ patch, note? }` | `updateItem` (actor human; `patch.evidence` replaces the evidence) |
+| `POST /api/projects/[id]/links` `{ add?, remove?, note? }` | `editLinks` (actor human) |
+| `POST /api/projects/[id]/links/refresh` `{ linkIds, note? }` | `refreshLinks` (actor human) |
+| `GET /api/projects/[id]/events?itemId=` | `listEvents` |
 | `POST /api/projects/[id]/accept-recommended` `{ node }` | `acceptRecommended` |
 | `POST /api/projects/[id]/fork` `{ name, summary? }` | new project + copies of runs, items, links, events (`forkProject`) |
 | `DELETE /api/projects/[id]` | deletes the project's decision events, links, items, runs and the project row in one transaction (`deleteProject`, `src/lib/db/delete-project.ts`); 400 for a non-UUID id, 404 when missing |
@@ -282,9 +318,11 @@ CREATE TABLE links (
 CREATE TABLE decision_events (
   project_id UUID NOT NULL, id TEXT NOT NULL, seq BIGINT GENERATED ALWAYS AS IDENTITY,
   item_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted')),
+  kind TEXT NOT NULL CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted',
+                                     'link_added','link_removed','link_confirmed','evidence_updated')),
   from_version INTEGER NOT NULL, to_version INTEGER NOT NULL, note TEXT,
-  prev_body JSONB,   -- singleton body before an AI rewrite; added by ALTER … IF NOT EXISTS on older DBs
+  prev_body JSONB,   -- body before an edit; added by ALTER … IF NOT EXISTS on older DBs
+  link JSONB,        -- link_* events: { id, to, rel }; added by ALTER … IF NOT EXISTS (the kind CHECK is dropped and re-added)
   actor TEXT NOT NULL CHECK (actor IN ('human','ai')), at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (project_id, id),
   FOREIGN KEY (project_id, item_id) REFERENCES items (project_id, id) ON DELETE CASCADE
@@ -299,6 +337,7 @@ Ids are unique per project (composite keys), so forking a project can copy rows 
 - **AI actions** — `runAiAction()` (`src/lib/store/ai-action.ts`): POST the route, run the task's adapter, `saveRunOutput` with `toRunInput(run, { node, inputs })`. `inputs` are the items the prompt was built from. Process steps (clarify, probe, follow-ups, free-ask) save the run without drafts; a failed call saves a failed run. A run whose output yields no valid item is reported to the person ("AI 输出没有可用条目") and changes nothing.
 - **Upstream context** — what a prompt receives for (node, type): the accepted items once the person has accepted any, otherwise every item they have not rejected (`contextItems`, `src/lib/model/context.ts`). Rejected items never travel downstream; the brief snapshot is rebuilt from the brief, red-line and assumption items (`briefRequestContext`).
 - **Old default selections → recommendations** — what the old UI pre-selected is now `aiStance: recommend` with a reason, so "采纳全部推荐" reproduces the old default in one click: the primary persona (candidate personas are `neutral`, so one click does not select every persona), priority jobs, baseline and manage-quadrant stakeholders, high/medium-threat and non-consumption alternatives plus the differentiation hypothesis, high-relevance scenario elements, deep-analysis extremes / hostiles / pain points / insights, priority features (a red-line risk is a `caution`), leap top picks, and the brief once its completeness reaches 70 % (below: `caution`). Design sections, modules and subtasks carry the model's own per-item verdict instead (see above), so "采纳全部推荐" there accepts only what the AI actually recommends.
+- **Links by hand** — subtask cards "✎ 编辑依赖" (depends_on between subtasks) and module cards "✎ 编辑关联" (module —implements→ feature): a checkbox per candidate, one `editLinks` call per toggle; candidates that would close a cycle are disabled (`LinkPicker`).
 - **Decisions** — every judgeable item has accept / reject-with-note / undo (and an editor for its free-text fields); the note goes into the next regeneration's feedback. Baseline stakeholders cannot be rejected (they were "必选不可删" before). The leap 🔒 lock is gone: "再补 3 条" is additive, so nothing needs protecting.
 - **Not items** — derived copilot follow-ups and their answers, the brief draft and the import notice are browser UI state (`td:ui:<projectId>:<key>`, `src/lib/store/ui-cache.ts`). A failed follow-up derivation is remembered there too (`followups-failed:<node>`, keyed by the node's inputs — item ids + versions): revisiting the node shows the failure with a "重试派生" button instead of calling the AI again; it re-derives on its own only once the inputs changed (`planFollowUps`, `src/lib/store/follow-ups-state.ts`).
 
@@ -344,4 +383,6 @@ Done in milestone 3a: every node runs on items (`ProjectStoreProvider`, `useNode
 
 Done in milestone 3b: per-item AI stance from the design and subtask prompts (`stance` → `aiStance`, missing → neutral); `DELETE /api/projects/[id]`; failed copilot follow-up derivations remembered instead of retried on every visit; the streaming pilot on the scenarios node (NDJSON progress, cancel; `docs/architecture.md`); the prompt eval baseline (`evals/README.md`: offline schema / render / promptVersion checks in `pnpm test`, `pnpm eval` for real runs with `--dry-run` budgets).
 
-Still to build: blanket stances that remain rule-based rather than model-given (red lines, personas, the differentiation hypothesis, deep-analysis extremes / hostiles / pain points / insights); staleness UI, consistency checks, PRD / issue exports (phase 3); editing Links by hand (subtask dependencies and module features are shown read-only).
+Done in phase 3: staleness UI with confirm / AI redo and the `revisit` feedback; hand-edited Links (subtask dependencies, module ↔ feature) with link events and cycle checks; `prevBody` on every edit; consistency rules and the manual AI check (`finding` items, exhaustive scopes); PRD and Jira / Linear / GitHub task exports ([exports.md](exports.md)); source checks with `evidence_updated`.
+
+Still to build: blanket stances that remain rule-based rather than model-given (red lines, personas, the differentiation hypothesis, deep-analysis extremes / hostiles / pain points / insights); linking dependencies automatically on import into issue trackers.

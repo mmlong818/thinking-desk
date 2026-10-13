@@ -2,7 +2,7 @@ import { indexById } from './graph';
 import { createIdAllocator, type IdAllocator, type IdSource } from './ids';
 import { buildLinks, classifyDrafts, type Classification, type ResolvedDraft } from './ingest';
 import { asItem, isSingletonType, type Item } from './item-types';
-import { makeEvent, type EventSpec } from './events';
+import { keptPrevBody, makeEvent, type EventSpec } from './events';
 import { retireCandidates } from './regenerate';
 import {
   RepositoryError, type IngestIssue, type ReplaceScope, type RunOutputInput, type SaveRunResult,
@@ -74,10 +74,11 @@ function rewrittenItem(r: ResolvedDraft, existing: Item, run: Run, ctx: PlanCont
 function rewriteEvents(existing: Item, run: Run): EventSpec[] {
   const v = existing.version;
   const note = `run ${run.id}`;
+  // A singleton is rewritten in place even when judged: its old body is always kept.
+  const prevBody = keptPrevBody(existing.body, isSingletonType(existing.type));
   const edited: EventSpec = {
     itemId: existing.id, kind: 'edited', fromVersion: v, toVersion: v + 1, actor: 'ai', note,
-    // A singleton is rewritten in place even when judged: keep the old body recoverable.
-    ...(isSingletonType(existing.type) ? { prevBody: existing.body } : {}),
+    ...(prevBody !== undefined ? { prevBody } : {}),
   };
   if (existing.decision === 'pending') return [edited];
   return [edited, { itemId: existing.id, kind: 'reset', fromVersion: v + 1, toVersion: v + 1, actor: 'ai', note }];
@@ -117,16 +118,24 @@ function emptyPlan(run: Run, issues: IngestIssue[] = []): RunPlan {
   };
 }
 
-/** A run that was asked for output but yielded no valid item fails as a whole and changes nothing. */
+/**
+ * A run that was asked for output but yielded no valid item fails as a whole and changes nothing —
+ * unless it returned nothing at all for scopes that are all `exhaustive` (an empty answer is valid).
+ */
 function noOutputError(input: RunOutputInput, c: Classification): string | null {
   if (c.resolved.length > 0 || (input.drafts.length === 0 && input.replace.length === 0)) return null;
-  if (input.drafts.length === 0) return 'run produced no items';
+  if (input.drafts.length === 0) {
+    return input.replace.every((s) => s.exhaustive) ? null : 'run produced no items';
+  }
   return `run produced no valid items (${input.drafts.length} drafts rejected)`;
 }
 
-/** Replace scopes that received at least one valid draft; empty scopes keep their pending items. */
+/**
+ * Replace scopes that received at least one valid draft; empty scopes keep their pending items.
+ * An `exhaustive` scope always counts as filled: its pending items go even when it got nothing.
+ */
 function filledScopes(replace: readonly ReplaceScope[], c: Classification) {
-  const filled = replace.filter((s) => c.resolved.some((r) => r.node === s.node && r.draft.type === s.type));
+  const filled = replace.filter((s) => s.exhaustive || c.resolved.some((r) => r.node === s.node && r.draft.type === s.type));
   const issues: IngestIssue[] = replace
     .filter((s) => !filled.includes(s))
     .map((s) => ({ kind: 'empty_scope', node: s.node, type: s.type }));

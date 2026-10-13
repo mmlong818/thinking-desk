@@ -42,7 +42,7 @@ function useGenerate(data: NodeData, brief: BriefRequestContext | null) {
           rice_score: f.body.rice_score, core_hypothesis: f.body.core_hypothesis, validation_metric: f.body.validation_metric,
         })),
         pillars: pillars.map((p) => ({ id: p.id, ...p.body })),
-        feedback: buildFeedback(data.all, scope),
+        feedback: buildFeedback(data.all, scope, data.links),
       },
       node: 'final',
       inputs: inputsOf(brief?.items ?? [], features, pillars),
@@ -83,7 +83,9 @@ export function FinalFeaturesNode() {
   );
   if (!data.loading && features.length === 0) return <NodeFrame copilot={copilot}><NotYetLeapt data={data} /></NodeFrame>;
   return (
-    <NodeFrame wide copilot={copilot}>
+    <NodeFrame wide copilot={copilot} redo={[{
+      label: '重新生成设计案', node: 'final', types: ['design_section', 'module'], run: generate, busy: generating,
+    }]}>
       <NodeHat kind="final" chip={CHIP} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">
@@ -161,7 +163,7 @@ function DesignView({ data, onRegenerate, regenerating }: { data: NodeData; onRe
       {overview ? <DesignHeader overview={overview} edit={edit} onRegenerate={onRegenerate} regenerating={regenerating} /> : null}
       {principles ? <DesignSection num="§ 1" title="设计原则"><Principles item={principles} edit={edit} /></DesignSection> : null}
       <DesignSection num="§ 2" title="信息架构"><SectionCards items={of('ia')} edit={edit} /></DesignSection>
-      <DesignSection num="§ 3" title={`模块拆分（${modules.length}）`}><Modules modules={modules} links={data.links} byId={byId} /></DesignSection>
+      <DesignSection num="§ 3" title={`模块拆分（${modules.length}）`}><Modules modules={modules} links={data.links} byId={byId} features={data.of('feature')} /></DesignSection>
       <DesignSection num="§ 4" title={`关键用户流（${of('flow').length}）`}><UserFlows items={of('flow')} edit={edit} /></DesignSection>
       <DesignSection num="§ 5" title="核心交互"><SectionCards items={of('interaction')} edit={edit} /></DesignSection>
       <DesignSection num="§ 6" title={`数据模型（${of('data_entity').length}）`}><DataModel items={of('data_entity')} edit={edit} /></DesignSection>

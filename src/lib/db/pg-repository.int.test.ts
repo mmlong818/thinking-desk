@@ -46,6 +46,13 @@ async function scenario(repo: Repository, pid: string) {
   await repo.updateItem(pid, id('persona:p1'), { body: personaBody('A v2') }, { actor: 'human' });
   const stale = staleItems(await repo.getGraph(pid)).flatMap((s) => s.links.map((l) => l.id)).slice(0, 1);
   await repo.refreshLinks(pid, stale);
+  const [anyLink] = (await repo.getGraph(pid)).links;
+  await repo.editLinks(pid, {
+    remove: [anyLink.id], add: [{ from: anyLink.from, to: anyLink.to, rel: anyLink.rel }],
+  }, { actor: 'human', note: 'by hand' });
+  await repo.updateItem(pid, id('persona:p1'), {
+    evidence: { basis: 'web', sources: [{ title: 'Doc', url: 'https://example.org/', verified: true, status: 'title_match' }] },
+  }, { actor: 'human' });
   await repo.updateItem(pid, id('job:j1'), { deleted: true }, { actor: 'human' });
   const briefRun = runInput({ task: 'BRIEF_EXTRACT', node: 'brief' });
   await repo.saveRunOutput(pid, output({ run: briefRun, drafts: [{ type: 'brief', body: briefBody('p', 'r') }] }));
@@ -103,6 +110,8 @@ describe.skipIf(!url)('PgRepository against Postgres', () => {
     expect(a.all.length).toBeGreaterThan(5);
     expect(a.events.length).toBeGreaterThan(10);
     expect(a.events.some((e) => e.kind === 'edited' && e.prevBody !== undefined)).toBe(true);
+    expect(a.events.filter((e) => e.link).map((e) => e.kind).sort()).toEqual(['link_added', 'link_confirmed', 'link_removed']);
+    expect(a.events.some((e) => e.kind === 'evidence_updated')).toBe(true);
     expect(a.runs.filter((r) => r.status === 'failed')).toHaveLength(2);
   });
 

@@ -54,7 +54,7 @@ function useDraft(data: NodeData, brief: BriefRequestContext | null) {
         design_insights: u.insights.map((i) => insightPayload(i, data.links)),
         pain_points: u.pains.map((p) => ({ id: p.id, moment: p.body.moment, root_cause: p.body.root_cause })),
         ...(u.diff ? { differentiation_hypothesis: u.diff.body.statement } : {}),
-        feedback: buildFeedback(data.all, [{ node: 'feat', type: 'feature' }, { node: 'feat', type: 'not_doing' }]),
+        feedback: buildFeedback(data.all, [{ node: 'feat', type: 'feature' }, { node: 'feat', type: 'not_doing' }], data.links),
       },
       node: 'feat',
       inputs: inputsOf(brief.items, u.personas, u.jobs, u.scenarios, u.insights, u.pains, u.diff ? [u.diff] : []),
@@ -120,7 +120,9 @@ export function FeaturesNode() {
   );
   if (!data.loading && !brief) return <NodeFrame copilot={copilot}><MissingFeatUpstream /></NodeFrame>;
   return (
-    <NodeFrame wide copilot={copilot}>
+    <NodeFrame wide copilot={copilot} redo={[{
+      label: '重新起草功能列表', node: 'feat', types: ['feature', 'pillar', 'not_doing'], run: draft, busy: running,
+    }]}>
       <NodeHat kind="feat" chip={STAGE_CHIP[stage]} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">

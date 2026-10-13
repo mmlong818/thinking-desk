@@ -53,9 +53,22 @@ Brief → Users & Jobs → Stakeholders → Alternatives
 | 08 | Design Proposal | Turn features into a full design document · 把功能整合成完整设计案 |
 | 09 | Subfeature Split | Break the design into executable tasks · 把设计拆成可执行的子功能任务 |
 
-The whole chain can be exported as Markdown or JSON from the top bar.
+### Judging aids · 裁决辅助
 
-整条思考链可从顶栏导出为 Markdown 或 JSON。
+- **Upstream changes · 上游已变** — when something an item was built from changes later, the item is marked "⟳ 上游已变" with what changed (before / after). Confirm it still holds (no AI call), or let the AI redo that step with the new content; what you accepted stays, the AI proposes updated versions next to it.
+  条目所依据的上游内容之后被改了，会标出「⟳ 上游已变」并显示改了什么（前后对比）。可以确认仍有效（不调用 AI），也可以让 AI 按新内容重做这一步；已采纳的内容保留，AI 给出更新版供你取舍。
+- **Links by hand · 手动关联** — edit subtask dependencies and which features a module implements; cycles are refused.
+  可手动编辑子任务之间的依赖、模块实现哪些功能；不允许循环依赖。
+- **Consistency · 一致性** — rule checks run on every change (e.g. an accepted feature that serves no accepted Job, a subtask with no feature); an AI check, started by hand, looks for contradictions between accepted decisions across nodes. Findings never block; AI findings are accepted or rejected like any item.
+  规则检查在每次改动后自动运行（如已采纳的功能没有服务任何已采纳的 Job、子任务没有落到功能上）；AI 检查需手动触发，查找跨节点的已采纳决定之间的矛盾。发现只做提示、不阻塞流程；AI 的发现和其他条目一样由你采纳或否决。
+- **Source checks · 来源核实** — cited links are opened on the server (private addresses refused) to see whether they are reachable and whether the page title matches: 已核实 / 未核实 / 无法打开.
+  引用的链接由服务端打开（拒绝内网地址），检查能否访问、页面标题是否对得上：已核实 / 未核实 / 无法打开。
+
+### Exports · 导出
+
+From the top bar: the whole graph as Markdown or JSON; a **PRD** in Markdown built from accepted items only, each line tagged with who produced it and the AI's stance; and the accepted subtasks as a **Jira CSV**, a **Linear CSV** or **GitHub issues** (JSON + `gh` commands). Files only — nothing is pushed to any service. Import steps: [docs/exports.md](docs/exports.md).
+
+顶栏可导出：整个项目的 Markdown 或 JSON；只含已采纳内容的 **PRD**（Markdown，每行标注来源与 AI 立场）；以及已采纳子任务的 **Jira CSV**、**Linear CSV**、**GitHub Issues**（JSON + `gh` 命令）。只生成文件，不会推送到任何服务。导入方法见 [docs/exports.md](docs/exports.md)。
 
 ---
 
@@ -220,9 +233,10 @@ src/
 │   ├── project/[id]/[node]/page.tsx
 │   └── api/
 │       ├── ai/                  # one route per AI task
-│       ├── projects/            # project list / create; [id]/… items, runs, fork (Postgres mode)
+│       ├── projects/            # project list / create; [id]/… items, runs, links, events, fork (Postgres mode)
+│       ├── sources/verify/      # server-side check of cited URLs (SSRF-guarded)
 │       └── providers/           # configured providers + models
-├── middleware.ts                # optional bearer auth + per-IP rate limit for /api
+├── middleware.ts                # optional bearer auth + per-IP rate limit for /api/ai and /api/sources
 ├── components/
 │   ├── shell/                   # TopBar · NavRail · Copilot · ModelPicker · ExportButton
 │   ├── project/                 # project store provider + hooks (items, AI actions, decisions)
@@ -234,8 +248,11 @@ src/
 │   │   ├── router.ts            # task → provider:model routing
 │   │   ├── tasks/               # prompt + schema per AI task
 │   │   └── types.ts
-│   ├── model/                   # items / links / runs / decisions, planners, LocalRepository, task adapters
-│   ├── store/                   # browser side: repository over HTTP, AI actions, completion cookie
+│   ├── model/                   # items / links / runs / decisions, planners, LocalRepository, task adapters,
+│   │                            #   staleness, consistency rules
+│   ├── export/                  # PRD Markdown, Jira / Linear CSV, GitHub issues (pure, deterministic)
+│   ├── sources/                 # URL check: SSRF guard, redirects, title matching
+│   ├── store/                   # browser side: repository over HTTP, AI actions, completion cookie, source checks
 │   └── db/
 │       ├── schema.sql
 │       ├── client.ts            # lazy pg Pool

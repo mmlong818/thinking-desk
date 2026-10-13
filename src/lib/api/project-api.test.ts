@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { LocalRepository } from '../model/local-repository';
 import { memoryStorage } from '../model/__fixtures__/storage';
 import { output, personaBody, rawJob, rawPersona, runInput, seqIdSource, T1 } from '../model/__fixtures__/model';
-import { acceptRecommended, createItem, getGraph, listRuns, saveRun, updateItem } from './project-api';
+import {
+  acceptRecommended, createItem, editLinks, getGraph, listEvents, listRuns, refreshLinks, saveRun, updateItem,
+} from './project-api';
 
 // The /api/projects/[id]/* handlers run against LocalRepository here (same planners as
 // PgRepository, no database): body validation, happy paths and error mapping.
@@ -92,5 +94,60 @@ describe('POST accept-recommended', () => {
     const res = await json(acceptRecommended(repo, PID, req('POST', { node: 'users' })));
     expect(res.body.items).toEqual([expect.objectContaining({ type: 'persona', decision: 'accepted' })]);
     expect((await json(acceptRecommended(repo, PID, req('POST', { node: 'nope' })))).status).toBe(400);
+  });
+});
+
+describe('links', () => {
+  async function seeded() {
+    const { repo } = setup();
+    await saveRun(repo, PID, req('POST', output({
+      run: runInput(),
+      drafts: [
+        { ref: 'p1', type: 'persona', body: rawPersona('p1') },
+        { ref: 'j1', type: 'job', body: rawJob('j1', ['p1']) },
+        { ref: 'j2', type: 'job', body: rawJob('j2') },
+      ],
+      replace: [],
+    })));
+    const graph = await repo.getGraph(PID);
+    const [p1, j1, j2] = graph.items;
+    return { repo, p1, j1, j2, link: graph.links[0] };
+  }
+
+  it('POST links edits links as the human with the note; bad bodies are 400, disallowed pairs 400', async () => {
+    const { repo, p1, j2, link } = await seeded();
+    const ok = await json(editLinks(repo, PID, req('POST', {
+      remove: [link.id], add: [{ from: j2.id, to: p1.id, rel: 'derived_from' }], note: '手动关联',
+    })));
+    expect(ok.status).toBe(200);
+    expect(ok.body.result).toMatchObject({ removed: [link.id], added: [{ from: j2.id, to: p1.id }] });
+    expect((await repo.listEvents(PID)).slice(-2)).toMatchObject([
+      { kind: 'link_removed', actor: 'human', note: '手动关联' }, { kind: 'link_added', actor: 'human' },
+    ]);
+    expect((await json(editLinks(repo, PID, req('POST', {})))).status).toBe(400);
+    expect((await json(editLinks(repo, PID, req('POST', { add: [{ from: j2.id, to: p1.id, rel: 'blocks' }] })))).status).toBe(400);
+    expect((await json(editLinks(repo, PID, req('POST', { add: [{ from: p1.id, to: j2.id, rel: 'depends_on' }] })))).status).toBe(400);
+    expect((await json(editLinks(repo, PID, req('POST', { remove: ['lnk_nope'] })))).status).toBe(404);
+  });
+
+  it('POST links/refresh confirms stale links; GET events lists an item’s events with prevBody', async () => {
+    const { repo, p1, j1, link } = await seeded();
+    await updateItem(repo, PID, p1.id, req('PATCH', { patch: { body: personaBody('v2') } }));
+    const res = await json(refreshLinks(repo, PID, req('POST', { linkIds: [link.id] })));
+    expect(res.body.links).toEqual([expect.objectContaining({ id: link.id, toVersionSeen: 2 })]);
+    expect((await json(refreshLinks(repo, PID, req('POST', { linkIds: [] })))).status).toBe(400);
+    const events = await json(listEvents(repo, PID, new URL(`http://x/events?itemId=${p1.id}`)));
+    expect(events.body.events).toMatchObject([{ kind: 'created' }, { kind: 'edited', prevBody: p1.body }]);
+    const confirmed = await json(listEvents(repo, PID, new URL(`http://x/events?itemId=${j1.id}`)));
+    expect((confirmed.body.events as { kind: string }[]).map((e) => e.kind)).toEqual(['created', 'link_confirmed']);
+  });
+
+  it('PATCH can replace evidence (source checks); malformed evidence is 400', async () => {
+    const { repo, p1 } = await seeded();
+    const evidence = { basis: 'web', sources: [{ title: 't', url: 'https://example.org/', verified: false, status: 'unreachable' }] };
+    const ok = await json(updateItem(repo, PID, p1.id, req('PATCH', { patch: { evidence } })));
+    expect(ok.body.item).toMatchObject({ version: 1, evidence });
+    const bad = await json(updateItem(repo, PID, p1.id, req('PATCH', { patch: { evidence: { basis: 'web', sources: [{ status: 'ok' }] } } })));
+    expect(bad.status).toBe(400);
   });
 });
