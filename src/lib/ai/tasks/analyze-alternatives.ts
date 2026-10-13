@@ -5,6 +5,7 @@ import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
 import type { BriefContext } from '../schemas/snapshots';
 import type { Persona, Job } from '../schemas/analyze-users';
+import { stancePromptFragment } from '../stance-prompt';
 import { AlternativesAnalysisSchema, type AlternativesAnalysis } from '../schemas/analyze-alternatives';
 
 /**
@@ -55,6 +56,7 @@ feature_breakdowns 每条覆盖：
 最后给 differentiation_hypothesis —— 一句话说清"我们凭什么赢"。
 必须基于以上分析推出，**不能是空口号**。
 格式参考："我们凭 [某个具体优势 / 结构] 解决 [某个对手没解决的 Job]，用户会因为 [某个情感或功能理由] 选我们。"
+同时给 differentiation_stance —— 你对这条假设本身的判断（见下方 stance 规则）。
 
 # key_threats 前 3
 列出你分析后认为对我们威胁最大的 3 条。可能是某个具体对手，也可能是"非消费"的总威胁。
@@ -65,7 +67,12 @@ feature_breakdowns 每条覆盖：
 - ask：追问用户决策（例"要不要把作业帮家长端作为直接替代单独列出？"）
 
 # 输出
-严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
+严格 JSON，不含任何前后文、不用 Markdown 代码块。
+
+${stancePromptFragment(
+  '差异化假设（differentiation_stance，只有这一条）',
+  '对差异化假设而言：recommend = 它能从上面的替代分析里推出来，点名了对手没解决的具体 Job，经得起"凭什么赢"的追问；neutral = 方向合理，但能不能成立取决于团队的资源 / 取舍，或联网搜到的证据不足以判断；caution = 像空口号、依赖没验证的假设、绕开了最强的替代（尤其是非消费替代），或与 key_threats 里的威胁自相矛盾。',
+)}`;
 
 function formatContext(
   brief: BriefContext,

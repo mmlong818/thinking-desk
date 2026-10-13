@@ -2,14 +2,14 @@
 
 exports[`promptVersion > is the same for every brief (it hashes the template, not the data) and matches the snapshot 1`] = `
 {
-  "chain:alt": "ALT_SCAN sha256:89036ca71bfc3037",
-  "chain:brief": "BRIEF_EXTRACT sha256:a58601a7b62253a3",
+  "chain:alt": "ALT_SCAN sha256:085fd0fdd4740aff",
+  "chain:brief": "BRIEF_EXTRACT sha256:d3364eb1b63793d6",
   "chain:design": "DESIGN_PROPOSAL sha256:d6749eace3f65cc1",
   "chain:features": "FEAT_DRAFT sha256:a124bef9e068822e",
   "chain:leap": "LEAP_FIRST_PRINCIPLES sha256:f7716b31962aa870",
   "chain:revise": "FEAT_DRAFT sha256:234b4e94455c1b39",
   "chain:scen_combine": "SCEN_FEED sha256:02a97fc6ad500d0d",
-  "chain:scen_deep": "SCEN_PAIN sha256:e244ea01fa577056",
+  "chain:scen_deep": "SCEN_PAIN sha256:e25d83cb247010d4",
   "chain:scen_exhaust": "SCEN_FEED sha256:bc78c34be1560052",
   "chain:split": "SPLIT_SUBFEATURES sha256:4728b1b09025707c",
   "chain:stake": "STAKE_MATRIX sha256:02643cc7f9bcf204",

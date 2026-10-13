@@ -1,6 +1,7 @@
 // Client-safe task contract: Zod schemas, types and UI constants only. Never import the router,
 // providers or tasks here (enforced by client-safety.test.ts).
 import { z } from 'zod';
+import { StanceField } from './stance';
 
 export const AlternativeSchema = z.object({
   id: z.string(),
@@ -44,6 +45,8 @@ export const AlternativesAnalysisSchema = z.object({
   strategic_profiles: z.array(StrategicProfileSchema).min(2).max(6),
   feature_breakdowns: z.array(FeatureBreakdownSchema).max(4),
   differentiation_hypothesis: z.string(),
+  /** The AI's verdict on the hypothesis; the `diff_hypothesis` item body stays stance-free. */
+  differentiation_stance: StanceField,
   key_threats: z.array(z.string()).min(1).max(5),
   critiques: z
     .array(

@@ -1,6 +1,7 @@
 import { dataBlock } from '../prompt';
 import { feedbackBlock } from '../feedback-prompt';
 import type { RegenerationFeedback } from '../../model/feedback';
+import { stancePromptFragment } from '../stance-prompt';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ClarificationAnswer } from '../schemas/extract-brief';
 import type { BriefContext } from '../schemas/snapshots';
@@ -217,6 +218,7 @@ const DEEP_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副驾
 - pushed_to_limit：推到了什么极限
 - description：具体场景
 - robustness_gap：当前方案在此极值下会怎么崩
+- stance：你对这条极值情景的判断（见下方 stance 规则）
 
 # 产出三 · 敌意情景（§8.3 第二部分）
 2-4 个。**如果有人恶意使用会怎样**：
@@ -226,7 +228,7 @@ const DEEP_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副驾
 - 侵犯他人隐私
 
 任何涉及 UGC / 社交 / 支付 / 数据收集的产品**都必须有**敌意情景分析。
-每条包含 attack / vulnerable_users / mitigation / severity。
+每条包含 attack / vulnerable_users / mitigation / severity，外加 stance（见下方 stance 规则）。
 
 # 产出四 · 痛点连续追问（§8.4 最精髓）
 每个选中情景**至少 1 个痛点**，用"连续追问为什么"挖到底层心理：
@@ -236,6 +238,7 @@ const DEEP_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副驾
 - why_2：追问一层后的原因
 - why_3：再追问一层到底层心理
 - root_cause：最底层的心理根源
+- stance：你对这条痛点追问的判断（见下方 stance 规则）
 
 示例（方法论原话）：
 - moment: 飞机晚点
@@ -251,7 +254,7 @@ const DEEP_PROMPT = `你是「思考工作台」第 05 情景节点的 AI 副驾
 3-8 条。每条必须用**方法论规定的句式**：
 "**在 [情景] 下，[用户] 想完成 [Job]，他的痛点是 [XX]，因此我们可以 [具体的设计动作]**。"
 
-insight_text 就放完整这句话，action 单独放"设计动作"短句方便引用。
+insight_text 就放完整这句话，action 单独放"设计动作"短句方便引用；每条再给 stance（见下方 stance 规则）。
 
 # critiques 最多 5 条
 - check：提醒（例"敌意情景只有 2 条 · K12 涉及未成年人建议加到 4 条"）
@@ -259,7 +262,17 @@ insight_text 就放完整这句话，action 单独放"设计动作"短句方便�
 - ask：反问（例"要不要补充一个涉及家长干预的敌意情景？"）
 
 # 输出
-严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
+严格 JSON，不含任何前后文、不用 Markdown 代码块。
+
+${stancePromptFragment(
+  '极值情景（extremes）、敌意情景（hostiles）、痛点（pain_points）、设计启发（design_insights）的每一条（矩阵、快点、critiques 不用给）',
+  '各类的读法：\n' +
+  '- 极值情景：recommend = 这个极值真会发生，当前方案确实会在这里崩，值得纳入设计；caution = 极值牵强、与本项目关系不大，或 robustness_gap 是凭空推演。\n' +
+  '- 敌意情景：recommend = 攻击路径现实，mitigation 具体、团队做得出来；caution = mitigation 只是口号或依赖没人力的人工审核，或 severity 你没把握、涉及未成年人等高危人群，需要人重点审查。\n' +
+  '- 痛点：recommend = 三层 why 逐层有依据，root_cause 确实挖到了心理层而不是换个说法复述表层；caution = 追问链有跳跃，root_cause 靠猜。\n' +
+  '- 设计启发：recommend = 严格从情景、Job、痛点推出，动作具体可落地；caution = 动作和痛点的因果牵强、太宽泛，或可能碰到 Brief 的边界 / 红线。\n' +
+  '各类的 neutral = 合理，但值不值得做取决于团队取舍，或现有信息不足以判断。',
+)}`;
 
 export async function deepAnalyzeScenarios(args: {
   brief: BriefContext;
