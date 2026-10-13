@@ -75,8 +75,13 @@ export function UsersNode() {
   );
   if (!data.loading && !ctx) return <NodeFrame copilot={copilot}><MissingBrief /></NodeFrame>;
   const brief = data.of('brief', 'brief')[0];
+  const busy = actions.running !== null;
+  const redo = [
+    { label: '基于当前画像刷新 Jobs', types: ['job'] as const, run: actions.refreshJobs, busy },
+    { label: '全部重新分析', types: ['persona'] as const, run: actions.analyze, busy },
+  ];
   return (
-    <NodeFrame copilot={copilot}>
+    <NodeFrame copilot={copilot} redo={redo}>
       <NodeHat kind="users" chip={STAGE_CHIP[stage]} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">

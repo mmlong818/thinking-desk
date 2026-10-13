@@ -40,7 +40,7 @@ function useAltScan(data: NodeData, brief: BriefRequestContext | null) {
         ...briefPayload(brief),
         personas: personas.map(personaPayload),
         lockedJobs: jobs.map((j) => jobPayload(j, data.links)),
-        feedback: buildFeedback(data.all, [{ node: 'alt', type: 'alternative' }]),
+        feedback: buildFeedback(data.all, [{ node: 'alt', type: 'alternative' }], data.links),
       },
       node: 'alt',
       inputs: inputsOf(brief.items, personas, jobs),
@@ -119,7 +119,9 @@ export function AlternativesNode() {
   );
   if (!data.loading && !brief) return <NodeFrame copilot={copilot}><MissingAltUpstream /></NodeFrame>;
   return (
-    <NodeFrame wide copilot={copilot}>
+    <NodeFrame wide copilot={copilot} redo={[{
+      label: '重新扫描替代方案', types: ['alternative', 'alt_profile', 'alt_breakdown', 'diff_hypothesis'], run: analyze, busy: running,
+    }]}>
       <NodeHat kind="alt" chip={STAGE_CHIP[stage]} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">

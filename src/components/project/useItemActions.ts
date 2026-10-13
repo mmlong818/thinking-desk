@@ -4,12 +4,14 @@ import { useCallback, useMemo, useState } from 'react';
 import type { NodeKind } from '@/data/nodes';
 import type { ProjectRepository } from '@/lib/api/project-api';
 import type { Item } from '@/lib/model/item-types';
-import type { CreateItemInput, ItemPatch } from '@/lib/model/repository';
+import type { CreateItemInput, ItemPatch, LinkEdit, LinkEditResult } from '@/lib/model/repository';
+import type { Evidence, Link } from '@/lib/model/types';
 import { useProject } from './ProjectStore';
 
 // Human-side writes on items: judge (accept / reject with a note / reset), edit the body,
-// soft-delete, create, accept every recommendation of a node. Each call reports its own
-// error instead of throwing, so a control can show it next to itself.
+// soft-delete, create, accept every recommendation of a node, confirm stale links ("still
+// holds"), edit links by hand, store source checks. Each call reports its own error instead of
+// throwing, so a control can show it next to itself.
 
 export interface ItemActions {
   busy: string | null;
@@ -22,6 +24,9 @@ export interface ItemActions {
   remove: (item: Item) => Promise<Item | undefined>;
   create: (input: CreateItemInput) => Promise<Item | undefined>;
   acceptRecommended: (node: NodeKind) => Promise<Item[] | undefined>;
+  confirmLinks: (linkIds: readonly string[], note?: string) => Promise<Link[] | undefined>;
+  editLinks: (edit: LinkEdit, note?: string) => Promise<LinkEditResult | undefined>;
+  setEvidence: (item: Item, evidence: Evidence, note?: string) => Promise<Item | undefined>;
 }
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -60,5 +65,10 @@ export function useItemActions(): ItemActions {
     remove: (item) => patch(item, { deleted: true }),
     create: (input) => run('create', (repo, pid) => repo.createItem(pid, input)),
     acceptRecommended: (node) => run('accept-recommended', (repo, pid) => repo.acceptRecommended(pid, node)),
+    confirmLinks: (linkIds, note) =>
+      run('confirm-links', (repo, pid) => repo.refreshLinks(pid, linkIds, { actor: 'human', ...(note ? { note } : {}) })),
+    editLinks: (edit, note) => run('edit-links', (repo, pid) => repo.editLinks(pid, edit, { actor: 'human', ...(note ? { note } : {}) })),
+    setEvidence: (item, evidence, note) =>
+      run(item.id, (repo, pid) => repo.updateItem(pid, item.id, { evidence }, { actor: 'human', ...(note ? { note } : {}) })),
   }), [busy, error, patch, run]);
 }

@@ -11,6 +11,7 @@ import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/N
 import {
   CenteredAction, ErrorCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
 } from '@/components/shared/NodeKit';
+import type { RedoHandler } from '@/components/shared/RedoContext';
 import { StreamProgressCard } from '@/components/shared/StreamProgress';
 import { briefRequestContext } from '@/lib/model/context';
 import { DeepResults } from './scen/DeepResults';
@@ -44,7 +45,7 @@ export function ScenariosNode() {
   );
   if (!data.loading && !brief) return <NodeFrame copilot={copilot}><MissingScenUpstream /></NodeFrame>;
   return (
-    <NodeFrame wide copilot={copilot}>
+    <NodeFrame wide copilot={copilot} redo={scenRedo(actions)}>
       <NodeHat kind="scen" chip={stageChip(stage)} />
       <h1 className="node-title">情景分析：挖真需求最锋利的工具</h1>
       <p className="node-intro">
@@ -68,6 +69,19 @@ export function ScenariosNode() {
       ) : null}
     </NodeFrame>
   );
+}
+
+/** The three scenario steps, each regenerating its own item types. */
+function scenRedo(actions: Actions): RedoHandler[] {
+  const busy = actions.running !== null;
+  return [
+    { label: '重新穷举要素', types: ['scenario_element'], run: actions.exhaust, busy },
+    { label: '重新组合情景', types: ['scenario'], run: () => void actions.combine(), busy },
+    {
+      label: '重新深入分析', types: ['matrix_cell', 'extreme', 'hostile', 'pain_point', 'delight_point', 'insight'],
+      run: () => void actions.deep(), busy,
+    },
+  ];
 }
 
 function MissingScenUpstream() {

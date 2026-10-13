@@ -42,7 +42,7 @@ function useGenerate(data: NodeData, brief: BriefRequestContext | null) {
           rice_score: f.body.rice_score, core_hypothesis: f.body.core_hypothesis, validation_metric: f.body.validation_metric,
         })),
         pillars: pillars.map((p) => ({ id: p.id, ...p.body })),
-        feedback: buildFeedback(data.all, scope),
+        feedback: buildFeedback(data.all, scope, data.links),
       },
       node: 'final',
       inputs: inputsOf(brief?.items ?? [], features, pillars),
@@ -83,7 +83,9 @@ export function FinalFeaturesNode() {
   );
   if (!data.loading && features.length === 0) return <NodeFrame copilot={copilot}><NotYetLeapt data={data} /></NodeFrame>;
   return (
-    <NodeFrame wide copilot={copilot}>
+    <NodeFrame wide copilot={copilot} redo={[{
+      label: '重新生成设计案', node: 'final', types: ['design_section', 'module'], run: generate, busy: generating,
+    }]}>
       <NodeHat kind="final" chip={CHIP} />
       <h1 className="node-title">{TITLE}</h1>
       <p className="node-intro">

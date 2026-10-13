@@ -5,6 +5,7 @@ import type { Item } from '@/lib/model/item-types';
 import { useItemActions } from '@/components/project/useItemActions';
 import { useNodeData } from '@/components/project/useNodeData';
 import { ITEM_TYPE_LABEL } from './item-labels';
+import { StaleNotice } from './StaleContent';
 
 // Node-level judging aids: how many items wait for a decision, what completes the node,
 // the one-click "accept every AI recommendation", and the non-blocking "missing" hints.
@@ -73,6 +74,7 @@ export function JudgeBar({ node, judged }: { node: NodeKind; judged?: readonly I
         </span>
         <AcceptRecommendedButton node={node} />
       </div>
+      <StaleNotice node={node} />
       <NodeHints node={node} />
     </div>
   );

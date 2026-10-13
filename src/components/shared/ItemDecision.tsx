@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Item } from '@/lib/model/item-types';
 import type { AiStance, Decision, Evidence } from '@/lib/model/types';
 import { useItemActions } from '@/components/project/useItemActions';
+import { StaleBadge, StalePanel } from './StaleContent';
 
 // The human judgment on one item: accept / reject with an optional note (fed back to the AI
 // on the next regeneration) / undo, plus an optional edit toggle. Badges show the AI's own
@@ -67,6 +68,7 @@ export function ItemDecision({
 }: DecisionProps) {
   const actions = useItemActions();
   const [noting, setNoting] = useState(false);
+  const [staleOpen, setStaleOpen] = useState(false);
   const [guardError, setGuardError] = useState<string | null>(null);
   const full = variant === 'full';
   const busy = actions.busy !== null;
@@ -94,7 +96,9 @@ export function ItemDecision({
           </button>
         ) : null}
         {full ? <StanceBadge stance={item.aiStance} withReason /> : null}
+        <StaleBadge item={item} open={staleOpen} onToggle={() => setStaleOpen((v) => !v)} />
       </div>
+      {staleOpen ? <StalePanel item={item} /> : null}
       {noting ? (
         <RejectNote
           onCancel={() => setNoting(false)}

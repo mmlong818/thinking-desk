@@ -21,6 +21,21 @@ describe('buildFeedback', () => {
     expect(isEmptyFeedback(fb)).toBe(false);
   });
 
+  it('moves kept items whose upstream changed into revisit, naming the new upstream', () => {
+    const persona = makeItem({ id: 'per_1', version: 2, body: personaBody('小米') });
+    const job = makeItem({ id: 'job_1', type: 'job', decision: 'accepted', body: jobBody('写作业') });
+    const fresh = makeItem({ id: 'job_2', type: 'job', decision: 'accepted', body: jobBody('背单词') });
+    const links = [
+      { id: 'l1', projectId: 'proj-1', from: 'job_1', to: 'per_1', rel: 'derived_from' as const, toVersionSeen: 1 },
+      { id: 'l2', projectId: 'proj-1', from: 'job_2', to: 'per_1', rel: 'derived_from' as const, toVersionSeen: 2 },
+    ];
+    const fb = buildFeedback([persona, job, fresh], [{ node: 'users', type: 'job' }], links);
+    expect(fb.keep.map((k) => k.id)).toEqual(['job_2']);
+    expect(fb.revisit).toEqual([{ id: 'job_1', type: 'job', summary: '[functional] 写作业', changed: 'persona [per_1] 小米 · o' }]);
+    expect(buildFeedback([persona, job, fresh], [{ node: 'users', type: 'job' }]).revisit).toEqual([]);
+    expect(isEmptyFeedback({ keep: [], avoid: [], revisit: fb.revisit })).toBe(false);
+  });
+
   it('is empty when nothing in scope was judged', () => {
     expect(isEmptyFeedback(buildFeedback(items, [{ node: 'stake', type: 'stakeholder' }]))).toBe(true);
     expect(isEmptyFeedback(undefined)).toBe(true);
