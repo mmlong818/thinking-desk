@@ -1,8 +1,9 @@
 import type { Feature } from '../../ai/schemas/draft-features';
 import type { DesignProposal } from '../../ai/schemas/generate-design';
 import type { FeatureRevision } from '../../ai/schemas/revise-features';
+import type { ItemStance } from '../../ai/schemas/stance';
 import type { DraftLink, ItemDraft } from '../repository';
-import { critiqueDrafts, recommend, scopes, summaryDraft, type AdaptedOutput } from './common';
+import { critiqueDrafts, modelStance, scopes, summaryDraft, type AdaptedOutput } from './common';
 import { featureDrafts, notDoingDrafts, pillarDrafts } from './features';
 
 export interface ReviseFeaturesContext {
@@ -40,36 +41,35 @@ export function adaptFeatureRevision(out: FeatureRevision, ctx: ReviseFeaturesCo
   };
 }
 
-export const DESIGN_REASON = 'AI 设计案的组成部分 · 可整体采纳后逐条修改';
-
-function section(body: Record<string, unknown>): ItemDraft {
-  return { type: 'design_section', node: 'final', body, aiStance: recommend(DESIGN_REASON) };
+/** One design part; its aiStance is the model's own verdict on that part (missing → neutral). */
+function section(body: Record<string, unknown>, stance: ItemStance | undefined): ItemDraft {
+  return { type: 'design_section', node: 'final', body, aiStance: modelStance(stance) };
 }
 
 function titled(kind: 'ia' | 'interaction' | 'tech', list: DesignProposal['information_architecture']): ItemDraft[] {
-  return list.map(({ title, body }) => section({ kind, title, body }));
+  return list.map(({ title, body, stance }) => section({ kind, title, body }, stance));
 }
 
 function designSections(d: DesignProposal): ItemDraft[] {
   return [
-    section({ kind: 'overview', title: d.title, one_liner: d.one_liner, vision: d.vision }),
-    section({ kind: 'principles', items: d.design_principles }),
+    section({ kind: 'overview', title: d.title, one_liner: d.one_liner, vision: d.vision }, d.overview_stance),
+    section({ kind: 'principles', items: d.design_principles }, d.principles_stance),
     ...titled('ia', d.information_architecture),
-    ...d.user_flows.map(({ id: _id, ...flow }) => section({ kind: 'flow', ...flow })),
+    ...d.user_flows.map(({ id: _id, stance, ...flow }) => section({ kind: 'flow', ...flow }, stance)),
     ...titled('interaction', d.key_interactions),
-    ...d.data_model.map((e) => section({ kind: 'data_entity', ...e })),
+    ...d.data_model.map(({ stance, ...e }) => section({ kind: 'data_entity', ...e }, stance)),
     ...titled('tech', d.tech_skeleton),
-    ...d.metrics.map((m) => section({ kind: 'metric', ...m })),
-    ...d.risks.map((r) => section({ kind: 'risk', ...r })),
-    ...d.milestones.map((m) => section({ kind: 'milestone', ...m })),
-    ...d.open_questions.map((text) => section({ kind: 'open_question', text })),
+    ...d.metrics.map(({ stance, ...m }) => section({ kind: 'metric', ...m }, stance)),
+    ...d.risks.map(({ stance, ...r }) => section({ kind: 'risk', ...r }, stance)),
+    ...d.milestones.map(({ stance, ...m }) => section({ kind: 'milestone', ...m }, stance)),
+    ...d.open_questions.map(({ question, stance }) => section({ kind: 'open_question', text: question }, stance)),
   ];
 }
 
 /** DESIGN_PROPOSAL → design sections (one per part) and modules (feature_ids → implements). */
 export function adaptDesignProposal(out: DesignProposal): AdaptedOutput {
-  const modules = out.modules.map((m): ItemDraft => ({
-    ref: m.id, type: 'module', node: 'final', body: m, aiStance: recommend(DESIGN_REASON),
+  const modules = out.modules.map(({ stance, ...m }): ItemDraft => ({
+    ref: m.id, type: 'module', node: 'final', body: m, aiStance: modelStance(stance),
   }));
   return { drafts: [...designSections(out), ...modules], replace: scopes('final', 'design_section', 'module') };
 }

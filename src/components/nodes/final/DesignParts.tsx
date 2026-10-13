@@ -2,15 +2,16 @@
 
 import type { ReactNode } from 'react';
 import { EditableList, EditableText, EditableTextarea } from '@/components/shared/Editable';
-import { ItemDecision } from '@/components/shared/ItemDecision';
+import { ItemDecision, StanceBadge } from '@/components/shared/ItemDecision';
 import { judgedClass } from '@/components/shared/JudgeStrip';
 import type { SectionItem, SectionOf } from './design-meta';
 import type { DesignEdit } from './useDesignEdit';
 
-/** ✓ / ✗ for an AI entry; a hand-made entry can also be deleted. */
+/** The AI's verdict and ✓ / ✗ for an AI entry; a hand-made entry can also be deleted. */
 export function EntryJudge({ item, edit }: { item: SectionItem; edit: DesignEdit }) {
   return (
     <span className="design-entry-judge">
+      <StanceBadge stance={item.aiStance} />
       <ItemDecision item={item} />
       {item.origin === 'human' ? (
         <button type="button" className="editable-remove" style={{ opacity: 1 }} title="删除" onClick={() => edit.remove(item)}>×</button>
@@ -68,6 +69,7 @@ export function Principles({ item, edit }: { item: SectionOf<'principles'>; edit
         addLabel="+ 添加我的设计原则"
         onChange={(next) => edit.patch(item, { items: next })}
       />
+      <StanceBadge stance={item.aiStance} />
       <ItemDecision item={item} />
     </div>
   );

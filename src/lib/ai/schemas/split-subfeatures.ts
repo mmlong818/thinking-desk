@@ -1,6 +1,7 @@
 // Client-safe task contract: Zod schemas, types and UI constants only. Never import the router,
 // providers or tasks here (enforced by client-safety.test.ts).
 import { z } from 'zod';
+import { StanceField } from './stance';
 
 export const SubFeatureSchema = z.object({
   id: z.string(),
@@ -13,11 +14,14 @@ export const SubFeatureSchema = z.object({
 });
 export type SubFeature = z.infer<typeof SubFeatureSchema>;
 
+/** A subtask as the AI outputs it, with its verdict; the subtask item body stays stance-free. */
+export const SubFeatureOutputSchema = SubFeatureSchema.extend({ stance: StanceField });
+
 export const FeatureSplitSchema = z.object({
   feature_id: z.string(),
   feature_name: z.string(),
   module_id: z.string().default(''),
-  subfeatures: z.array(SubFeatureSchema).min(1),
+  subfeatures: z.array(SubFeatureOutputSchema).min(1),
 });
 export type FeatureSplit = z.infer<typeof FeatureSplitSchema>;
 

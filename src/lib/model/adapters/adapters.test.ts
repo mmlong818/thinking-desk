@@ -7,7 +7,7 @@ import { JobsRefinementSchema, PersonaBatchSchema, UsersAnalysisSchema } from '.
 import { CreativeLeapAnalysisSchema, MoreItemsResultSchema } from '../../ai/schemas/creative-leap';
 import { FeatureListSchema } from '../../ai/schemas/draft-features';
 import { BriefExtractionSchema } from '../../ai/schemas/extract-brief';
-import { DesignProposalSchema } from '../../ai/schemas/generate-design';
+import { DesignProposalSchema, type DesignProposal } from '../../ai/schemas/generate-design';
 import { FeatureRevisionSchema } from '../../ai/schemas/revise-features';
 import { SubfeatureBreakdownSchema } from '../../ai/schemas/split-subfeatures';
 import { validAlternatives } from '../../ai/schemas/__fixtures__/alternatives';
@@ -24,7 +24,7 @@ import { jobBody, makeItem, PROJECT, runInput, seqIdSource, T1 } from '../__fixt
 import type { Item } from '../item-types';
 import { planRunOutput, type RunPlan } from '../plan-run';
 import type { AiTask } from '../../ai/types';
-import type { AdaptedOutput } from './common';
+import { NO_STANCE_REASON, UNEXPLAINED_REASON, type AdaptedOutput } from './common';
 import {
   adaptAlternatives, adaptDeepAnalysis, adaptDesignProposal, adaptDimensions, adaptExtractBrief,
   adaptFeatureList, adaptFeatureRevision, adaptJobsRefinement, adaptLeapAnalysis, adaptMoreLeapItems,
@@ -267,6 +267,42 @@ describe('final adapters', () => {
     const [mod] = ofType(plan, 'module');
     expect(linksFrom(plan, mod.id)).toEqual([expect.objectContaining({ to: 'ftr_9', rel: 'implements' })]);
   });
+
+  it("design: every part carries the model's own stance; a missing one is neutral, never recommend", () => {
+    const data = DesignProposalSchema.parse({
+      ...validDesign,
+      overview_stance: { verdict: 'recommend', reason: '定位与 Brief 一致' },
+      information_architecture: [
+        { ...validDesign.information_architecture[0], stance: { verdict: 'caution', reason: '依赖未验证的假设' } },
+        validDesign.information_architecture[1],
+      ],
+      modules: [{ ...validDesign.modules[0], stance: { verdict: 'recommend', reason: '职责清楚' } }, validDesign.modules[1]],
+      open_questions: ['旧格式的字符串', { question: 'q2', stance: { verdict: 'caution', reason: ' ' } }],
+    });
+    const plan = ingest(adaptDesignProposal(data), 'final', 'DESIGN_PROPOSAL');
+    expect(plan.issues.filter((i) => i.kind !== 'unresolved_ref')).toEqual([]);
+    const stances = ofType(plan, 'design_section').map((s) => s.type === 'design_section' && [s.body.kind, s.aiStance]);
+    expect(stances.slice(0, 4)).toEqual([
+      ['overview', { verdict: 'recommend', reason: '定位与 Brief 一致' }],
+      ['principles', { verdict: 'neutral', reason: NO_STANCE_REASON }],
+      ['ia', { verdict: 'caution', reason: '依赖未验证的假设' }],
+      ['ia', { verdict: 'neutral', reason: NO_STANCE_REASON }],
+    ]);
+    expect(stances.slice(-2)).toEqual([
+      ['open_question', { verdict: 'neutral', reason: NO_STANCE_REASON }],
+      ['open_question', { verdict: 'caution', reason: UNEXPLAINED_REASON }],
+    ]);
+    expect(ofType(plan, 'design_section').at(-2)?.body).toEqual({ kind: 'open_question', text: '旧格式的字符串' });
+    expect(ofType(plan, 'module').map((m) => m.aiStance?.verdict)).toEqual(['recommend', 'neutral']);
+    expect(plan.created.some((i) => 'stance' in (i.body as object))).toBe(false);
+  });
+
+  it('design: an output without any stance fields (pre-stance shape) adapts with neutral stances', () => {
+    const legacy = { ...validDesign, open_questions: [] } as unknown as DesignProposal;
+    const out = adaptDesignProposal(legacy);
+    expect(out.drafts.every((d) => d.aiStance?.verdict === 'neutral')).toBe(true);
+    expect(ingest(out, 'final', 'DESIGN_PROPOSAL').issues.filter((i) => i.kind === 'invalid_body')).toEqual([]);
+  });
 });
 
 describe('split adapter', () => {
@@ -289,7 +325,28 @@ describe('split adapter', () => {
     const [a, b] = ofType(plan, 'subtask');
     expect(b.body).toMatchObject({ feature_name: 'F1', critical: true });
     expect(linksFrom(plan, b.id).map((l) => [l.to, l.rel])).toEqual([['ftr_1', 'implements'], [a.id, 'depends_on']]);
-    expect(b.aiStance?.reason).toBe('关键路径上的子任务');
+    expect(a.aiStance).toEqual({ verdict: 'neutral', reason: NO_STANCE_REASON });
+    expect(b.aiStance).toEqual({ verdict: 'neutral', reason: NO_STANCE_REASON });
+    expect('stance' in b.body).toBe(false);
+  });
+
+  it("subtasks take the model's per-item verdict, critical or not", () => {
+    const sub = validBreakdown.splits[0].subfeatures[0];
+    const data = SubfeatureBreakdownSchema.parse({
+      ...validBreakdown,
+      splits: [{
+        ...validBreakdown.splits[0],
+        subfeatures: [
+          { ...sub, stance: { verdict: 'recommend', reason: '设计案已定，可直接开工' } },
+          { ...sub, id: 'sf-2', stance: { verdict: 'caution', reason: '依赖未拍板的支付方案' } },
+        ],
+      }],
+      critical_path: ['sf-2'],
+    });
+    const [a, b] = ofType(ingest(adaptSubfeatureBreakdown(data), 'split', 'SPLIT_SUBFEATURES'), 'subtask');
+    expect(a.aiStance).toEqual({ verdict: 'recommend', reason: '设计案已定，可直接开工' });
+    expect(b.aiStance).toEqual({ verdict: 'caution', reason: '依赖未拍板的支付方案' });
+    expect(b.body).toMatchObject({ critical: true });
   });
 });
 

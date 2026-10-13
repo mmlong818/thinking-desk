@@ -1,6 +1,7 @@
 // Client-safe task contract: Zod schemas, types and UI constants only. Never import the router,
 // providers or tasks here (enforced by client-safety.test.ts).
 import { z } from 'zod';
+import { StanceField } from './stance';
 
 export const SectionSchema = z.object({
   id: z.string(),
@@ -57,27 +58,41 @@ export const MilestoneSchema = z.object({
 });
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
+// The design as the AI outputs it: every part carries its own `stance` (the AI's verdict on that
+// entry). The shapes above stay stance-free: item bodies and upstream snapshots reuse them.
+const StancedSection = SectionSchema.extend({ stance: StanceField });
+
+/** An open question; a bare string (the pre-stance shape) is still accepted, without a verdict. */
+export const OpenQuestionSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? { question: v } : v),
+  z.object({ question: z.string(), stance: StanceField }),
+);
+
 export const DesignProposalSchema = z.object({
   title: z.string(),
   one_liner: z.string(),
   vision: z.string(),
+  overview_stance: StanceField,
   design_principles: z.array(z.string()).min(2),
-  information_architecture: z.array(SectionSchema).min(2),
-  modules: z.array(ModuleSchema).min(2),
-  user_flows: z.array(UserFlowSchema).min(1),
-  key_interactions: z.array(SectionSchema).min(1),
-  data_model: z.array(DataEntitySchema).min(1),
-  tech_skeleton: z.array(SectionSchema).min(1),
+  principles_stance: StanceField,
+  information_architecture: z.array(StancedSection).min(2),
+  modules: z.array(ModuleSchema.extend({ stance: StanceField })).min(2),
+  user_flows: z.array(UserFlowSchema.extend({ stance: StanceField })).min(1),
+  key_interactions: z.array(StancedSection).min(1),
+  data_model: z.array(DataEntitySchema.extend({ stance: StanceField })).min(1),
+  tech_skeleton: z.array(StancedSection).min(1),
   metrics: z.array(z.object({
     name: z.string(),
     definition: z.string(),
     target: z.string(),
+    stance: StanceField,
   })),
   risks: z.array(z.object({
     risk: z.string(),
     mitigation: z.string(),
+    stance: StanceField,
   })),
-  milestones: z.array(MilestoneSchema).min(1),
-  open_questions: z.array(z.string()),
+  milestones: z.array(MilestoneSchema.extend({ stance: StanceField })).min(1),
+  open_questions: z.array(OpenQuestionSchema),
 });
 export type DesignProposal = z.infer<typeof DesignProposalSchema>;

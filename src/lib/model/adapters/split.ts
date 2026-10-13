@@ -1,20 +1,16 @@
 import type { SubfeatureBreakdown } from '../../ai/schemas/split-subfeatures';
 import type { ItemDraft } from '../repository';
-import { recommend, scopes, summaryDraft, type AdaptedOutput } from './common';
-
-export const SUBTASK_REASON = {
-  critical: '关键路径上的子任务',
-  normal: '可执行子任务',
-} as const;
+import { modelStance, scopes, summaryDraft, type AdaptedOutput } from './common';
 
 /**
  * SPLIT_SUBFEATURES → one `subtask` per subfeature, carrying its split's feature_id / module_id
- * (→ implements / derived_from Links), feature name and critical-path flag; plus the summary.
+ * (→ implements / derived_from Links), feature name and critical-path flag, with the model's own
+ * verdict as aiStance (missing → neutral); plus the summary.
  */
 export function adaptSubfeatureBreakdown(out: SubfeatureBreakdown): AdaptedOutput {
   const critical = new Set(out.critical_path);
   const subtasks = out.splits.flatMap((split) =>
-    split.subfeatures.map((sf): ItemDraft => ({
+    split.subfeatures.map(({ stance, ...sf }): ItemDraft => ({
       ref: sf.id,
       type: 'subtask',
       body: {
@@ -24,7 +20,7 @@ export function adaptSubfeatureBreakdown(out: SubfeatureBreakdown): AdaptedOutpu
         feature_name: split.feature_name,
         critical: critical.has(sf.id),
       },
-      aiStance: recommend(critical.has(sf.id) ? SUBTASK_REASON.critical : SUBTASK_REASON.normal),
+      aiStance: modelStance(stance),
     })),
   );
   return {

@@ -2,6 +2,7 @@ import { dataBlock } from '../prompt';
 import { feedbackBlock } from '../feedback-prompt';
 import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import { stancePromptFragment } from '../stance-prompt';
 import type { BriefContext, FeatureDigest } from '../schemas/snapshots';
 import type { Pillar } from '../schemas/draft-features';
 import { DesignProposalSchema, type DesignProposal } from '../schemas/generate-design';
@@ -32,14 +33,19 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 08 设计案节点的 AI �
 11. **metrics** — 5-10 条衡量指标，每条 name + definition + target
 12. **risks** — 已知风险 + 缓解策略
 13. **milestones** — 里程碑。phase / goal / deliverables / duration 时间用周/月即可
-14. **open_questions** — 还没决定的问题，留给后续讨论
+14. **open_questions** — 还没决定的问题，留给后续讨论。每条 { question, stance }
 
 # 风格要求
 - 写成"已经决定了"的口吻，不要"建议 / 可以考虑"。设计案就是要拍板。
 - 每段都要有内容，不要空 section。
 - 模块的 feature_ids 必须从输入 features 中真实引用（用功能 id）。
 - 数据模型要给出能直接建表的字段。
-- 严格 JSON，不含前后文，不用 Markdown 代码块。`;
+- 严格 JSON，不含前后文，不用 Markdown 代码块。
+
+${stancePromptFragment(
+  '设计案的每一部分——overview_stance（标题/定位/愿景整体）、principles_stance（设计原则整体），以及 information_architecture / modules / user_flows / key_interactions / data_model / tech_skeleton / metrics / risks / milestones / open_questions 里的每一条——',
+  '对设计案而言：recommend = 这一条有上游依据、可以直接按它开工；caution = 依赖未验证的假设、与 Brief 红线或约束冲突、成本或风险明显偏高，或上游信息不足以支撑这个决定。',
+)}`;
 
 function formatContext(args: {
   brief: BriefContext;

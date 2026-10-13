@@ -2,7 +2,7 @@
 
 import { useItemActions } from '@/components/project/useItemActions';
 import { EditableList, EditableText, EditableTextarea } from '@/components/shared/Editable';
-import { ItemDecision, RejectionNote } from '@/components/shared/ItemDecision';
+import { ItemDecision, RejectionNote, StanceBadge } from '@/components/shared/ItemDecision';
 import { judgedClass } from '@/components/shared/JudgeStrip';
 import type { SubFeature } from '@/lib/ai/schemas/split-subfeatures';
 import type { Link } from '@/lib/model/types';
@@ -51,6 +51,7 @@ function SubtaskCard({ item, deps }: { item: SubtaskItem; deps: string[] }) {
         <span className="subfeature-title judged-text"><b><EditableText value={sf.title} placeholder="子任务标题" onChange={(v) => patch({ title: v })} /></b></span>
         <span className="subfeature-est mono">⏱ <EditableText value={sf.estimate} placeholder="工作量" onChange={(v) => patch({ estimate: v })} /></span>
         {sf.critical ? <span className="subfeature-critical">关键路径</span> : null}
+        <StanceBadge stance={item.aiStance} />
         <ItemDecision item={item} showNote={false} />
         {item.origin === 'human' ? (
           <button type="button" className="subfeature-remove" aria-label="删除这条子任务" title="删除" onClick={() => void actions.remove(item)}>×</button>

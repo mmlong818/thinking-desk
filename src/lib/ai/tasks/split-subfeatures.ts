@@ -2,6 +2,7 @@ import { dataBlock } from '../prompt';
 import { feedbackBlock } from '../feedback-prompt';
 import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import { stancePromptFragment } from '../stance-prompt';
 import type { DesignSnapshot } from '../schemas/snapshots';
 import { SubfeatureBreakdownSchema, type SubfeatureBreakdown } from '../schemas/split-subfeatures';
 
@@ -25,6 +26,7 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 09 子功能拆分节点�
 - estimate: 工作量（0.5d / 2d / 1w）—— 用半天/天/周
 - acceptance_criteria: 1-3 条验收标准（"跑通 X 流程" / "覆盖率 ≥ 80%"）
 - dependencies: 其它子任务 id（只能引用同一次拆分内的）
+- stance: 你对这条子任务的判断（见下方 stance 规则）
 
 # 整体字段
 - splits: 每个 feature 一组
@@ -36,7 +38,12 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 09 子功能拆分节点�
 - 动词开头，不要"实现一个支持..."这种描述句
 - estimate 偏保守，宁多估 20%
 - 子任务必须可独立完成、可验收
-- 严格 JSON 输出`;
+- 严格 JSON 输出
+
+${stancePromptFragment(
+  '每一条子任务',
+  '对子任务而言：recommend = 按现在的设计案可以直接开工、估时和验收都有把握；caution = 依赖还没拍板的决策、估时把握低、验收标准难以量化，或拆法本身值得商榷，开工前要人先确认。',
+)}`;
 
 function formatContext(design: DesignSnapshot): string {
   const moduleBlock = design.modules

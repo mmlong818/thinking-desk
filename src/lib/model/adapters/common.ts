@@ -1,4 +1,5 @@
 import type { NodeKind } from '../../../data/nodes';
+import type { ItemStance } from '../../ai/schemas/stance';
 import type { ItemDraft, ReplaceScope } from '../repository';
 import type { AiStance, ItemType } from '../types';
 
@@ -21,6 +22,19 @@ export interface CritiqueLike {
 export const recommend = (reason: string): AiStance => ({ verdict: 'recommend', reason });
 export const caution = (reason: string): AiStance => ({ verdict: 'caution', reason });
 export const neutral = (reason: string): AiStance => ({ verdict: 'neutral', reason });
+
+export const NO_STANCE_REASON = 'AI 未给出判断';
+export const UNEXPLAINED_REASON = 'AI 未说明理由';
+
+/**
+ * A per-item verdict the model output (`stance`) → aiStance. A missing stance (or the empty
+ * neutral a missing one parses to) is neutral, never a silent recommend.
+ */
+export function modelStance(stance: ItemStance | undefined): AiStance {
+  const reason = stance?.reason.trim() ?? '';
+  if (!stance || (stance.verdict === 'neutral' && !reason)) return neutral(NO_STANCE_REASON);
+  return { verdict: stance.verdict, reason: reason || UNEXPLAINED_REASON };
+}
 
 export function scopes(node: NodeKind, ...types: ItemType[]): ReplaceScope[] {
   return types.map((type) => ({ node, type }));
