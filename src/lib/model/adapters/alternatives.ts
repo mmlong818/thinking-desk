@@ -1,6 +1,6 @@
 import type { Alternative, AlternativesAnalysis } from '../../ai/schemas/analyze-alternatives';
 import type { ItemDraft } from '../repository';
-import type { AiStance } from '../types';
+import type { AiStance, Evidence } from '../types';
 import { critiqueDrafts, neutral, recommend, scopes, type AdaptedOutput } from './common';
 
 export const DIFF_HYPOTHESIS_REASON = 'AI 的一句话差异化假设 · 采纳后传给下游节点';
@@ -13,14 +13,26 @@ function altStance(a: Alternative): AiStance {
 }
 
 /**
- * ALT_SCAN → alternatives (sources stay on the body until the task emits evidence), strategic
- * profiles and feature breakdowns linked to their alternative, the differentiation hypothesis
- * singleton (with the key threats) and critiques.
+ * The URLs the AI cites for an alternative become evidence sources (unchecked). The prompt only
+ * allows URLs it found with web search, so the basis is `web`; ALT_SCAN states no confidence and
+ * no title per URL, so neither is invented (a source check compares the page title with the
+ * alternative's name instead).
+ */
+export function altEvidence(urls: readonly string[]): Evidence | undefined {
+  if (urls.length === 0) return undefined;
+  return { basis: 'web', sources: urls.map((url) => ({ title: '', url, verified: false })) };
+}
+
+/**
+ * ALT_SCAN → alternatives (their source URLs moved from the body into evidence.sources),
+ * strategic profiles and feature breakdowns linked to their alternative, the differentiation
+ * hypothesis singleton (with the key threats) and critiques.
  */
 export function adaptAlternatives(out: AlternativesAnalysis): AdaptedOutput {
-  const alternatives = out.alternatives.map((a): ItemDraft => ({
-    ref: a.id, type: 'alternative', body: a, aiStance: altStance(a),
-  }));
+  const alternatives = out.alternatives.map((a): ItemDraft => {
+    const evidence = altEvidence(a.sources);
+    return { ref: a.id, type: 'alternative', body: { ...a, sources: [] }, aiStance: altStance(a), ...(evidence ? { evidence } : {}) };
+  });
   const profiles = out.strategic_profiles.map((p): ItemDraft => ({ type: 'alt_profile', body: p }));
   const breakdowns = out.feature_breakdowns.map((b): ItemDraft => ({ type: 'alt_breakdown', body: b }));
   const hypothesis: ItemDraft = {

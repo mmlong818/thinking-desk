@@ -153,6 +153,19 @@ describe('alternatives adapter', () => {
     expect(ofType(plan, 'diff_hypothesis')[0].body).toEqual({ statement: 'h', key_threats: ['t'] });
     expect(alts.every((a) => a.aiStance?.verdict === 'recommend')).toBe(true);
   });
+
+  it('moves the cited URLs into evidence.sources (web basis, unchecked, no invented confidence)', () => {
+    const data = AlternativesAnalysisSchema.parse(validAlternatives);
+    const withUrls = { ...data, alternatives: data.alternatives.map((a, i) => (i === 0 ? { ...a, sources: ['https://example.org/a', 'https://example.org/b'] } : a)) };
+    const plan = ingest(adaptAlternatives(withUrls), 'alt', 'ALT_SCAN');
+    const [first, second] = ofType(plan, 'alternative');
+    expect(first.body).toMatchObject({ sources: [] });
+    expect(first.evidence).toEqual({
+      basis: 'web',
+      sources: [{ title: '', url: 'https://example.org/a', verified: false }, { title: '', url: 'https://example.org/b', verified: false }],
+    });
+    expect(second.evidence).toBeUndefined();
+  });
 });
 
 describe('scenario adapters', () => {

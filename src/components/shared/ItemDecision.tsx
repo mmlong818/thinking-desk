@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Item } from '@/lib/model/item-types';
 import type { AiStance, Decision, Evidence } from '@/lib/model/types';
 import { useItemActions } from '@/components/project/useItemActions';
+import { SourceBadge } from './SourceCheck';
 import { StaleBadge } from './StaleContent';
 
 // The human judgment on one item: accept / reject with an optional note (fed back to the AI
@@ -29,7 +30,8 @@ export function DecisionBadge({ item }: { item: Item }) {
   return <span className={`decision-badge ${item.decision}`}>{DECISION_LABEL[item.decision]}{origin}</span>;
 }
 
-export function EvidenceLine({ evidence }: { evidence?: Evidence }) {
+/** Basis, confidence (when stated) and each source with its check status (已核实 / 未核实 / 无法打开). */
+export function EvidenceLine({ evidence }: { evidence?: Evidence | null }) {
   if (!evidence) return null;
   return (
     <div className="evidence-line">
@@ -37,9 +39,12 @@ export function EvidenceLine({ evidence }: { evidence?: Evidence }) {
       {evidence.confidence !== undefined ? ` · 置信度 ${Math.round(evidence.confidence * 100)}%` : ''}
       {evidence.sources.map((s, i) =>
         s.url ? (
-          <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="evidence-source">
-            {s.title || `来源 ${i + 1}`}{s.verified ? ' ✓' : ''}
-          </a>
+          <span key={i} className="evidence-source-wrap">
+            <a href={s.url} target="_blank" rel="noopener noreferrer" className="evidence-source">
+              {s.title || s.pageTitle || `来源 ${i + 1}`}
+            </a>
+            <SourceBadge source={s} />
+          </span>
         ) : (
           <span key={i} className="evidence-source">{s.title}</span>
         ),

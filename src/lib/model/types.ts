@@ -70,6 +70,8 @@ export const EvidenceSourceSchema = z.object({
   checkedAt: Timestamp.optional(),
   /** The page title the check found. */
   pageTitle: z.string().optional(),
+  /** Why a check failed or did not match (e.g. "HTTP 404", "timeout", "private address …"). */
+  detail: z.string().optional(),
 });
 export type EvidenceSource = z.infer<typeof EvidenceSourceSchema>;
 
