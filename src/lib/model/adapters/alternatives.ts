@@ -1,9 +1,7 @@
 import type { Alternative, AlternativesAnalysis } from '../../ai/schemas/analyze-alternatives';
 import type { ItemDraft } from '../repository';
 import type { AiStance, Evidence } from '../types';
-import { critiqueDrafts, neutral, recommend, scopes, type AdaptedOutput } from './common';
-
-export const DIFF_HYPOTHESIS_REASON = 'AI 的一句话差异化假设 · 采纳后传给下游节点';
+import { critiqueDrafts, modelStance, neutral, recommend, scopes, type AdaptedOutput } from './common';
 
 function altStance(a: Alternative): AiStance {
   if (a.category === 'non_consumption') return recommend('非消费替代 · 真正的对手');
@@ -26,7 +24,7 @@ export function altEvidence(urls: readonly string[]): Evidence | undefined {
 /**
  * ALT_SCAN → alternatives (their source URLs moved from the body into evidence.sources),
  * strategic profiles and feature breakdowns linked to their alternative, the differentiation
- * hypothesis singleton (with the key threats) and critiques.
+ * hypothesis singleton (with the key threats, the model's own verdict as aiStance) and critiques.
  */
 export function adaptAlternatives(out: AlternativesAnalysis): AdaptedOutput {
   const alternatives = out.alternatives.map((a): ItemDraft => {
@@ -38,7 +36,7 @@ export function adaptAlternatives(out: AlternativesAnalysis): AdaptedOutput {
   const hypothesis: ItemDraft = {
     type: 'diff_hypothesis',
     body: { statement: out.differentiation_hypothesis, key_threats: out.key_threats },
-    aiStance: recommend(DIFF_HYPOTHESIS_REASON),
+    aiStance: modelStance(out.differentiation_stance),
   };
   return {
     drafts: [...alternatives, ...profiles, ...breakdowns, hypothesis, ...critiqueDrafts(out.critiques)],

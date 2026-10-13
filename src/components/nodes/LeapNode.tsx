@@ -10,8 +10,9 @@ import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { MissingUpstream, NodeLink } from '@/components/shared/Navigation';
 import {
-  CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, StoreStatus,
+  CenteredAction, ErrorCard, NodeFrame, NodeHat, StoreStatus,
 } from '@/components/shared/NodeKit';
+import { StreamProgressCard } from '@/components/shared/StreamProgress';
 import { briefRequestContext } from '@/lib/model/context';
 import { ApplyLeapsSection, type RevisionView } from './leap/ApplyLeaps';
 import { CategorySection } from './leap/LeapCards';
@@ -24,6 +25,12 @@ type Actions = ReturnType<typeof useLeapActions>;
 
 const TITLE = '创造性跃迁：设计真正开始的地方';
 const STAGE_CHIP: Record<Stage, string> = { idle: '★ 设计真正开始的地方', analyzing: '思考跃迁中…', done: '已生成 · 可采纳 / 否决' };
+
+/** Card label per running action key (`more:<type>` shares `more`). */
+const RUNNING_LABEL: Record<string, string> = {
+  more: '再补 3 条候选中',
+  revise: '应用跃迁中 · 产出 08 最终功能列表',
+};
 
 const leapsOf = (data: NodeData) => LEAP_TYPES.flatMap((t) => data.of(t)) as LeapItem[];
 
@@ -104,7 +111,7 @@ export function LeapNode() {
       </p>
       <StoreStatus data={data} />
       {stage === 'idle' && brief ? <CenteredAction label="生成跃迁候选 →" onClick={actions.run} /> : null}
-      {stage === 'analyzing' ? <LoadingCard>同时从三角度思考 · 通常 90-180 秒……</LoadingCard> : null}
+      {stage === 'analyzing' ? <StreamProgressCard label="同时从三角度思考 · 20+ 条候选" progress={actions.progress} onCancel={actions.cancel} /> : null}
       <ErrorCard message={actions.error} />
       {stage === 'done' ? <LeapResults data={data} actions={actions} slug={slug} /> : null}
     </NodeFrame>
@@ -133,6 +140,9 @@ function LeapResults({ data, actions, slug }: { data: NodeData; actions: Actions
   const leaps = leapsOf(data);
   const revision = revisionOf(data);
   const revising = actions.running === 'revise';
+  const progress = actions.running
+    ? <StreamProgressCard label={RUNNING_LABEL[actions.running.split(':')[0]] ?? 'AI 生成中'} progress={actions.progress} onCancel={actions.cancel} />
+    : null;
   return (
     <>
       {timing ? <TimingCard timing={timing} /> : null}
@@ -143,14 +153,14 @@ function LeapResults({ data, actions, slug }: { data: NodeData; actions: Actions
           <CategorySection
             key={s.type} num={s.num} title={s.title} hint={s.hint(items.length)} items={items}
             regenerating={actions.running === `more:${s.type}`} disabled={actions.running !== null}
-            onRegenerate={() => actions.more(s.type)}
+            onRegenerate={() => actions.more(s.type)} progress={progress}
           />
         );
       })}
       <UserPicksSection leaps={leaps} />
       <ApplyLeapsSection
         leaps={leaps} revision={revision} revising={revising} hasOriginalFeat={data.of('feature', 'feat').length > 0}
-        links={data.links} slug={slug} onApply={() => void actions.revise()}
+        links={data.links} slug={slug} onApply={() => void actions.revise()} progress={progress}
       />
       <LeapFooter revising={revising} hasRevision={!!revision} onRegenerate={actions.run} slug={slug} />
     </>

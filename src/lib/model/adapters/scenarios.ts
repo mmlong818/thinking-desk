@@ -4,16 +4,12 @@ import {
   type ScenarioDeepAnalysis,
   type ScenarioDrafts,
 } from '../../ai/schemas/analyze-scenarios';
+import type { ItemStance } from '../../ai/schemas/stance';
 import type { ItemDraft } from '../repository';
-import { critiqueDrafts, recommend, scopes, type AdaptedOutput } from './common';
+import type { ItemType } from '../types';
+import { critiqueDrafts, modelStance, recommend, scopes, type AdaptedOutput } from './common';
 
-export const SCEN_REASON = {
-  element: '与 Brief / 已锁 Jobs 高相关',
-  extreme: '§8.3 极值情景 · 方法论硬要求',
-  hostile: '§8.3 敌意情景 · 方法论硬要求',
-  pain: '痛点根因 · 将带入功能列表',
-  insight: '§8.5 设计启发 · 将带入功能列表',
-} as const;
+export const SCEN_ELEMENT_REASON = '与 Brief / 已锁 Jobs 高相关';
 
 /**
  * SCEN_FEED (exhaust): one `scenario_element` per candidate; high relevance was pre-selected before.
@@ -30,7 +26,7 @@ export function adaptDimensions(out: DimensionsResult): AdaptedOutput {
         ...(ref ? { ref } : {}),
         type: 'scenario_element',
         body: { ...e, dim },
-        ...(e.relevance === 'high' ? { aiStance: recommend(SCEN_REASON.element) } : {}),
+        ...(e.relevance === 'high' ? { aiStance: recommend(SCEN_ELEMENT_REASON) } : {}),
       };
     }),
   );
@@ -43,15 +39,23 @@ export function adaptScenarioDrafts(out: ScenarioDrafts): AdaptedOutput {
   return { drafts, replace: scopes('scen', 'scenario') };
 }
 
-/** SCEN_PAIN (deep): matrix, extremes, hostiles, pain / delight points, insights and critiques. */
+/** One draft per entity the model gave a verdict on; the verdict becomes aiStance (missing → neutral), not part of the body. */
+function stancedDrafts(type: ItemType, entities: ReadonlyArray<{ id: string; stance: ItemStance }>): ItemDraft[] {
+  return entities.map(({ stance, ...body }): ItemDraft => ({ ref: body.id, type, body, aiStance: modelStance(stance) }));
+}
+
+/**
+ * SCEN_PAIN (deep): matrix, extremes, hostiles, pain / delight points, insights and critiques;
+ * extremes, hostiles, pain points and insights carry the model's own verdict as aiStance.
+ */
 export function adaptDeepAnalysis(out: ScenarioDeepAnalysis): AdaptedOutput {
   const drafts: ItemDraft[] = [
     ...out.matrix.map((c): ItemDraft => ({ type: 'matrix_cell', body: c })),
-    ...out.extremes.map((x): ItemDraft => ({ ref: x.id, type: 'extreme', body: x, aiStance: recommend(SCEN_REASON.extreme) })),
-    ...out.hostiles.map((h): ItemDraft => ({ ref: h.id, type: 'hostile', body: h, aiStance: recommend(SCEN_REASON.hostile) })),
-    ...out.pain_points.map((p): ItemDraft => ({ ref: p.id, type: 'pain_point', body: p, aiStance: recommend(SCEN_REASON.pain) })),
+    ...stancedDrafts('extreme', out.extremes),
+    ...stancedDrafts('hostile', out.hostiles),
+    ...stancedDrafts('pain_point', out.pain_points),
     ...out.delight_points.map((d): ItemDraft => ({ ref: d.id, type: 'delight_point', body: d })),
-    ...out.design_insights.map((i): ItemDraft => ({ ref: i.id, type: 'insight', body: i, aiStance: recommend(SCEN_REASON.insight) })),
+    ...stancedDrafts('insight', out.design_insights),
     ...critiqueDrafts(out.critiques),
   ];
   return {

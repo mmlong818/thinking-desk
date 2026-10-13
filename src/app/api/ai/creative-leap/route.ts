@@ -26,6 +26,8 @@ export const POST = aiRoute({
   name: 'creative-leap',
   body: Body,
   timeoutMs: 290_000,
+  // Both actions stream: "initial" runs 70-100 s, "more" is shorter but just as cancellable.
+  stream: true,
   handle(body, opts) {
     const ctx = {
       brief: requireBrief(body.brief),

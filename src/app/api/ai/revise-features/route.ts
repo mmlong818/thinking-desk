@@ -18,6 +18,8 @@ export const POST = aiRoute({
   name: 'revise-features',
   body: Body,
   timeoutMs: 290_000,
+  // Long call (70-100 s): live progress and cancel for clients that ask for NDJSON.
+  stream: true,
   handle(body, opts) {
     if (!body.brief) throw new RouteError(400, 'missing_brief');
     if (!body.original) throw new RouteError(400, 'missing_features', '需要先完成功能列表');

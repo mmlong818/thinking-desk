@@ -50,14 +50,37 @@ export const breakdownWithStances = {
   })),
 };
 
+/** The brief in its current shape: red lines the text states, plus the ones the AI inferred with their basis. */
+export const briefWithInferredRedLines = {
+  ...validBrief,
+  fields: { ...validBrief.fields, red_lines: ['不收集未成年人的生物信息'] },
+  inferred_red_lines: [{ text: '不使用虚假紧迫感催促付费', reason: '面向未成年人的消费类产品常见的操纵手法' }],
+};
+
+export const alternativesWithStance = {
+  ...validAlternatives,
+  differentiation_stance: stance('neutral', '方向合理，能否成立取决于团队的数据资源'),
+};
+
+const first = <T extends object>(xs: T[], extra: object) => xs.map((x, i) => (i === 0 ? { ...x, ...extra } : x));
+
+/** The deep analysis in its current shape: extremes, hostiles, pain points and insights carry the model's own stance. */
+export const deepAnalysisWithStances = {
+  ...validDeepAnalysis,
+  extremes: validDeepAnalysis.extremes.map((x) => ({ ...x, stance: stance('recommend', '极值真会发生，当前方案会崩') })),
+  hostiles: first(validDeepAnalysis.hostiles, { stance: stance('caution', '缓解措施依赖人工审核') }),
+  pain_points: validDeepAnalysis.pain_points.map((p) => ({ ...p, stance: stance('recommend', '三层追问都有依据') })),
+  design_insights: first(validDeepAnalysis.design_insights, { stance: stance('neutral', '值不值得做取决于优先级') }),
+};
+
 export const STEP_FIXTURES: Record<StepName, unknown> = {
-  brief: validBrief,
+  brief: briefWithInferredRedLines,
   users: validUsers,
   stake: validStakeholders,
-  alt: validAlternatives,
+  alt: alternativesWithStance,
   scen_exhaust: validDimensions,
   scen_combine: validScenarioDrafts,
-  scen_deep: validDeepAnalysis,
+  scen_deep: deepAnalysisWithStances,
   features: validFeatureList,
   leap: validLeap,
   revise: validRevision,
@@ -80,16 +103,16 @@ export const FOLLOW_UPS_FIXTURE = {
 /** Every structured task output schema with fixtures it must accept (FREE_ASK answers plain text). */
 export const SCHEMA_FIXTURES: ReadonlyArray<{ task: AiTask; name: string; schema: z.ZodType; fixtures: unknown[] }> = [
   { task: 'BRIEF_CLARIFY', name: 'ClarifyResult', schema: ClarifyResultSchema, fixtures: [validClarifyAsk, validClarifyProceed] },
-  { task: 'BRIEF_EXTRACT', name: 'BriefExtraction', schema: BriefExtractionSchema, fixtures: [validBrief] },
+  { task: 'BRIEF_EXTRACT', name: 'BriefExtraction', schema: BriefExtractionSchema, fixtures: [validBrief, briefWithInferredRedLines] },
   { task: 'BRIEF_PROBE', name: 'ProbeResult', schema: ProbeResultSchema, fixtures: [validProbeQuestion, validProbeDone] },
   { task: 'USERS_JTBD', name: 'UsersAnalysis', schema: UsersAnalysisSchema, fixtures: [validUsers] },
   { task: 'USERS_JTBD', name: 'JobsRefinement', schema: JobsRefinementSchema, fixtures: [validJobsRefinement] },
   { task: 'USERS_JTBD', name: 'PersonaBatch', schema: PersonaBatchSchema, fixtures: [validPersonaBatch] },
   { task: 'STAKE_MATRIX', name: 'StakeholdersAnalysis', schema: StakeholdersAnalysisSchema, fixtures: [validStakeholders] },
-  { task: 'ALT_SCAN', name: 'AlternativesAnalysis', schema: AlternativesAnalysisSchema, fixtures: [validAlternatives] },
+  { task: 'ALT_SCAN', name: 'AlternativesAnalysis', schema: AlternativesAnalysisSchema, fixtures: [validAlternatives, alternativesWithStance] },
   { task: 'SCEN_FEED', name: 'DimensionsResult', schema: DimensionsResultSchema, fixtures: [validDimensions] },
   { task: 'SCEN_FEED', name: 'ScenarioDrafts', schema: ScenarioDraftsSchema, fixtures: [validScenarioDrafts] },
-  { task: 'SCEN_PAIN', name: 'ScenarioDeepAnalysis', schema: ScenarioDeepAnalysisSchema, fixtures: [validDeepAnalysis] },
+  { task: 'SCEN_PAIN', name: 'ScenarioDeepAnalysis', schema: ScenarioDeepAnalysisSchema, fixtures: [validDeepAnalysis, deepAnalysisWithStances] },
   { task: 'FEAT_DRAFT', name: 'FeatureList', schema: FeatureListSchema, fixtures: [validFeatureList] },
   { task: 'FEAT_DRAFT', name: 'FeatureRevision', schema: FeatureRevisionSchema, fixtures: [validRevision] },
   { task: 'LEAP_FIRST_PRINCIPLES', name: 'CreativeLeapAnalysis', schema: CreativeLeapAnalysisSchema, fixtures: [validLeap] },
