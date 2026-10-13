@@ -16,6 +16,7 @@ export type RuleCode =
   | 'feature.no_job'
   | 'module.no_feature'
   | 'subtask.no_target'
+  | 'feature.no_subtask'
   | 'feature.red_line_risk'
   | 'finding.unresolved'
   | 'link.to_rejected';
@@ -48,6 +49,26 @@ const isAccepted = (i: Item) => i.decision === 'accepted';
 const finding = (code: RuleCode, item: Item, message: string, severity: RuleFinding['severity'] = 'warn', more: Item[] = []): RuleFinding =>
   ({ code, node: item.node, itemIds: [item.id, ...more.map((m) => m.id)], message, severity });
 
+/**
+ * Final-list features that no accepted subtask reaches, directly or through an accepted module.
+ * Silent until some subtask is accepted, so an unsplit project is not one finding per feature.
+ */
+function noSubtaskRule(ctx: Ctx): RuleFinding[] {
+  const subtasks = ctx.accepted.filter((i) => i.type === 'subtask');
+  if (subtasks.length === 0) return [];
+  const reached = new Set<string>();
+  for (const s of subtasks) {
+    for (const t of [...targets(ctx, s.id, 'implements'), ...targets(ctx, s.id, 'derived_from')]) {
+      if (!isAccepted(t)) continue;
+      if (t.type === 'feature') reached.add(t.id);
+      if (t.type === 'module') targets(ctx, t.id, 'implements').forEach((f) => reached.add(f.id));
+    }
+  }
+  return ctx.accepted
+    .filter((i) => i.type === 'feature' && i.node === 'final' && !reached.has(i.id))
+    .map((i) => finding('feature.no_subtask', i, `功能${name(i)}还没有任何已采纳的子任务`, 'info'));
+}
+
 const RULES: ReadonlyArray<(ctx: Ctx) => RuleFinding[]> = [
   (ctx) => ctx.accepted
     .filter((i) => i.type === 'feature' && !targets(ctx, i.id, 'serves').some((t) => t.type === 'job' && isAccepted(t)))
@@ -60,6 +81,7 @@ const RULES: ReadonlyArray<(ctx: Ctx) => RuleFinding[]> = [
     .filter((i) => ![...targets(ctx, i.id, 'implements'), ...targets(ctx, i.id, 'derived_from')]
       .some((t) => (t.type === 'feature' || t.type === 'module') && isAccepted(t)))
     .map((i) => finding('subtask.no_target', i, `子任务${name(i)}没有落到任何已采纳的功能或模块上`)),
+  noSubtaskRule,
   (ctx) => ctx.accepted
     .filter((i): i is Extract<Item, { type: 'feature' }> => i.type === 'feature' && i.body.red_line_risk)
     .map((i) => finding('feature.red_line_risk', i,

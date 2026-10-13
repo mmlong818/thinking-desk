@@ -49,6 +49,20 @@ describe('ruleFindings', () => {
     ]);
   });
 
+  it('flags final features no accepted subtask reaches, once any subtask is accepted', () => {
+    const items = [
+      feature('ftr_direct'), feature('ftr_via_mod'), feature('ftr_none'), feature('ftr_draft', { node: 'feat' }),
+      job('job_a'), moduleItem('mod_a'), subtask('tsk_a'), subtask('tsk_b'), subtask('tsk_p', 'pending'),
+    ];
+    const links = [
+      ...['ftr_direct', 'ftr_via_mod', 'ftr_none', 'ftr_draft'].map((f) => link(f, 'job_a', 'serves')),
+      link('tsk_a', 'ftr_direct', 'implements'), link('mod_a', 'ftr_via_mod', 'implements'),
+      link('tsk_b', 'mod_a', 'derived_from'), link('tsk_p', 'ftr_none', 'implements'),
+    ];
+    expect(codes(items, links)).toEqual([['feature.no_subtask', ['ftr_none']]]);
+    expect(codes([feature('ftr_none'), job('job_a')], [link('ftr_none', 'job_a', 'serves')])).toEqual([]);
+  });
+
   it('flags accepted features the AI marked as touching a red line', () => {
     const items = [feature('ftr_red', {}, { red_line_risk: true, ethics_concern: '公开排名' }), job('job_a')];
     const found = ruleFindings(liveGraph(items, [link('ftr_red', 'job_a', 'serves')]));
@@ -84,7 +98,9 @@ describe('ruleFindings', () => {
 
   it('is silent for pending and rejected items, and sorts by node order', () => {
     const items = [subtask('tsk_none'), feature('ftr_none'), feature('ftr_p', { decision: 'pending' })];
-    expect(ruleFindings(liveGraph(items, [])).map((f) => f.node)).toEqual(['final', 'split']);
+    expect(ruleFindings(liveGraph(items, [])).map((f) => [f.node, f.code])).toEqual([
+      ['final', 'feature.no_job'], ['final', 'feature.no_subtask'], ['split', 'subtask.no_target'],
+    ]);
   });
 });
 
