@@ -47,21 +47,34 @@ export function bodyAtVersion(events: readonly DecisionEvent[], itemId: string, 
   return edit?.prevBody;
 }
 
-/** The newest non-failed run per task on the node (runs come newest first). */
+/**
+ * Runs that do not generate the node's content: clarifying questions, copilot answers and
+ * follow-ups, and the project-wide consistency check (recorded on the page it was started from).
+ */
+const PROCESS_TASKS = new Set(['BRIEF_CLARIFY', 'BRIEF_PROBE', 'FREE_ASK', 'FOLLOW_UPS', 'CONSISTENCY_CHECK']);
+
+/** The newest non-failed generating run per task on the node (runs come newest first). */
 export function latestRunsByTask(runs: readonly Run[], node: NodeKind): Run[] {
   const seen = new Set<string>();
   const out: Run[] = [];
   for (const run of runs) {
-    if (run.node !== node || run.status === 'failed' || seen.has(run.task)) continue;
+    if (run.node !== node || run.status === 'failed' || PROCESS_TASKS.has(run.task) || seen.has(run.task)) continue;
     seen.add(run.task);
     out.push(run);
   }
   return out;
 }
 
-/** Run-level staleness of a node: its latest runs whose prompt inputs changed or were deleted since. */
+/**
+ * Run-level staleness of a node: its latest generating runs whose inputs from other nodes changed
+ * since. Inputs on the node itself are covered by item Links; deleted inputs are left out (their
+ * node is unknown here, and the rules that ask for an accepted target cover them).
+ */
 export function nodeRunStaleness(runs: readonly Run[], items: readonly Item[], node: NodeKind): StaleRun[] {
-  return staleRuns(latestRunsByTask(runs, node), items);
+  const byId = new Map(items.filter((i) => !i.deletedAt).map((i) => [i.id, i]));
+  return staleRuns(latestRunsByTask(runs, node), byId)
+    .map((s) => ({ ...s, changed: s.changed.filter((c) => c.current !== null && byId.get(c.itemId)?.node !== node) }))
+    .filter((s) => s.changed.length > 0);
 }
 
 /** Order-independent fingerprint of the changed inputs (what a "noted" acknowledgement is keyed by). */

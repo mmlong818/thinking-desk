@@ -64,9 +64,19 @@ describe('run-level staleness', () => {
     expect(nodeRunStaleness(runs, [brief], 'alt')).toEqual([]);
   });
 
+  it('ignores process runs, inputs on the node itself and deleted inputs', () => {
+    const persona = makeItem({ id: 'per_1', version: 2 });
+    const process = [
+      run('run_fu', 'FOLLOW_UPS', 'users', [{ itemId: 'per_1', version: 1 }]),
+      run('run_cc', 'CONSISTENCY_CHECK', 'users', [{ itemId: 'brf_1', version: 1 }]),
+      run('run_refine', 'USERS_JTBD', 'users', [{ itemId: 'per_1', version: 1 }]),
+    ];
+    expect(nodeRunStaleness(process, [brief, persona], 'users')).toEqual([]);
+    expect(nodeRunStaleness(runs, [], 'users')).toEqual([]);
+  });
+
   it('fingerprints the changed inputs by id and current version', () => {
     const stale = nodeRunStaleness(runs, [brief], 'users');
     expect(changedInputsKey(stale)).toBe('brf_1@2');
-    expect(changedInputsKey(nodeRunStaleness(runs, [], 'users'))).toBe('brf_1@x');
   });
 });
