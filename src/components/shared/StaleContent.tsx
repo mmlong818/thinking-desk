@@ -150,7 +150,7 @@ function fieldLabel(item: Item, path: string): string {
 
 function UpstreamDiff({ upstream, seen }: { upstream: Item; seen: number }) {
   const state = useBodyAt(upstream.id, seen);
-  if (state.loading) return <div className="stale-diff-note">读取历史…</div>;
+  if (state.loading) return <div className="stale-diff-note stale-diff-loading">读取历史…</div>;
   if (state.error) return <div className="idc-error">{state.error}</div>;
   if (state.before === undefined) {
     return <div className="stale-diff-note">v{seen} 的内容没有留存（旧数据或内容过长），只能看到现在的版本。</div>;
