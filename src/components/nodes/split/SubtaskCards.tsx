@@ -40,15 +40,38 @@ export function FeatureSplitView({ group, links, titles, subtasks }: {
   );
 }
 
-function SubtaskCard({ item, links, titles, subtasks }: {
+interface CardProps {
   item: SubtaskItem;
   links: Link[];
   titles: Map<string, string>;
   subtasks: SubtaskItem[];
-}) {
-  const actions = useItemActions();
-  const [editingDeps, setEditingDeps] = useState(false);
+}
+
+/** "依赖：…  ✎ 编辑依赖" and, while editing, a checkbox per other subtask (cycles disabled). */
+function SubtaskDependencies({ item, links, titles, subtasks }: CardProps) {
+  const [editing, setEditing] = useState(false);
   const deps = linkedIds(links, item.id, 'depends_on').map((id) => titles.get(id) ?? id);
+  return (
+    <>
+      <div className="dim" style={{ fontSize: 12 }}>
+        <b>依赖：</b>{deps.length > 0 ? deps.join(' · ') : '无'}
+        <button type="button" className="link-edit-btn" onClick={() => setEditing((v) => !v)} aria-expanded={editing}>
+          {editing ? '完成' : '✎ 编辑依赖'}
+        </button>
+      </div>
+      {editing ? (
+        <LinkPicker
+          from={item} rel="depends_on" links={links} title="这条子任务要等哪些子任务先完成？"
+          candidates={subtasks.filter((s) => s.id !== item.id)}
+          label={(s) => titles.get(s.id) || '（未命名子任务）'}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function SubtaskCard({ item, links, titles, subtasks }: CardProps) {
+  const actions = useItemActions();
   const sf = item.body;
   const meta = LAYER_META[sf.layer];
   const patch = (p: Partial<typeof sf>) => void actions.editBody(item, { ...sf, ...p });
@@ -81,20 +104,8 @@ function SubtaskCard({ item, links, titles, subtasks }: {
           <b>验收：</b>
           <EditableList items={sf.acceptance_criteria} placeholder="验收标准…" addLabel="+ 添加验收标准" onChange={(next) => patch({ acceptance_criteria: next })} />
         </div>
-        <div className="dim" style={{ fontSize: 12 }}>
-          <b>依赖：</b>{deps.length > 0 ? deps.join(' · ') : '无'}
-          <button type="button" className="link-edit-btn" onClick={() => setEditingDeps((v) => !v)} aria-expanded={editingDeps}>
-            {editingDeps ? '完成' : '✎ 编辑依赖'}
-          </button>
-        </div>
+        <SubtaskDependencies item={item} links={links} titles={titles} subtasks={subtasks} />
       </div>
-      {editingDeps ? (
-        <LinkPicker
-          from={item} rel="depends_on" links={links} title="这条子任务要等哪些子任务先完成？"
-          candidates={subtasks.filter((s) => s.id !== item.id)}
-          label={(s) => titles.get(s.id) || '（未命名子任务）'}
-        />
-      ) : null}
       {actions.error ? <div className="idc-error">{actions.error}</div> : null}
     </div>
   );
