@@ -29,6 +29,11 @@ export interface TaskOptions {
   timeoutMs?: number;
   /** Progress while the task runs; set → stream from providers that can (others answer in one piece). */
   onProgress?: (event: TaskProgress) => void;
+  /**
+   * Resolver and clock for this call (prompt evals: a fake provider renders prompts offline).
+   * Routes never set it; an explicit runTask(spec, deps) argument wins.
+   */
+  deps?: RunTaskDeps;
 }
 
 export interface RunTaskSpec {
@@ -104,7 +109,8 @@ export async function runTask<S extends z.ZodType>(
   spec: RunTaskSpec & { schema: S }, deps?: RunTaskDeps,
 ): Promise<RunTaskResult<z.output<S>>>;
 export async function runTask(spec: RunTaskSpec & { schema?: undefined }, deps?: RunTaskDeps): Promise<RunTaskResult<string>>;
-export async function runTask(spec: RunTaskSpec, deps: RunTaskDeps = DEFAULT_DEPS): Promise<RunTaskResult<unknown>> {
+export async function runTask(spec: RunTaskSpec, explicitDeps?: RunTaskDeps): Promise<RunTaskResult<unknown>> {
+  const deps = explicitDeps ?? spec.options?.deps ?? DEFAULT_DEPS;
   const started = deps.now();
   const schema = spec.schema ? taskJsonSchema(spec.schema) : undefined;
   const system = `${spec.system}\n\n${DATA_GUARD}`;
