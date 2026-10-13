@@ -286,4 +286,8 @@ src/
 
 ## License
 
-[AGPL-3.0](LICENSE) — free to use and modify with attribution; commercial use requires the full source to remain open under the same license.
+Copyright (C) 2026 mmlong818
+
+[GPL-3.0](LICENSE) — free to use, modify and distribute, including commercially. If you distribute this software or a modified version, you must provide its source under the same license.
+
+[GPL-3.0](LICENSE)——可以自由使用、修改和分发，包括商业用途；分发本软件或修改版时，须以同一许可证提供源代码。
