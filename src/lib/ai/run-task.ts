@@ -6,13 +6,16 @@ import { parseJsonLoose } from './json';
 import { taskJsonSchema } from './json-schema';
 import { DATA_GUARD } from './prompt';
 import { resolveProvider } from './router';
+import type { AttemptEvent, TaskProgress } from './stream-protocol';
 import type {
   AiProvider, AiTask, ChatMessage, CompleteRequest, CompleteResult, Effort, JsonSchema,
 } from './types';
 
 // The single entry point for AI calls: builds the JSON Schema from the task's Zod schema,
 // validates the answer (one retry with the validation errors fed back), enforces a deadline
-// and returns run metadata shaped for the `Run` record of src/lib/model.
+// and returns run metadata shaped for the `Run` record of src/lib/model. With `onProgress` it
+// streams (providers with stream()) and reports each attempt and text delta; the result, the
+// validation and the retry are the same either way — a retry simply starts a new attempt.
 
 export const DEFAULT_TIMEOUT_MS = 240_000;
 const MAX_ATTEMPTS = 2;
@@ -24,6 +27,8 @@ export interface TaskOptions {
   model?: string;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Progress while the task runs; set → stream from providers that can (others answer in one piece). */
+  onProgress?: (event: TaskProgress) => void;
 }
 
 export interface RunTaskSpec {
@@ -151,9 +156,10 @@ async function attempt(
   spec: RunTaskSpec, p: Prepared, target: ResolvedTarget, deadline: Deadline, meta: RunMeta,
 ): Promise<RunTaskResult<unknown>> {
   let messages: ChatMessage[] = [{ role: 'system', content: p.system }, ...spec.messages];
+  let retry: AttemptEvent['retry'];
   for (let n = 1; ; n++) {
     const req = request(spec, p.schema, messages, deadline);
-    const res = await deadline.race(target.provider.complete(target.model, req));
+    const res = await deadline.race(callProvider(spec, target, req, { n, retry, deadline }));
     meta.attempts = n;
     meta.usage = addUsage(meta.usage, res.usage);
     const outcome = check(spec.schema, res);
@@ -164,8 +170,37 @@ async function attempt(
     if (outcome.code !== 'invalid_output' || n >= MAX_ATTEMPTS) {
       throw new RunTaskError(outcome.code, outcome.message, meta, outcome.issues);
     }
+    retry = { code: outcome.code, issues: outcome.issues.slice(0, 3) };
     messages = [...messages, { role: 'assistant', content: res.text || '（空输出）' }, { role: 'user', content: retryPrompt(outcome.issues) }];
   }
+}
+
+/**
+ * One provider call. Without onProgress: complete(). With it: reports the attempt, then streams
+ * (each delta reported) when the provider can, else complete(). Progress is best effort: it stops
+ * once the deadline fires and a throwing listener cannot break the call.
+ */
+function callProvider(
+  spec: RunTaskSpec, target: ResolvedTarget, req: CompleteRequest,
+  a: { n: number; retry?: AttemptEvent['retry']; deadline: Deadline },
+): Promise<CompleteResult> {
+  const listener = spec.options?.onProgress;
+  if (!listener) return target.provider.complete(target.model, req);
+  const report = (event: TaskProgress) => {
+    if (a.deadline.reason) return;
+    try {
+      listener(event);
+    } catch {
+      // progress only
+    }
+  };
+  const streaming = typeof target.provider.stream === 'function';
+  report({
+    type: 'attempt', attempt: a.n, provider: target.provider.name, model: target.model, streaming,
+    ...(a.retry ? { retry: a.retry } : {}),
+  });
+  if (!target.provider.stream) return target.provider.complete(target.model, req);
+  return target.provider.stream(target.model, req, (text) => report({ type: 'delta', attempt: a.n, text }));
 }
 
 function request(spec: RunTaskSpec, schema: JsonSchema | undefined, messages: ChatMessage[], deadline: Deadline): CompleteRequest {
