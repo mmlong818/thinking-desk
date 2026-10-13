@@ -221,6 +221,10 @@ With Docker, set these in `.env` next to `docker-compose.yml`; the `app` service
 
 使用 Docker 时，在 `docker-compose.yml` 同目录的 `.env` 里设置即可；`app` 服务会透传这些变量，以及全部 `AI_MODEL_<TASK>` 覆盖项和 `ALLOW_CUSTOM_AI_BASE_URL`。
 
+**Source checks (`/api/sources/verify`) fetch URLs from the server.** Private, loopback and reserved addresses are refused after DNS resolution and again on every redirect, but a DNS-rebinding window remains between that lookup and the fetch's own, and behind an HTTP(S) proxy the proxy makes the request. On a public deployment, also block the server's outbound access to internal networks (firewall or an egress proxy), and keep `REQUIRE_AUTH` on.
+
+**来源核实（`/api/sources/verify`）由服务器去访问被引用的链接。** 服务器会在 DNS 解析后、以及每次跳转时拒绝内网、本机和保留地址，但这次解析与实际请求之间仍存在 DNS 重绑定的窗口；配置了 HTTP(S) 代理时，实际请求由代理发出。公开部署时，请同时在网络层禁止服务器访问内网（防火墙或出站代理），并开启 `REQUIRE_AUTH`。
+
 ---
 
 ## Project Structure · 目录结构

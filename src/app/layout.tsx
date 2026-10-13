@@ -4,7 +4,7 @@ import './review.css';
 
 export const metadata: Metadata = {
   title: '思考工作台 · Thinking Desk',
-  description: 'AI 陪伴下的结构化设计思考',
+  description: 'AI 主导产出的结构化设计思考',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
