@@ -76,6 +76,7 @@ describe('users adapters', () => {
   it('maps personas and jobs, links jobs to personas, turns priority into recommend', () => {
     const data = UsersAnalysisSchema.parse({
       ...validUsers,
+      personas: [...validUsers.personas, { ...validUsers.personas[0], id: 'p-2', role: 'candidate' }],
       jobs: { ...validUsers.jobs, functional: [{ ...validUsers.jobs.functional[0], persona_ids: ['p-1'], suggested_priority: true }] },
       critiques: [{ kind: 'ask', title: 't', body: 'b' }],
     });
@@ -83,6 +84,9 @@ describe('users adapters', () => {
     expect(blocking(plan)).toEqual([]);
     const [persona] = ofType(plan, 'persona');
     expect(persona.aiStance).toMatchObject({ verdict: 'recommend', reason: expect.stringContaining('主用户') });
+    const candidates = ofType(plan, 'persona').filter((p) => p.type === 'persona' && p.body.role === 'candidate');
+    expect(candidates.length).toBeGreaterThan(0);
+    expect(candidates.every((p) => p.aiStance?.verdict === 'neutral')).toBe(true);
     const jobs = ofType(plan, 'job');
     expect(jobs.map((j) => j.type === 'job' && j.body.dimension)).toEqual(['functional', 'emotional']);
     expect(jobs[0].aiStance?.verdict).toBe('recommend');
