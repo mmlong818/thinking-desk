@@ -10,8 +10,9 @@ import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
 import {
-  CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
+  CenteredAction, ErrorCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
 } from '@/components/shared/NodeKit';
+import { StreamProgressCard } from '@/components/shared/StreamProgress';
 import { adaptFeatureList } from '@/lib/model/adapters';
 import { briefRequestContext, inputsOf, type BriefRequestContext } from '@/lib/model/context';
 import { buildFeedback } from '@/lib/model/feedback';
@@ -59,9 +60,10 @@ function useDraft(data: NodeData, brief: BriefRequestContext | null) {
       node: 'feat',
       inputs: inputsOf(brief.items, u.personas, u.jobs, u.scenarios, u.insights, u.pains, u.diff ? [u.diff] : []),
       adapt: adaptFeatureList,
+      stream: true,
     });
   };
-  return { draft, running: ai.running !== null, error: ai.error };
+  return { draft, running: ai.running !== null, error: ai.error, progress: ai.progress, cancel: ai.cancel };
 }
 
 function idleCard(data: NodeData): CopilotCard {
@@ -112,7 +114,7 @@ export function FeaturesNode() {
   const { slug } = useProject();
   const data = useNodeData('feat');
   const brief = useMemo(() => briefRequestContext(data.all), [data.all]);
-  const { draft, running, error } = useDraft(data, brief);
+  const { draft, running, error, progress, cancel } = useDraft(data, brief);
   const stage: Stage = running ? 'drafting' : data.of('feature').length > 0 ? 'done' : 'idle';
   const copilot = (
     <Copilot projectSlug={slug} nodeKind="feat" cards={copilotCards(data, stage, !!brief)} pending={stage === 'drafting'}
@@ -133,7 +135,7 @@ export function FeaturesNode() {
       <StoreStatus data={data} />
       {data.loading ? null : <UpstreamStatus data={data} />}
       {stage === 'idle' && brief ? <CenteredAction label="基于上游产出起草功能列表 →" onClick={draft} /> : null}
-      {stage === 'drafting' ? <LoadingCard>收口中 · 同时计算 Kano/RICE/五问法/功能卡片，通常 90-180 秒……</LoadingCard> : null}
+      {stage === 'drafting' ? <StreamProgressCard label="收口中 · Kano / RICE / 五问法 / 功能卡片" progress={progress} onCancel={cancel} /> : null}
       <ErrorCard message={error} />
       {stage === 'done' ? <FeatResults data={data} onRedraft={draft} /> : null}
     </NodeFrame>

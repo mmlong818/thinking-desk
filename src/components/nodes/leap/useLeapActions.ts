@@ -78,6 +78,7 @@ function revise(ctx: Ctx) {
     node: 'final',
     inputs: [...inputs, ...inputsOf(picked)],
     adapt: (out) => adaptFeatureRevision(out, { originalFeatureIds: features.map((f) => f.id) }),
+    stream: true,
   });
 }
 
@@ -90,12 +91,15 @@ export function useLeapActions(data: NodeData, brief: BriefRequestContext | null
   return {
     running: ai.running,
     error: ai.error,
+    /** Live progress of the streamed call in flight, and its cancel. */
+    progress: ai.progress,
+    cancel: ai.cancel,
     run: () => {
       if (!ctx) return;
       const { body, inputs } = leapContext(ctx);
       void ai.run('analyze', {
         route: '/api/ai/creative-leap', body: { action: 'initial', ...body, feedback: buildFeedback(data.all, types, data.links) },
-        node: 'leap', inputs, adapt: adaptLeapAnalysis,
+        node: 'leap', inputs, adapt: adaptLeapAnalysis, stream: true,
       });
     },
     more: (type: LeapType) => {
@@ -105,7 +109,7 @@ export function useLeapActions(data: NodeData, brief: BriefRequestContext | null
       void ai.run(`more:${type}`, {
         route: '/api/ai/creative-leap',
         body: { action: 'more', category: CATEGORY_OF[type], existing, ...body, feedback: buildFeedback(data.all, [{ node: 'leap', type }], data.links) },
-        node: 'leap', inputs, adapt: adaptMoreLeapItems,
+        node: 'leap', inputs, adapt: adaptMoreLeapItems, stream: true,
       });
     },
     revise: () => ctx && revise(ctx),

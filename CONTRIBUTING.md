@@ -53,7 +53,7 @@ Tests live next to the code as `*.test.ts`. When you add or change a Zod respons
 
 1. Add a literal to `AI_TASKS` in `src/lib/ai/types.ts`.
 2. Create `src/lib/ai/schemas/your-task.ts` (Zod response schema, client-safe) and `src/lib/ai/tasks/your-task.ts` (prompt builder that calls `runTask()`; wrap request data in `dataBlock()`).
-3. Create `src/app/api/ai/your-task/route.ts` — `export const POST = aiRoute({ name, body, handle })` (`src/lib/ai/route.ts`): it validates the body, runs your task and returns `{ ok, data, run }`. Add `stream: true` only if the node should show live progress (see the scenarios route and `docs/architecture.md`).
+3. Create `src/app/api/ai/your-task/route.ts` — `export const POST = aiRoute({ name, body, handle })` (`src/lib/ai/route.ts`): it validates the body, runs your task and returns `{ ok, data, run }`. Add `stream: true` (and `stream: true` on the node's `useAiAction().run` calls, with a `StreamProgressCard`) for calls that take more than ~30 s (see the scenarios route and `docs/architecture.md`).
 4. Add an output adapter in `src/lib/model/adapters/` (task output → `ItemDraft[]` + replace scope, with a test on the fixtures) and call the route from your node with `useAiAction().run(…, { route, body, node, inputs, adapt })` — it saves the run and its items.
 5. Document the new `AI_MODEL_YOUR_TASK` variable in `.env.example`.
 
