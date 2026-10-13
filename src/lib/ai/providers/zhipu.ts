@@ -1,4 +1,6 @@
-import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
+import type { AiProvider, CompleteRequest, CompleteResult, ModelInfo } from '../types';
+import { schemaInstruction } from '../json-schema';
+import { readChatStream } from './chat-stream';
 import { validateBaseUrl } from './validate-base-url';
 
 // Zhipu exposes an OpenAI-compatible Chat Completions endpoint. We call it
@@ -6,27 +8,54 @@ import { validateBaseUrl } from './validate-base-url';
 // Zhipu doesn't always expose /models reliably. We probe and fall back to a
 // curated list of currently-usable models if the endpoint is unreachable.
 const ZHIPU_FALLBACK = [
-  { id: 'glm-4-plus',    label: 'GLM-4 Plus · 旗舰' },
-  { id: 'glm-4-air',     label: 'GLM-4 Air · 性价比' },
-  { id: 'glm-4-long',    label: 'GLM-4 Long · 长上下文' },
-  { id: 'glm-4-flash',   label: 'GLM-4 Flash · 超快' },
-  { id: 'glm-zero-preview', label: 'GLM-Zero · 推理预览' },
+  { id: 'glm-5.2',       label: 'GLM-5.2 · 旗舰' },
+  { id: 'glm-5.1',       label: 'GLM-5.1 · 推理 / Agent' },
+  { id: 'glm-5-turbo',   label: 'GLM-5 Turbo · 快速' },
+  { id: 'glm-4.7-flash', label: 'GLM-4.7 Flash · 免费' },
 ];
 
-function safeParseJson(raw: string): unknown {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error(`Zhipu response is not valid JSON. First 300 chars: ${trimmed.slice(0, 300)}`);
+/** The curated list marked as offline, so the router never treats it as proof of what exists. */
+function offlineList(): ModelInfo[] {
+  return ZHIPU_FALLBACK.map((m) => ({ ...m, fallback: true }));
+}
+
+/** OpenAI-compatible chat body (JSON mode + schema in a trailing system message). */
+export function buildZhipuRequest(model: string, req: CompleteRequest): Record<string, unknown> {
+  const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
+  if (req.schema) messages.push({ role: 'system', content: schemaInstruction(req.schema) });
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature: req.temperature ?? 0.3,
+    max_tokens: req.maxTokens ?? 8000,
+    response_format: req.schema ? { type: 'json_object' } : undefined,
+    tools: req.webSearch ? [{ type: 'web_search', web_search: { enable: true } }] : undefined,
+    // GLM-4.5+ reasoning models burn huge token budgets in reasoning_content
+    // before emitting the actual answer. For structured-output tasks we
+    // always want the JSON, not the thinking trace — disable reasoning.
+    thinking: req.schema ? { type: 'disabled' } : undefined,
+  };
+  // When web search is enabled, override tools with the Zhipu-specific shape
+  // that also returns citations so the UI can attribute sources.
+  if (req.webSearch) {
+    body.tools = [
+      {
+        type: 'web_search',
+        web_search: { enable: true, search_result: true },
+      },
+    ];
+    // Web search dramatically increases output — give extra headroom.
+    body.max_tokens = Math.max(Number(body.max_tokens ?? 0), 12000);
   }
+  return body;
 }
 
 export const zhipuProvider: AiProvider = {
   name: 'zhipu',
   isConfigured: () => !!process.env.ZHIPU_API_KEY,
+  // glm-5.3 family: thinking is always on and `thinking: disabled` (sent for JSON tasks) is an error.
+  canDrive: (id) => !/^glm-5\.3/i.test(id),
   async listModels() {
     if (!process.env.ZHIPU_API_KEY) return [];
     const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';
@@ -34,10 +63,10 @@ export const zhipuProvider: AiProvider = {
       const res = await fetch(`${base}/models`, {
         headers: { authorization: `Bearer ${process.env.ZHIPU_API_KEY}` },
       });
-      if (!res.ok) return ZHIPU_FALLBACK;
+      if (!res.ok) return offlineList();
       const json = (await res.json()) as { data?: { id: string }[] };
       const ids = (json.data ?? []).map((m) => m.id);
-      if (ids.length === 0) return ZHIPU_FALLBACK;
+      if (ids.length === 0) return offlineList();
       // Keep a friendly label from fallback if we have one.
       const labelled = ids.map((id) => {
         const match = ZHIPU_FALLBACK.find((f) => f.id === id);
@@ -45,88 +74,71 @@ export const zhipuProvider: AiProvider = {
       });
       return labelled;
     } catch {
-      return ZHIPU_FALLBACK;
+      return offlineList();
     }
   },
   async complete(model, req): Promise<CompleteResult> {
-    const apiKey = process.env.ZHIPU_API_KEY;
-    if (!apiKey) throw new Error('ZHIPU_API_KEY not configured');
-    const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';
     const started = Date.now();
-
-    const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
-    if (req.schema) {
-      messages.push({
-        role: 'system',
-        content: `输出必须是 JSON，且严格符合以下 schema：\n${JSON.stringify(req.schema)}`,
-      });
-    }
-
-    const body: Record<string, unknown> = {
-      model,
-      messages,
-      temperature: req.temperature ?? 0.3,
-      max_tokens: req.maxTokens ?? 8000,
-      response_format: req.schema ? { type: 'json_object' } : undefined,
-      tools: req.webSearch ? [{ type: 'web_search', web_search: { enable: true } }] : undefined,
-      // GLM-4.5+ reasoning models burn huge token budgets in reasoning_content
-      // before emitting the actual answer. For structured-output tasks we
-      // always want the JSON, not the thinking trace — disable reasoning.
-      thinking: req.schema ? { type: 'disabled' } : undefined,
-    };
-    // When web search is enabled, override tools with the Zhipu-specific shape
-    // that also returns citations so the UI can attribute sources.
-    if (req.webSearch) {
-      body.tools = [
-        {
-          type: 'web_search',
-          web_search: { enable: true, search_result: true },
-        },
-      ];
-      // Web search dramatically increases output — give extra headroom.
-      body.max_tokens = Math.max(Number(body.max_tokens ?? 0), 12000);
-    }
-
-    const res = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: req.signal,
-    });
-    if (!res.ok) {
-      throw new Error(`Zhipu ${res.status}: ${await res.text()}`);
-    }
+    const res = await postChat(buildZhipuRequest(model, req), req.signal);
     const json = (await res.json()) as {
       choices?: { message?: { content?: string }; finish_reason?: string }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const choice = json.choices?.[0];
-    const text = choice?.message?.content ?? '';
-    if (!text.trim()) {
-      const hint =
-        choice?.finish_reason === 'length'
-          ? '（finish_reason=length：模型未在预算内完成输出，考虑增大 maxTokens 或切换非推理模型）'
-          : '';
-      throw new Error(
-        `Zhipu returned empty content (finish_reason=${choice?.finish_reason ?? 'unknown'}) ${hint}. ` +
-          `Raw: ${JSON.stringify(json).slice(0, 500)}`,
-      );
-    }
-    const data = req.schema ? safeParseJson(text) : text;
+    const usage = { inputTokens: json.usage?.prompt_tokens, outputTokens: json.usage?.completion_tokens };
+    return result(model, started, choice?.message?.content ?? '', choice?.finish_reason, usage, () => JSON.stringify(json));
+  },
 
-    return {
-      data,
-      text,
-      provider: 'zhipu',
-      model,
-      latencyMs: Date.now() - started,
-      usage: {
-        inputTokens: json.usage?.prompt_tokens,
-        outputTokens: json.usage?.completion_tokens,
-      },
-    };
+  /** Same request with `stream: true` (OpenAI-compatible SSE; usage comes with the last chunk). */
+  async stream(model, req, onDelta): Promise<CompleteResult> {
+    const started = Date.now();
+    const res = await postChat({ ...buildZhipuRequest(model, req), stream: true }, req.signal);
+    if (!res.body) throw new Error('Zhipu stream: empty response body');
+    const out = await readChatStream(res.body, onDelta);
+    return result(model, started, out.text, out.finishReason, out.usage ?? {}, () => '(streamed)');
   },
 };
+
+async function postChat(body: Record<string, unknown>, signal: AbortSignal | undefined): Promise<Response> {
+  const apiKey = process.env.ZHIPU_API_KEY;
+  if (!apiKey) throw new Error('ZHIPU_API_KEY not configured');
+  const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`Zhipu ${res.status}: ${await res.text()}`);
+  }
+  return res;
+}
+
+/** An empty answer is an error (reasoning models can spend the whole budget before answering). */
+function result(
+  model: string, started: number, text: string, finish: string | undefined,
+  usage: CompleteResult['usage'], raw: () => string,
+): CompleteResult {
+  if (!text.trim()) {
+    const hint =
+      finish === 'length'
+        ? '（finish_reason=length：模型未在预算内完成输出，考虑增大 maxTokens 或切换非推理模型）'
+        : '';
+    throw new Error(
+      `Zhipu returned empty content (finish_reason=${finish ?? 'unknown'}) ${hint}. ` +
+        `Raw: ${raw().slice(0, 500)}`,
+    );
+  }
+  return {
+    text,
+    provider: 'zhipu',
+    model,
+    latencyMs: Date.now() - started,
+    usage,
+    finishReason: finish === 'length' ? 'length' : 'stop',
+  };
+}

@@ -1,4 +1,5 @@
-import { runAi } from '../router';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
 import type { ChatMessage } from '../types';
 
 /**
@@ -22,7 +23,6 @@ export interface FreeAskRequest {
   contextSummary: string;
   question: string;
   history: FreeAskHistoryItem[];
-  override?: string;
 }
 
 const SYSTEM = `你是 Thinking Desk 的 AI 副驾驶，正在协助用户走结构化设计思考流程。
@@ -34,29 +34,15 @@ const SYSTEM = `你是 Thinking Desk 的 AI 副驾驶，正在协助用户走结
 4. **简短** —— 默认 2-4 句话；只有用户明确说"展开"才长答。
 5. 用中文。技术术语保留英文原文。`;
 
-export async function freeAsk(req: FreeAskRequest): Promise<{ text: string; provider: string; model: string; latencyMs: number }> {
+export async function freeAsk(req: FreeAskRequest, opts?: TaskOptions): Promise<RunTaskResult<string>> {
+  const summary = req.contextSummary || '（用户还在 Brief 阶段，尚无更多上下文）';
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM },
     {
       role: 'system',
-      content: `当前节点：${req.nodeKind} ${req.nodeLabel}\n\n项目上下文摘要：\n${req.contextSummary || '（用户还在 Brief 阶段，尚无更多上下文）'}`,
+      content: `当前节点：${req.nodeKind} ${req.nodeLabel}\n\n项目上下文摘要：\n${dataBlock('project_context', summary)}`,
     },
-    ...req.history.map((h) => ({ role: h.role, content: h.content }) as ChatMessage),
+    ...req.history.map((h): ChatMessage => ({ role: h.role, content: h.content })),
     { role: 'user', content: req.question },
   ];
-
-  const result = await runAi({
-    task: 'FREE_ASK',
-    messages,
-    maxTokens: 600,
-    temperature: 0.7,
-    override: req.override,
-  });
-
-  return {
-    text: result.text,
-    provider: result.provider,
-    model: result.model,
-    latencyMs: result.latencyMs,
-  };
+  return runTask({ task: 'FREE_ASK', system: SYSTEM, messages, maxTokens: 600, temperature: 0.7, options: opts });
 }

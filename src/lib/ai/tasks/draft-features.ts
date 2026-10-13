@@ -1,8 +1,12 @@
-import { z } from 'zod';
-import { runAi } from '../router';
-import type { BriefExtraction, ClarificationAnswer } from './extract-brief';
-import type { Persona, Job } from './analyze-users';
-import type { ScenarioDraft, ScenarioDeepAnalysis } from './analyze-scenarios';
+import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext, InsightDigest, PainDigest } from '../schemas/snapshots';
+import type { Persona, Job } from '../schemas/analyze-users';
+import type { ScenarioDraft } from '../schemas/analyze-scenarios';
+import { FeatureListSchema, type FeatureList } from '../schemas/draft-features';
 
 /**
  * 方法论 v2 §九 功能列表与优先级。
@@ -14,218 +18,6 @@ import type { ScenarioDraft, ScenarioDeepAnalysis } from './analyze-scenarios';
  *  - §9.5 功能卡片 = 假设（核心假设 + 验证指标 + 失败信号）
  *  - §9.6 不做什么清单 + 理由
  */
-
-export const KanoKeys = ['must', 'performance', 'delight', 'indifferent', 'reverse'] as const;
-export const KanoSchema = z.enum(KanoKeys);
-export type KanoKind = z.infer<typeof KanoSchema>;
-
-export const KANO_META: Record<
-  KanoKind,
-  { label: string; short: string; hint: string; cls: string }
-> = {
-  must:        { label: '基本型',   short: 'MUST',    hint: '没有用户愤怒、有了无感',          cls: 'must' },
-  performance: { label: '期望型',   short: 'PERF',    hint: '越好越满意、线性关系',            cls: 'perf' },
-  delight:     { label: '兴奋型',   short: 'DELIGHT', hint: '没有不失望、有了惊喜',            cls: 'delight' },
-  indifferent: { label: '无差别',   short: 'MEH',     hint: '有没有无感 —— 优先砍掉',          cls: 'meh' },
-  reverse:     { label: '反向型',   short: 'REV',     hint: '有人喜欢有人讨厌 —— 可控选项',    cls: 'reverse' },
-};
-
-export const RiceSchema = z.object({
-  /** 每季度受影响的用户数绝对值 */
-  reach: z.number().min(0),
-  /** 0.25 | 0.5 | 1 | 2 | 3 */
-  impact: z.number().min(0.25).max(3),
-  /** 0.5 | 0.8 | 1.0 */
-  confidence: z.number().min(0).max(1),
-  /** 开发 + 设计 + 测试总人月 */
-  effort: z.number().min(0.1),
-});
-export type RiceScore = z.infer<typeof RiceSchema>;
-
-export const FiveQuestionsSchema = z.object({
-  why_do: z.string(),          // §9.4 Q1 · 为什么要做
-  why_this_way: z.string(),    // §9.4 Q2 · 为什么这么做
-  alternatives: z.string(),    // §9.4 Q3 · 还能怎么做
-  what_if_not: z.string(),     // §9.4 Q4 · 不做会怎样
-  what_if_wrong: z.string(),   // §9.4 Q5 · 做错会怎样（最重要）
-});
-
-export const FeatureTracesSchema = z.object({
-  insight_ids: z.array(z.string()).default([]),
-  job_ids: z.array(z.string()).default([]),
-  persona_ids: z.array(z.string()).default([]),
-  scenario_ids: z.array(z.string()).default([]),
-});
-
-export const FeatureSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  /** 金字塔支柱 · 同层级最多 7 个 */
-  pillar: z.string(),
-  /** 可选的中层分组名 */
-  group: z.string().optional().default(''),
-
-  traces: FeatureTracesSchema,
-
-  kano: KanoSchema,
-  rice: RiceSchema,
-  /** R × I × C ÷ E */
-  rice_score: z.number(),
-
-  five_questions: FiveQuestionsSchema,
-
-  /** §9.5 功能卡片 = 假设 */
-  core_hypothesis: z.string(),
-  validation_metric: z.string(),
-  failure_signal: z.string(),
-
-  /** §十一 伦理前哨（更深审查在独立节点） */
-  ethics_concern: z.string().optional().default(''),
-  red_line_risk: z.boolean().default(false),
-
-  suggested_priority: z.boolean().default(false),
-});
-export type Feature = z.infer<typeof FeatureSchema>;
-
-export const PillarSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-});
-export type Pillar = z.infer<typeof PillarSchema>;
-
-export const NotDoingSchema = z.object({
-  name: z.string(),
-  reason: z.enum(['boundary', 'ethics', 'indifferent', 'low_rice', 'dependency']),
-  why: z.string(),
-});
-export type NotDoing = z.infer<typeof NotDoingSchema>;
-
-export const FeatureListSchema = z.object({
-  pillars: z.array(PillarSchema).min(2).max(5),
-  features: z.array(FeatureSchema).min(5),
-  not_doing: z.array(NotDoingSchema).min(1),
-  differentiation_echo: z.string(),
-  critiques: z
-    .array(
-      z.object({
-        kind: z.enum(['check', 'critique', 'ask']),
-        title: z.string(),
-        body: z.string(),
-      }),
-    )
-    .max(6),
-});
-export type FeatureList = z.infer<typeof FeatureListSchema>;
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['pillars', 'features', 'not_doing', 'differentiation_echo', 'critiques'],
-  properties: {
-    pillars: {
-      type: 'array',
-      minItems: 2,
-      maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['id', 'name', 'description'],
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          description: { type: 'string' },
-        },
-      },
-    },
-    features: {
-      type: 'array',
-      minItems: 5,
-      items: {
-        type: 'object',
-        required: [
-          'id', 'name', 'description', 'pillar', 'group',
-          'traces', 'kano', 'rice', 'rice_score',
-          'five_questions',
-          'core_hypothesis', 'validation_metric', 'failure_signal',
-          'ethics_concern', 'red_line_risk', 'suggested_priority',
-        ],
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          description: { type: 'string' },
-          pillar: { type: 'string' },
-          group: { type: 'string' },
-          traces: {
-            type: 'object',
-            required: ['insight_ids', 'job_ids', 'persona_ids', 'scenario_ids'],
-            properties: {
-              insight_ids: { type: 'array', items: { type: 'string' } },
-              job_ids: { type: 'array', items: { type: 'string' } },
-              persona_ids: { type: 'array', items: { type: 'string' } },
-              scenario_ids: { type: 'array', items: { type: 'string' } },
-            },
-          },
-          kano: { type: 'string', enum: [...KanoKeys] },
-          rice: {
-            type: 'object',
-            required: ['reach', 'impact', 'confidence', 'effort'],
-            properties: {
-              reach: { type: 'number' },
-              impact: { type: 'number', enum: [0.25, 0.5, 1, 2, 3] },
-              confidence: { type: 'number', enum: [0.5, 0.8, 1] },
-              effort: { type: 'number' },
-            },
-          },
-          rice_score: { type: 'number' },
-          five_questions: {
-            type: 'object',
-            required: ['why_do', 'why_this_way', 'alternatives', 'what_if_not', 'what_if_wrong'],
-            properties: {
-              why_do: { type: 'string' },
-              why_this_way: { type: 'string' },
-              alternatives: { type: 'string' },
-              what_if_not: { type: 'string' },
-              what_if_wrong: { type: 'string' },
-            },
-          },
-          core_hypothesis: { type: 'string' },
-          validation_metric: { type: 'string' },
-          failure_signal: { type: 'string' },
-          ethics_concern: { type: 'string' },
-          red_line_risk: { type: 'boolean' },
-          suggested_priority: { type: 'boolean' },
-        },
-      },
-    },
-    not_doing: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'object',
-        required: ['name', 'reason', 'why'],
-        properties: {
-          name: { type: 'string' },
-          reason: { type: 'string', enum: ['boundary', 'ethics', 'indifferent', 'low_rice', 'dependency'] },
-          why: { type: 'string' },
-        },
-      },
-    },
-    differentiation_echo: { type: 'string' },
-    critiques: {
-      type: 'array',
-      maxItems: 6,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 06 功能列表节点的 AI 副驾驶。
 方法论 v2 §九 要求用上游所有节点的产出（Brief / Users / Stake / Alt / 情景启发）产出结构化功能列表。
@@ -320,12 +112,12 @@ rice_score = reach × impact × confidence ÷ effort —— 你自己算好放�
 严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
 
 function formatContext(
-  brief: BriefExtraction,
+  brief: BriefContext,
   personas: Persona[],
   jobs: Job[],
   scenarios: ScenarioDraft[],
-  insights: ScenarioDeepAnalysis['design_insights'],
-  painPoints: ScenarioDeepAnalysis['pain_points'],
+  insights: InsightDigest[],
+  painPoints: PainDigest[],
   diffHypothesis: string | undefined,
   rawText?: string,
   answers?: ClarificationAnswer[],
@@ -384,17 +176,17 @@ function formatContext(
 }
 
 export async function draftFeatures(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
   scenarios: ScenarioDraft[];
-  design_insights: ScenarioDeepAnalysis['design_insights'];
-  pain_points: ScenarioDeepAnalysis['pain_points'];
+  design_insights: InsightDigest[];
+  pain_points: PainDigest[];
   differentiation_hypothesis?: string;
-  override?: string;
-}): Promise<FeatureList> {
+  feedback?: RegenerationFeedback;
+}, opts?: TaskOptions): Promise<RunTaskResult<FeatureList>> {
   const context = formatContext(
     args.brief,
     args.personas,
@@ -407,14 +199,14 @@ export async function draftFeatures(args: {
     args.answers,
   );
 
-  const res = await runAi({
+  const res = await runTask({
     task: 'FEAT_DRAFT',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `请基于以下上游上下文产出完整的功能列表。\n\n${context}\n\n` +
+          `请基于以下上游上下文产出完整的功能列表。\n\n${dataBlock('project_context', context)}\n\n` +
           `要求：\n` +
           `1. **feature.name 必须是产品能力名词**（例"拍题识别"、"错题本"、"语音输入"），不是情景描述。\n` +
           `   从 §8.5 设计启发的 action 字段提炼能力，一条 insight 可能对应多个能力，多个 insight 也可共享一个能力。\n` +
@@ -424,22 +216,21 @@ export async function draftFeatures(args: {
           `5. 五问法五个回答都要具体、不套话\n` +
           `6. 功能卡片三件（假设/指标/信号）必填\n` +
           `7. not_doing 至少 3-6 条\n` +
-          `8. 如果功能触及 red_lines，red_line_risk 必须标 true`,
+          `8. 如果功能触及 red_lines，red_line_risk 必须标 true` +
+          feedbackBlock(args.feedback),
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: FeatureListSchema,
     maxTokens: 16000,
     temperature: 0.35,
-    override: args.override,
+    options: opts,
   });
 
-  const parsed = FeatureListSchema.parse(res.data);
-
   // Defensive: re-compute rice_score client-side in case model mis-arithmetic
-  parsed.features = parsed.features.map((f) => {
+  const features = res.data.features.map((f) => {
     const computed = (f.rice.reach * f.rice.impact * f.rice.confidence) / Math.max(f.rice.effort, 0.1);
     return { ...f, rice_score: Math.round(computed * 10) / 10 };
   });
 
-  return parsed;
+  return { ...res, data: { ...res.data, features } };
 }

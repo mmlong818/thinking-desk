@@ -30,3 +30,6 @@ credentials.json
 service-account.json
 .secrets/
 sessions/
+
+# Prompt eval outputs (pnpm eval)
+evals/results/

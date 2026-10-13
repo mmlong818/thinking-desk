@@ -8,8 +8,8 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 
 **Section:** Problem Definition  
 **Deps:** none  
-**Purpose:** Clarify the problem statement through structured AI dialogue. Extracts a clean Brief object (problem, context, constraints, success criteria).  
-**Primary AI task:** `BRIEF_EXTRACT`  
+**Purpose:** Clarify the problem statement through structured AI dialogue. Extracts a structured Brief (problem statement, target user, scenario, value proposition, success criteria, time constraint, boundaries, red lines).  
+**AI tasks:** `BRIEF_CLARIFY` (decide whether to ask), `BRIEF_PROBE` (one-question interview), `BRIEF_EXTRACT` (primary)  
 **Component:** `BriefNode.tsx`
 
 ---
@@ -19,7 +19,7 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 **Section:** Four-Dimensional Analysis  
 **Deps:** `brief`  
 **Purpose:** Map user segments using Jobs-to-be-done (JTBD) — functional, emotional, social jobs. Identify underserved clusters.  
-**Primary AI task:** `USERS_JTBD`  
+**AI task:** `USERS_JTBD` (also used for refining jobs and adding personas)  
 **Component:** `UsersNode.tsx`
 
 ---
@@ -48,8 +48,8 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 
 **Section:** Four-Dimensional Analysis  
 **Deps:** `brief`  
-**Purpose:** Generate use scenarios across 6 dimensions (who, what, when, where, why, how). Feeds the storyboard.  
-**Primary AI task:** `SCEN_FEED`  
+**Purpose:** Exhaust 7 dimensions (time, place, people, trigger, process, tools, conditions), combine selected elements into scenarios, then deep-analyze them (matrix, extremes, hostile cases, pain points). `nodes.ts` labels this node "六维" (six dimensions), but the code defines seven.  
+**AI tasks:** `SCEN_FEED` (dimensions and scenarios), `SCEN_PAIN` (deep analysis)  
 **Component:** `ScenariosNode.tsx`
 
 ---
@@ -59,7 +59,7 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 **Section:** Conventional Solution  
 **Deps:** `brief`  
 **Purpose:** List the features a conventional market solution would have. Intentionally pre-design — benchmark without bias.  
-**Primary AI task:** `FEAT_DRAFT`  
+**AI task:** `FEAT_DRAFT`  
 **Component:** `FeaturesNode.tsx`
 
 ---
@@ -68,8 +68,8 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 
 **Section:** Start Designing  
 **Deps:** `feat`  
-**Purpose:** The inflection point. Review the feature list, reject/keep/lock items, and apply creative leaps that differentiate the product. Real design starts here.  
-**Primary AI task:** `LEAP_GENERATE`  
+**Purpose:** The inflection point. Generate first-principles rethinks, analogy transfers and constraint flips, review them, and feed the chosen leaps back into the feature list. Real design starts here.  
+**AI tasks:** `LEAP_FIRST_PRINCIPLES` (primary), `LEAP_ANALOGY` and `LEAP_CONSTRAINT_FLIP` ("more items" requests); revisions of the feature list use `FEAT_DRAFT`  
 **Component:** `LeapNode.tsx`
 
 ---
@@ -79,7 +79,7 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 **Section:** Start Designing  
 **Deps:** `feat`  
 **Purpose:** Synthesise upstream work into a full design document — rationale, feature decisions, open questions.  
-**Primary AI task:** `GENERATE_DESIGN`  
+**AI task:** `DESIGN_PROPOSAL`  
 **Component:** `FinalFeaturesNode.tsx`
 
 ---
@@ -89,11 +89,11 @@ Each node is defined in `src/data/nodes.ts` and rendered by a component in `src/
 **Section:** Start Designing  
 **Deps:** `final`  
 **Purpose:** Break the design proposal into concrete, executable subfeatures/tasks ready for a sprint backlog.  
-**Primary AI task:** `SPLIT_SUBFEATURES`  
+**AI task:** `SPLIT_SUBFEATURES`  
 **Component:** `SplitNode.tsx`
 
 ---
 
 ## Lock Mechanics
 
-`isNodeLocked(kind, completedSet)` in `data/nodes.ts` returns `true` if any dep is missing from `completedSet`. The SSR page builds `completedSet` from the Postgres DB (if available) or the `td-done:<slug>` cookie. `LockedNode.tsx` renders in place of the real component when locked.
+`isNodeLocked(kind, completedSet)` in `data/nodes.ts` returns `true` if any dep is missing from `completedSet`. A node is complete when its `completion` rule holds on accepted items (`completedNodes(items)`, see [data-model.md](data-model.md#node-completion)). The SSR page derives `completedSet` from the project's items in Postgres mode and reads it from the `td-done:<slug>` cookie (`td-done-h:<hash>` for long slugs) in pure-local mode, where the browser rewrites the cookie from the items after every change. `LockedNode.tsx` renders in place of the real component when locked.

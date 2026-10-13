@@ -1,210 +1,17 @@
-import { z } from 'zod';
-import { runAi } from '../router';
-import type { BriefExtraction } from './extract-brief';
-import type { Feature, Pillar } from './draft-features';
+import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import { stancePromptFragment } from '../stance-prompt';
+import type { BriefContext, FeatureDigest } from '../schemas/snapshots';
+import type { Pillar } from '../schemas/draft-features';
+import { DesignProposalSchema, type DesignProposal } from '../schemas/generate-design';
 
 /**
  * 设计案生成 · NODE 08
  * 输入：跃迁后的最终功能列表 + Brief + 选中场景
  * 输出：完整设计文档（不是功能罗列） —— 信息架构、关键用户流、核心交互、数据模型、技术骨架、里程碑
  */
-
-export const SectionSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  body: z.string(),
-});
-export type DesignSection = z.infer<typeof SectionSchema>;
-
-export const FlowStepSchema = z.object({
-  step: z.number().int().min(1),
-  actor: z.string(),
-  action: z.string(),
-  system_response: z.string(),
-});
-export type FlowStep = z.infer<typeof FlowStepSchema>;
-
-export const UserFlowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  goal: z.string(),
-  precondition: z.string(),
-  steps: z.array(FlowStepSchema).min(2),
-  success_criteria: z.string(),
-  failure_handling: z.string(),
-});
-export type UserFlow = z.infer<typeof UserFlowSchema>;
-
-export const ModuleSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  responsibility: z.string(),
-  feature_ids: z.array(z.string()),
-  key_screens: z.array(z.string()),
-  depends_on: z.array(z.string()).default([]),
-});
-export type DesignModule = z.infer<typeof ModuleSchema>;
-
-export const DataEntitySchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  fields: z.array(z.object({
-    name: z.string(),
-    type: z.string(),
-    note: z.string().default(''),
-  })),
-});
-export type DataEntity = z.infer<typeof DataEntitySchema>;
-
-export const MilestoneSchema = z.object({
-  phase: z.string(),
-  goal: z.string(),
-  deliverables: z.array(z.string()),
-  duration: z.string(),
-});
-export type Milestone = z.infer<typeof MilestoneSchema>;
-
-export const DesignProposalSchema = z.object({
-  title: z.string(),
-  one_liner: z.string(),
-  vision: z.string(),
-  design_principles: z.array(z.string()).min(2),
-  information_architecture: z.array(SectionSchema).min(2),
-  modules: z.array(ModuleSchema).min(2),
-  user_flows: z.array(UserFlowSchema).min(1),
-  key_interactions: z.array(SectionSchema).min(1),
-  data_model: z.array(DataEntitySchema).min(1),
-  tech_skeleton: z.array(SectionSchema).min(1),
-  metrics: z.array(z.object({
-    name: z.string(),
-    definition: z.string(),
-    target: z.string(),
-  })),
-  risks: z.array(z.object({
-    risk: z.string(),
-    mitigation: z.string(),
-  })),
-  milestones: z.array(MilestoneSchema).min(1),
-  open_questions: z.array(z.string()),
-});
-export type DesignProposal = z.infer<typeof DesignProposalSchema>;
-
-const sectionJson = {
-  type: 'object',
-  required: ['id', 'title', 'body'],
-  properties: {
-    id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' },
-  },
-};
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: [
-    'title','one_liner','vision','design_principles',
-    'information_architecture','modules','user_flows','key_interactions',
-    'data_model','tech_skeleton','metrics','risks','milestones','open_questions',
-  ],
-  properties: {
-    title: { type: 'string' },
-    one_liner: { type: 'string' },
-    vision: { type: 'string' },
-    design_principles: { type: 'array', items: { type: 'string' } },
-    information_architecture: { type: 'array', items: sectionJson },
-    modules: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['id','name','responsibility','feature_ids','key_screens','depends_on'],
-        properties: {
-          id: { type: 'string' }, name: { type: 'string' },
-          responsibility: { type: 'string' },
-          feature_ids: { type: 'array', items: { type: 'string' } },
-          key_screens: { type: 'array', items: { type: 'string' } },
-          depends_on: { type: 'array', items: { type: 'string' } },
-        },
-      },
-    },
-    user_flows: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['id','name','goal','precondition','steps','success_criteria','failure_handling'],
-        properties: {
-          id: { type: 'string' }, name: { type: 'string' },
-          goal: { type: 'string' }, precondition: { type: 'string' },
-          steps: {
-            type: 'array',
-            items: {
-              type: 'object',
-              required: ['step','actor','action','system_response'],
-              properties: {
-                step: { type: 'integer' },
-                actor: { type: 'string' },
-                action: { type: 'string' },
-                system_response: { type: 'string' },
-              },
-            },
-          },
-          success_criteria: { type: 'string' },
-          failure_handling: { type: 'string' },
-        },
-      },
-    },
-    key_interactions: { type: 'array', items: sectionJson },
-    data_model: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['name','description','fields'],
-        properties: {
-          name: { type: 'string' }, description: { type: 'string' },
-          fields: {
-            type: 'array',
-            items: {
-              type: 'object',
-              required: ['name','type','note'],
-              properties: {
-                name: { type: 'string' }, type: { type: 'string' }, note: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    },
-    tech_skeleton: { type: 'array', items: sectionJson },
-    metrics: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['name','definition','target'],
-        properties: {
-          name: { type: 'string' }, definition: { type: 'string' }, target: { type: 'string' },
-        },
-      },
-    },
-    risks: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['risk','mitigation'],
-        properties: { risk: { type: 'string' }, mitigation: { type: 'string' } },
-      },
-    },
-    milestones: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['phase','goal','deliverables','duration'],
-        properties: {
-          phase: { type: 'string' }, goal: { type: 'string' },
-          deliverables: { type: 'array', items: { type: 'string' } },
-          duration: { type: 'string' },
-        },
-      },
-    },
-    open_questions: { type: 'array', items: { type: 'string' } },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 08 设计案节点的 AI 副驾驶。
 
@@ -226,18 +33,23 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 08 设计案节点的 AI �
 11. **metrics** — 5-10 条衡量指标，每条 name + definition + target
 12. **risks** — 已知风险 + 缓解策略
 13. **milestones** — 里程碑。phase / goal / deliverables / duration 时间用周/月即可
-14. **open_questions** — 还没决定的问题，留给后续讨论
+14. **open_questions** — 还没决定的问题，留给后续讨论。每条 { question, stance }
 
 # 风格要求
 - 写成"已经决定了"的口吻，不要"建议 / 可以考虑"。设计案就是要拍板。
 - 每段都要有内容，不要空 section。
 - 模块的 feature_ids 必须从输入 features 中真实引用（用功能 id）。
 - 数据模型要给出能直接建表的字段。
-- 严格 JSON，不含前后文，不用 Markdown 代码块。`;
+- 严格 JSON，不含前后文，不用 Markdown 代码块。
+
+${stancePromptFragment(
+  '设计案的每一部分——overview_stance（标题/定位/愿景整体）、principles_stance（设计原则整体），以及 information_architecture / modules / user_flows / key_interactions / data_model / tech_skeleton / metrics / risks / milestones / open_questions 里的每一条——',
+  '对设计案而言：recommend = 这一条有上游依据、可以直接按它开工；caution = 依赖未验证的假设、与 Brief 红线或约束冲突、成本或风险明显偏高，或上游信息不足以支撑这个决定。',
+)}`;
 
 function formatContext(args: {
-  brief: BriefExtraction;
-  features: Feature[];
+  brief: BriefContext;
+  features: FeatureDigest[];
   pillars: Pillar[];
 }): string {
   const briefFields = Object.entries(args.brief.fields)
@@ -261,27 +73,27 @@ function formatContext(args: {
 }
 
 export async function generateDesignProposal(args: {
-  brief: BriefExtraction;
-  features: Feature[];
+  brief: BriefContext;
+  features: FeatureDigest[];
   pillars: Pillar[];
-  override?: string;
-}): Promise<DesignProposal> {
+  feedback?: RegenerationFeedback;
+}, opts?: TaskOptions): Promise<RunTaskResult<DesignProposal>> {
   const ctx = formatContext(args);
-  const res = await runAi({
+  return runTask({
     task: 'DESIGN_PROPOSAL',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `请基于以下材料产出一份完整的设计案。\n\n${ctx}\n\n` +
-          `要求：模块的 feature_ids 必须用真实 id；用户流要写到能画 wireframe 的颗粒度；数据模型要能直接建表。`,
+          `请基于以下材料产出一份完整的设计案。\n\n${dataBlock('project_context', ctx)}\n\n` +
+          `要求：模块的 feature_ids 必须用真实 id；用户流要写到能画 wireframe 的颗粒度；数据模型要能直接建表。` +
+          feedbackBlock(args.feedback),
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: DesignProposalSchema,
     maxTokens: 16000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
-  return DesignProposalSchema.parse(res.data);
 }

@@ -3,6 +3,11 @@
 // Server-persisted projects always win; local entries are merged in when
 // their slug isn't already in the server response.
 
+import { localProjectId } from './model/local-repository';
+import { removeLocalProjectData } from './model/local-transfer';
+import { clearCompletionCookies } from './store/completion-cookie';
+import { purgeUi } from './store/ui-cache';
+
 export interface LocalProject {
   id: string;
   slug: string;
@@ -60,7 +65,7 @@ export function touchLocalProject(slug: string): void {
   write(list);
 }
 
-/** 删除一个本地项目条目（仅 localStorage 列表，不动 sessionStorage 节点缓存）。 */
+/** 删除一个本地项目条目（仅项目列表，不动项目数据）。 */
 export function removeLocalProject(slug: string): void {
   const list = read();
   const next = list.filter((p) => p.slug !== slug);
@@ -68,30 +73,18 @@ export function removeLocalProject(slug: string): void {
 }
 
 /**
- * 把项目相关的所有客户端缓存（sessionStorage 节点 + 派生 follow-ups + cookie 标记 + localStorage 项目条目）一次清掉。
+ * 删除项目时清掉它在本浏览器里的一切：本地项目文档（td:v2:<id> 及其损坏备份）、UI 缓存、完成状态 cookie、项目列表条目。
  */
 export function purgeProjectClientData(slug: string): void {
   if (typeof window === 'undefined') return;
-  let decoded = slug;
-  try { decoded = decodeURIComponent(slug); } catch { /* noop */ }
-  // sessionStorage：所有 td:<slug>:* 形态的 entry
+  const projectId = localProjectId(slug);
   try {
-    const targets: string[] = [];
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const k = sessionStorage.key(i);
-      if (!k) continue;
-      if (k.startsWith(`td:${slug}:`) || k.startsWith(`td:${decoded}:`)) targets.push(k);
-      if (k === `td:import-warn:${slug}` || k === `td:import-warn:${decoded}`) targets.push(k);
-    }
-    for (const k of targets) sessionStorage.removeItem(k);
-  } catch { /* ignore */ }
-  // cookie：td-done:<encoded slug> 失效
-  try {
-    const enc = encodeURIComponent(decoded);
-    document.cookie = `td-done:${enc}=; path=/; max-age=0; samesite=lax`;
-    document.cookie = `td-done:${slug}=; path=/; max-age=0; samesite=lax`;
-  } catch { /* ignore */ }
-  // localStorage 项目条目
+    removeLocalProjectData(window.localStorage, projectId);
+  } catch {
+    // storage unavailable — nothing stored either
+  }
+  purgeUi(projectId);
+  clearCompletionCookies(slug);
   removeLocalProject(slug);
 }
 

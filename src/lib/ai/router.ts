@@ -1,4 +1,4 @@
-import type { AiProvider, AiProviderName, AiTask, CompleteRequest, CompleteResult, ModelInfo } from './types';
+import type { AiProvider, AiProviderName, AiTask, ModelInfo } from './types';
 import { claudeProvider } from './providers/claude';
 import { openaiProvider } from './providers/openai';
 import { geminiProvider } from './providers/gemini';
@@ -59,6 +59,11 @@ function sortLatestFirst(models: ModelInfo[]): ModelInfo[] {
   return [...models].sort((a, b) => score(b.id) - score(a.id));
 }
 
+/** False when the adapter cannot drive this model on structured (schema) tasks. */
+export function supportsStructured(name: AiProviderName, modelId: string): boolean {
+  return PROVIDERS[name].canDrive?.(modelId) !== false;
+}
+
 export function configuredProviders(): AiProviderName[] {
   return (Object.keys(PROVIDERS) as AiProviderName[]).filter((n) => PROVIDERS[n].isConfigured());
 }
@@ -70,28 +75,46 @@ export function configuredProviders(): AiProviderName[] {
 //   AI_MODEL_DEFAULT applies when task-specific key missing.
 // If nothing is configured at all, fall back to the first configured provider.
 
-async function pickModel(name: AiProviderName, hint?: string): Promise<string> {
+/**
+ * An explicit `provider:model` from the client is kept unless the provider's real model list
+ * proves it does not exist. An unavailable list (empty, offline fallback, or a listing error)
+ * proves nothing, so the request goes out with the requested id instead of a silent substitute.
+ */
+async function checkOverride(name: AiProviderName, modelId: string): Promise<string> {
+  let models: ModelInfo[];
+  try {
+    models = await listModels(name);
+  } catch {
+    return modelId;
+  }
+  const listed = models.filter((m) => !m.fallback);
+  if (listed.length === 0 || listed.some((m) => m.id === modelId)) return modelId;
+  throw new Error(`Model "${modelId}" is not offered by provider "${name}". Pick another model.`);
+}
+
+async function pickModel(name: AiProviderName): Promise<string> {
   const models = await listModels(name);
   if (models.length === 0) {
     throw new Error(`Provider "${name}" returned no models. Check API key and network.`);
   }
-  if (hint && models.some((m) => m.id === hint)) return hint;
   // Prefer known flagship ids when present (descending capability).
   const preferred = [
-    // Zhipu
-    'glm-4.6', 'glm-4.5', 'glm-5', 'glm-4-plus', 'glm-4.5-air', 'glm-5-turbo',
-    // Claude
-    'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5',
+    // Zhipu (glm-5.3 excluded: thinking cannot be disabled, but the zhipu adapter sends thinking:disabled for JSON tasks)
+    'glm-5.2', 'glm-5.1', 'glm-5', 'glm-5-turbo',
+    // Claude (request params are chosen per model family in providers/claude-params.ts)
+    'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-opus-5-5', 'claude-sonnet-4-6',
     // OpenAI
-    'gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini',
+    'gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-terra', 'gpt-5.4',
     // Gemini
-    'gemini-2.5-pro', 'gemini-2.0-pro', 'gemini-2.0-flash',
+    'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash',
   ];
   for (const p of preferred) {
     if (models.some((m) => m.id === p)) return p;
   }
-  // listModels() already sorted latest-first.
-  return models[0].id;
+  // listModels() already sorted latest-first; never auto-pick a model the adapter cannot drive.
+  const drivable = models.find((m) => PROVIDERS[name].canDrive?.(m.id) !== false);
+  if (!drivable) throw new Error(`Provider "${name}" lists no model this adapter can drive.`);
+  return drivable.id;
 }
 
 export async function providerFor(task: AiTask, override?: string): Promise<Resolved> {
@@ -125,14 +148,15 @@ export async function providerFor(task: AiTask, override?: string): Promise<Reso
   if (!modelId) {
     modelId = await pickModel(providerName);
   } else if (override) {
-    // 当 modelId 来自客户端 override 时，验证它在 listModels 里——避免任意字符串被原样发给 provider
-    modelId = await pickModel(providerName, modelId);
+    // 当 modelId 来自客户端 override 时，只在真实模型列表证明它不存在时拒绝（离线 / 空列表不算证据）
+    modelId = await checkOverride(providerName, modelId);
   }
 
   return { provider: providerName, model: modelId };
 }
 
-export async function runAi(req: CompleteRequest & { override?: string }): Promise<CompleteResult> {
-  const { provider, model } = await providerFor(req.task, req.override);
-  return PROVIDERS[provider].complete(model, req);
+/** providerFor() resolved to the adapter object (runTask's default resolver). */
+export async function resolveProvider(task: AiTask, override?: string): Promise<{ provider: AiProvider; model: string }> {
+  const { provider, model } = await providerFor(task, override);
+  return { provider: PROVIDERS[provider], model };
 }

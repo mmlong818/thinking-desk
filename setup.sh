@@ -11,7 +11,7 @@ echo "=== Thinking Desk Setup ==="
 # ── Prerequisites ────────────────────────────────────────────────────────────
 
 command -v node >/dev/null 2>&1 || {
-  echo "Error: Node.js is required (20+). https://nodejs.org"
+  echo "Error: Node.js is required (22+). https://nodejs.org"
   exit 1
 }
 

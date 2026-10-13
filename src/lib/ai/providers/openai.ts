@@ -1,12 +1,17 @@
-import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
+import type { AiProvider, CompleteRequest, CompleteResult, FinishReason } from '../types';
+import { schemaInstruction } from '../json-schema';
+import { withReasoningHeadroom } from './budget';
+import { readChatStream } from './chat-stream';
 import { validateBaseUrl } from './validate-base-url';
 
+/** Stays below the smallest output limit of the reasoning families we drive (o-series: 100k). */
+const OPENAI_OUTPUT_CAP = 64_000;
+
+/** Offline list (models endpoint unreachable); `fallback` tells the router it proves nothing. */
 const OPENAI_FALLBACK = [
-  { id: 'gpt-5', label: 'GPT-5' },
-  { id: 'gpt-5-mini', label: 'GPT-5 mini' },
-  { id: 'gpt-4.1', label: 'GPT-4.1' },
-  { id: 'gpt-4o', label: 'GPT-4o' },
-  { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+  { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', fallback: true },
+  { id: 'gpt-6-luna', label: 'GPT-6 Luna', fallback: true },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', fallback: true },
 ];
 
 function getBase(): string {
@@ -21,10 +26,38 @@ function getKey(): string {
 
 interface ChatChoice {
   message?: { content?: string | null };
+  finish_reason?: string | null;
 }
 interface ChatResponse {
   choices?: ChatChoice[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
+/** Chat Completions body. JSON mode + schema in the prompt (json_schema strict mode would need
+ *  every property required; see docs/ai-providers.md). */
+export function buildOpenAIRequest(model: string, req: CompleteRequest): Record<string, unknown> {
+  const systemMessages = req.messages.filter((m) => m.role === 'system').map((m) => m.content);
+  if (req.schema) systemMessages.push(schemaInstruction(req.schema));
+  const messages = [
+    ...systemMessages.map((c) => ({ role: 'system' as const, content: c })),
+    ...req.messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+  ];
+
+  // GPT-5+ / GPT-6 / o-series only accept `max_completion_tokens` and reject
+  // `temperature`. Older 4.x families still use `max_tokens`.
+  const isNewFamily = /^(gpt-[5-9]|o\d|o-)/i.test(model);
+  const body: Record<string, unknown> = { model, messages };
+  if (isNewFamily) {
+    // Reasoning models: the cap includes reasoning tokens (see budget.ts).
+    body.max_completion_tokens = withReasoningHeadroom(req.maxTokens, OPENAI_OUTPUT_CAP);
+  } else {
+    body.max_tokens = req.maxTokens ?? 4096;
+    body.temperature = req.temperature ?? 0.3;
+  }
+  if (req.schema) body.response_format = { type: 'json_object' };
+  return body;
 }
 
 export const openaiProvider: AiProvider = {
@@ -51,51 +84,11 @@ export const openaiProvider: AiProvider = {
 
   async complete(model, req): Promise<CompleteResult> {
     const started = Date.now();
-    const systemMessages = req.messages.filter((m) => m.role === 'system').map((m) => m.content);
-    if (req.schema) {
-      systemMessages.push(
-        `你必须只输出 JSON，且严格符合以下 schema（不要包含 Markdown 代码块包裹）：\n${JSON.stringify(req.schema)}`,
-      );
-    }
-    const messages = [
-      ...systemMessages.map((c) => ({ role: 'system' as const, content: c })),
-      ...req.messages
-        .filter((m) => m.role !== 'system')
-        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-    ];
-
-    // GPT-5+ / o-series only accept `max_completion_tokens` and reject
-    // `temperature`. Older 4.x families still use `max_tokens`.
-    const isNewFamily = /^(gpt-5|o\d|o-)/i.test(model);
-    const body: Record<string, unknown> = { model, messages };
-    if (isNewFamily) {
-      body.max_completion_tokens = req.maxTokens ?? 4096;
-    } else {
-      body.max_tokens = req.maxTokens ?? 4096;
-      body.temperature = req.temperature ?? 0.3;
-    }
-    if (req.schema) body.response_format = { type: 'json_object' };
-
-    const res = await fetch(`${getBase()}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${getKey()}`,
-      },
-      body: JSON.stringify(body),
-      signal: req.signal,
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      throw new Error(`OpenAI ${res.status}: ${detail.slice(0, 300)}`);
-    }
+    const res = await postChat(buildOpenAIRequest(model, req), req.signal);
     const json = (await res.json()) as ChatResponse;
-    const text = json.choices?.[0]?.message?.content ?? '';
-    const data = req.schema ? safeParseJson(text) : text;
-
+    const choice = json.choices?.[0];
     return {
-      data,
-      text,
+      text: choice?.message?.content ?? '',
       provider: 'openai',
       model,
       latencyMs: Date.now() - started,
@@ -103,17 +96,48 @@ export const openaiProvider: AiProvider = {
         inputTokens: json.usage?.prompt_tokens,
         outputTokens: json.usage?.completion_tokens,
       },
+      finishReason: finishReason(choice?.finish_reason),
+    };
+  },
+
+  /** Same request with `stream: true`; usage arrives on a last chunk (stream_options.include_usage). */
+  async stream(model, req, onDelta): Promise<CompleteResult> {
+    const started = Date.now();
+    const body = { ...buildOpenAIRequest(model, req), stream: true, stream_options: { include_usage: true } };
+    const res = await postChat(body, req.signal);
+    if (!res.body) throw new Error('OpenAI stream: empty response body');
+    const out = await readChatStream(res.body, onDelta);
+    return {
+      text: out.text,
+      provider: 'openai',
+      model,
+      latencyMs: Date.now() - started,
+      usage: out.usage,
+      finishReason: finishReason(out.finishReason),
     };
   },
 };
 
-function safeParseJson(raw: string): unknown {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('OpenAI response is not valid JSON');
+async function postChat(body: Record<string, unknown>, signal: AbortSignal | undefined): Promise<Response> {
+  const res = await fetch(`${getBase()}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${getKey()}`,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`OpenAI ${res.status}: ${detail.slice(0, 300)}`);
   }
+  return res;
+}
+
+/** Chat Completions finish_reason: stop | length | content_filter | tool_calls | function_call. */
+function finishReason(raw: string | null | undefined): FinishReason {
+  if (raw === 'length') return 'length';
+  if (raw === 'content_filter') return 'refusal';
+  return raw === 'stop' ? 'stop' : 'other';
 }

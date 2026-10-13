@@ -1,131 +1,11 @@
-import { z } from 'zod';
-import { runAi } from '../router';
-import type { BriefExtraction, ClarificationAnswer } from './extract-brief';
-import type { Persona, Job } from './analyze-users';
-
-export const StakeholderSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  role: z.string(),
-  power: z.enum(['high', 'low']),
-  interest: z.enum(['high', 'low']),
-  note: z.string(),
-  source: z.string(),
-  /** Baseline stakeholders (sponsor, maker, business owner, compliance) are
-   *  required — they stay selected and cannot be removed by the user. */
-  required: z.boolean().default(false),
-  category: z.enum([
-    'sponsor',
-    'maker',
-    'business',
-    'user',
-    'compliance',
-    'partner',
-    'competitor',
-    'other',
-  ]),
-  engagement_hint: z.string().optional().default(''),
-});
-export type Stakeholder = z.infer<typeof StakeholderSchema>;
-
-export const EngagementPlanSchema = z.object({
-  manage: z.string(),
-  satisfy: z.string(),
-  inform: z.string(),
-  monitor: z.string(),
-});
-export type EngagementPlan = z.infer<typeof EngagementPlanSchema>;
-
-export const StakeholdersAnalysisSchema = z.object({
-  stakeholders: z.array(StakeholderSchema).min(5).max(15),
-  engagement_plan: EngagementPlanSchema,
-  priority_summary: z.string(),
-  critiques: z
-    .array(
-      z.object({
-        kind: z.enum(['check', 'critique', 'ask']),
-        title: z.string(),
-        body: z.string(),
-      }),
-    )
-    .max(5),
-});
-export type StakeholdersAnalysis = z.infer<typeof StakeholdersAnalysisSchema>;
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['stakeholders', 'engagement_plan', 'priority_summary', 'critiques'],
-  properties: {
-    stakeholders: {
-      type: 'array',
-      minItems: 5,
-      maxItems: 15,
-      items: {
-        type: 'object',
-        required: [
-          'id',
-          'name',
-          'role',
-          'power',
-          'interest',
-          'note',
-          'source',
-          'required',
-          'category',
-          'engagement_hint',
-        ],
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          role: { type: 'string' },
-          power: { type: 'string', enum: ['high', 'low'] },
-          interest: { type: 'string', enum: ['high', 'low'] },
-          note: { type: 'string' },
-          source: { type: 'string' },
-          required: { type: 'boolean' },
-          category: {
-            type: 'string',
-            enum: [
-              'sponsor',
-              'maker',
-              'business',
-              'user',
-              'compliance',
-              'partner',
-              'competitor',
-              'other',
-            ],
-          },
-          engagement_hint: { type: 'string' },
-        },
-      },
-    },
-    engagement_plan: {
-      type: 'object',
-      required: ['manage', 'satisfy', 'inform', 'monitor'],
-      properties: {
-        manage: { type: 'string' },
-        satisfy: { type: 'string' },
-        inform: { type: 'string' },
-        monitor: { type: 'string' },
-      },
-    },
-    priority_summary: { type: 'string' },
-    critiques: {
-      type: 'array',
-      maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
+import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext } from '../schemas/snapshots';
+import type { Persona, Job } from '../schemas/analyze-users';
+import { StakeholdersAnalysisSchema, type StakeholdersAnalysis } from '../schemas/analyze-stakeholders';
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 03 节点"干系人 (Mendelow 矩阵)"的 AI 副驾驶。
 
@@ -169,7 +49,7 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 03 节点"干系人 (Mende
 严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
 
 function formatContext(
-  brief: BriefExtraction,
+  brief: BriefContext,
   personas: Persona[],
   jobs: Job[],
   rawText?: string,
@@ -211,13 +91,13 @@ function formatContext(
 }
 
 export async function analyzeStakeholders(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
-  override?: string;
-}): Promise<StakeholdersAnalysis> {
+  feedback?: RegenerationFeedback;
+}, opts?: TaskOptions): Promise<RunTaskResult<StakeholdersAnalysis>> {
   const context = formatContext(
     args.brief,
     args.personas,
@@ -225,22 +105,22 @@ export async function analyzeStakeholders(args: {
     args.rawText,
     args.answers,
   );
-  const res = await runAi({
+  return runTask({
     task: 'STAKE_MATRIX',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `请基于以下上下文完成 Mendelow 矩阵干系人分析。\n\n${context}\n\n` +
+          `请基于以下上下文完成 Mendelow 矩阵干系人分析。\n\n${dataBlock('project_context', context)}\n\n` +
           `请务必包含 5 类 required: true 的基线干系人（sponsor / maker / business / compliance / user），` +
-          `外加 3-7 个项目专属的。`,
+          `外加 3-7 个项目专属的。` +
+          feedbackBlock(args.feedback),
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: StakeholdersAnalysisSchema,
     maxTokens: 10000,
     temperature: 0.35,
-    override: args.override,
+    options: opts,
   });
-  return StakeholdersAnalysisSchema.parse(res.data);
 }

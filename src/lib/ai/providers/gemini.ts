@@ -1,4 +1,6 @@
-import type { AiProvider, CompleteRequest, CompleteResult, ChatMessage } from '../types';
+import type { AiProvider, CompleteRequest, CompleteResult, ChatMessage, FinishReason } from '../types';
+import { adaptSchema, GEMINI_DIALECT, schemaInstruction } from '../json-schema';
+import { withReasoningHeadroom } from './budget';
 import { validateBaseUrl } from './validate-base-url';
 
 interface GeminiPart { text: string }
@@ -11,6 +13,31 @@ function toContents(messages: ChatMessage[]): GeminiContent[] {
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }));
+}
+
+/** Gemini 3.x Flash output limit (64k); maxOutputTokens includes thinking tokens (budget.ts). */
+const GEMINI_OUTPUT_CAP = 65_536;
+
+/** generateContent body: native responseJsonSchema when the schema fits, else JSON mode + prompt. */
+export function buildGeminiRequest(req: CompleteRequest): Record<string, unknown> {
+  const native = req.schema ? adaptSchema(req.schema, GEMINI_DIALECT) : null;
+  const system = [
+    ...req.messages.filter((m) => m.role === 'system').map((m) => m.content),
+    req.schema && !native ? schemaInstruction(req.schema) : null,
+  ].filter(Boolean).join('\n\n');
+  return {
+    contents: toContents(req.messages),
+    systemInstruction: system ? { parts: [{ text: system }] } : undefined,
+    generationConfig: {
+      temperature: req.temperature ?? 0.3,
+      maxOutputTokens: withReasoningHeadroom(req.maxTokens, GEMINI_OUTPUT_CAP),
+      responseMimeType: req.schema ? 'application/json' : 'text/plain',
+      // JSON Schema form (mutually exclusive with the OpenAPI-subset `responseSchema`).
+      ...(native ? { responseJsonSchema: native } : {}),
+    },
+    // Gemini grounding via Google Search — only available on supported models.
+    tools: req.webSearch ? [{ googleSearch: {} }] : undefined,
+  };
 }
 
 export const geminiProvider: AiProvider = {
@@ -37,42 +64,25 @@ export const geminiProvider: AiProvider = {
     if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
     const base = validateBaseUrl('gemini', process.env.GEMINI_BASE_URL) || 'https://generativelanguage.googleapis.com';
     const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
-
-    const system = req.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
     const started = Date.now();
-
-    const body: Record<string, unknown> = {
-      contents: toContents(req.messages),
-      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
-      generationConfig: {
-        temperature: req.temperature ?? 0.3,
-        maxOutputTokens: req.maxTokens ?? 4096,
-        responseMimeType: req.schema ? 'application/json' : 'text/plain',
-        responseSchema: req.schema,
-      },
-      // Gemini grounding via Google Search — only available on supported models.
-      tools: req.webSearch ? [{ googleSearch: {} }] : undefined,
-    };
 
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(buildGeminiRequest(req)),
       signal: req.signal,
     });
     if (!res.ok) {
       throw new Error(`Gemini ${res.status}: ${await res.text()}`);
     }
     const json = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
+      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     };
-    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-    const data = req.schema ? JSON.parse(text) : text;
+    const candidate = json.candidates?.[0];
 
     return {
-      data,
-      text,
+      text: candidate?.content?.parts?.map((p) => p.text ?? '').join('') ?? '',
       provider: 'gemini',
       model,
       latencyMs: Date.now() - started,
@@ -80,6 +90,13 @@ export const geminiProvider: AiProvider = {
         inputTokens: json.usageMetadata?.promptTokenCount,
         outputTokens: json.usageMetadata?.candidatesTokenCount,
       },
+      finishReason: finishReason(candidate?.finishReason),
     };
   },
 };
+
+function finishReason(raw: string | undefined): FinishReason {
+  if (raw === 'MAX_TOKENS') return 'length';
+  if (raw === 'SAFETY') return 'refusal';
+  return raw === 'STOP' ? 'stop' : 'other';
+}

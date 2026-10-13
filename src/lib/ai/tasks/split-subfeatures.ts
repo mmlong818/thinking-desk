@@ -1,76 +1,16 @@
-import { z } from 'zod';
-import { runAi } from '../router';
-import type { DesignProposal } from './generate-design';
+import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import { stancePromptFragment } from '../stance-prompt';
+import type { DesignSnapshot } from '../schemas/snapshots';
+import { SubfeatureBreakdownSchema, type SubfeatureBreakdown } from '../schemas/split-subfeatures';
 
 /**
  * 子功能拆分 · NODE 09
  * 输入：设计案（modules + features）
  * 输出：每个 feature 拆成 2-6 条可执行子任务（前端 / 后端 / 数据 / 测试 标签 + 工作量估计）
  */
-
-export const SubFeatureSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string(),
-  layer: z.enum(['frontend', 'backend', 'data', 'ai', 'design', 'test', 'devops', 'mixed']),
-  estimate: z.string(),                          // "0.5d" / "2d" / "1w" 等
-  acceptance_criteria: z.array(z.string()).min(1),
-  dependencies: z.array(z.string()).default([]), // 其它 sub id
-});
-export type SubFeature = z.infer<typeof SubFeatureSchema>;
-
-export const FeatureSplitSchema = z.object({
-  feature_id: z.string(),
-  feature_name: z.string(),
-  module_id: z.string().default(''),
-  subfeatures: z.array(SubFeatureSchema).min(1),
-});
-export type FeatureSplit = z.infer<typeof FeatureSplitSchema>;
-
-export const SubfeatureBreakdownSchema = z.object({
-  splits: z.array(FeatureSplitSchema).min(1),
-  summary: z.string(),
-  total_subfeatures: z.number().int().min(1),
-  critical_path: z.array(z.string()).default([]),
-});
-export type SubfeatureBreakdown = z.infer<typeof SubfeatureBreakdownSchema>;
-
-const subJson = {
-  type: 'object',
-  required: ['id','title','description','layer','estimate','acceptance_criteria','dependencies'],
-  properties: {
-    id: { type: 'string' },
-    title: { type: 'string' },
-    description: { type: 'string' },
-    layer: { type: 'string', enum: ['frontend','backend','data','ai','design','test','devops','mixed'] },
-    estimate: { type: 'string' },
-    acceptance_criteria: { type: 'array', items: { type: 'string' } },
-    dependencies: { type: 'array', items: { type: 'string' } },
-  },
-};
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['splits','summary','total_subfeatures','critical_path'],
-  properties: {
-    splits: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['feature_id','feature_name','module_id','subfeatures'],
-        properties: {
-          feature_id: { type: 'string' },
-          feature_name: { type: 'string' },
-          module_id: { type: 'string' },
-          subfeatures: { type: 'array', items: subJson },
-        },
-      },
-    },
-    summary: { type: 'string' },
-    total_subfeatures: { type: 'integer' },
-    critical_path: { type: 'array', items: { type: 'string' } },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 09 子功能拆分节点的 AI 副驾驶。
 
@@ -86,6 +26,7 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 09 子功能拆分节点�
 - estimate: 工作量（0.5d / 2d / 1w）—— 用半天/天/周
 - acceptance_criteria: 1-3 条验收标准（"跑通 X 流程" / "覆盖率 ≥ 80%"）
 - dependencies: 其它子任务 id（只能引用同一次拆分内的）
+- stance: 你对这条子任务的判断（见下方 stance 规则）
 
 # 整体字段
 - splits: 每个 feature 一组
@@ -97,9 +38,14 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 09 子功能拆分节点�
 - 动词开头，不要"实现一个支持..."这种描述句
 - estimate 偏保守，宁多估 20%
 - 子任务必须可独立完成、可验收
-- 严格 JSON 输出`;
+- 严格 JSON 输出
 
-function formatContext(design: DesignProposal): string {
+${stancePromptFragment(
+  '每一条子任务',
+  '对子任务而言：recommend = 按现在的设计案可以直接开工、估时和验收都有把握；caution = 依赖还没拍板的决策、估时把握低、验收标准难以量化，或拆法本身值得商榷，开工前要人先确认。',
+)}`;
+
+function formatContext(design: DesignSnapshot): string {
   const moduleBlock = design.modules
     .map((m) => `- [${m.id}] ${m.name} → features=[${m.feature_ids.join(', ')}]`)
     .join('\n');
@@ -122,23 +68,24 @@ function formatContext(design: DesignProposal): string {
 }
 
 export async function splitSubfeatures(args: {
-  design: DesignProposal;
-  override?: string;
-}): Promise<SubfeatureBreakdown> {
+  design: DesignSnapshot;
+  feedback?: RegenerationFeedback;
+}, opts?: TaskOptions): Promise<RunTaskResult<SubfeatureBreakdown>> {
   const ctx = formatContext(args.design);
-  const res = await runAi({
+  return runTask({
     task: 'SPLIT_SUBFEATURES',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `请把以下设计案里的功能拆成可执行子任务：\n\n${ctx}\n\n每个 feature 至少 2 条 subfeature，最多 6 条。`,
+        content:
+          `请把以下设计案里的功能拆成可执行子任务：\n\n${dataBlock('design', ctx)}\n\n每个 feature 至少 2 条 subfeature，最多 6 条。` +
+          feedbackBlock(args.feedback),
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: SubfeatureBreakdownSchema,
     maxTokens: 16000,
     temperature: 0.3,
-    override: args.override,
+    options: opts,
   });
-  return SubfeatureBreakdownSchema.parse(res.data);
 }

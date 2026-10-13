@@ -2,8 +2,8 @@ FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat
 RUN corepack enable
 WORKDIR /app
-COPY package.json ./
-RUN pnpm install --no-frozen-lockfile
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 FROM node:22-alpine AS builder
 RUN corepack enable
@@ -11,6 +11,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_OUTPUT_STANDALONE=true
 RUN pnpm build
 
 FROM node:22-alpine AS runner

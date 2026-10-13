@@ -1,9 +1,18 @@
-import { z } from 'zod';
-import { runAi } from '../router';
-import type { BriefExtraction, ClarificationAnswer } from './extract-brief';
-import type { Persona, Job } from './analyze-users';
-import type { AlternativesAnalysis } from './analyze-alternatives';
-import type { Feature, FeatureList } from './draft-features';
+import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { AiTask } from '../types';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext, FeatureDigest } from '../schemas/snapshots';
+import type { Persona, Job } from '../schemas/analyze-users';
+import {
+  CreativeLeapAnalysisSchema,
+  MORE_ITEMS_SCHEMAS,
+  type CreativeLeapAnalysis,
+  type LeapCategory,
+  type MoreItemsResult,
+} from '../schemas/creative-leap';
 
 /**
  * 方法论 v2 §十 创造性跃迁。
@@ -15,188 +24,6 @@ import type { Feature, FeatureList } from './draft-features';
  * §10.4 强调这不是每个项目都该用的工具，成本高失败率高。
  * 适用时机：进入成熟红海 · 强烈怀疑行业共识 · 走完标准分析发现方案平庸。
  */
-
-// --- Schemas ---
-
-export const FirstPrincipleRethinkSchema = z.object({
-  id: z.string(),
-  /** 当前行业默认的假设 · 例如"锂电池必须贵" */
-  industry_assumption: z.string(),
-  /** 把它拆到物理 / 底层规律 · 例如"原料价其实只占 15%" */
-  physical_floor: z.string(),
-  /** 由此推出的新设计机会 */
-  opportunity: z.string(),
-  /** 可信度 0-3：这条反转在本项目里能落地吗？ */
-  feasibility: z.enum(['low', 'medium', 'high']),
-});
-export type FirstPrincipleRethink = z.infer<typeof FirstPrincipleRethinkSchema>;
-
-export const AnalogyTransferSchema = z.object({
-  id: z.string(),
-  /** 我们项目的本质问题（不是表层） · 例"本质是撮合" */
-  core_essence: z.string(),
-  /** 借鉴的源领域 */
-  source_domain: z.string(),
-  /** 源领域的成熟解法 · 例"做市商 + 集中撮合引擎" */
-  source_mechanism: z.string(),
-  /** 迁移后的具体动作 */
-  transferred_mechanism: z.string(),
-  /** 哪些要适配 / 哪些搬不过来 */
-  adaptation_notes: z.string(),
-  feasibility: z.enum(['low', 'medium', 'high']),
-});
-export type AnalogyTransfer = z.infer<typeof AnalogyTransferSchema>;
-
-export const ConstraintFlipSchema = z.object({
-  id: z.string(),
-  /** 类型：去掉 / 加一个 / 反转目标 */
-  flip_type: z.enum(['remove_constraint', 'add_constraint', 'reverse_goal']),
-  /** 原约束 · 例"用户必须注册账号" */
-  original: z.string(),
-  /** 反转后 · 例"如果用户不需要注册呢？" */
-  flipped: z.string(),
-  /** 反转暴露的可能性 */
-  surprise: z.string(),
-  /** 如果采纳，对当前功能列表的具体影响 */
-  impact_on_features: z.string(),
-  feasibility: z.enum(['low', 'medium', 'high']),
-});
-export type ConstraintFlip = z.infer<typeof ConstraintFlipSchema>;
-
-export const LeapRecommendationSchema = z.object({
-  /** AI 综合评估：项目适合做多大胆的跃迁
-   * - bold：大胆跃迁（推翻多个常规假设，差异化显著）
-   * - selective：精选跃迁（选 1-2 个关键点突破，其他保持常规）
-   * - minimal：最小跃迁（仅做 1 个最保守的改造，但必须有改造）
-   *
-   * 注意：v2 方法论里虽然 §10.4 说"大部分项目不需要跃迁"，但**设计的意义正在跃迁处产生**。
-   * 即便项目整体保守，也必须选出至少 1 条值得的跃迁——没有跃迁就是"交付常规方案"，不是"设计"。
-   */
-  timing_verdict: z.enum(['bold', 'selective', 'minimal']),
-  timing_reason: z.string(),
-  /** 挑出来最值得采纳的 1-3 条跃迁 · 来自上面任一类 · 至少 1 条 */
-  top_picks: z.array(
-    z.object({
-      source_method: z.enum(['first_principles', 'analogy', 'constraint_flip']),
-      source_id: z.string(),
-      why: z.string(),
-      /** 采纳这条意味着功能列表要怎么改 */
-      required_changes: z.array(z.string()),
-    }),
-  ).min(1),
-});
-export type LeapRecommendation = z.infer<typeof LeapRecommendationSchema>;
-
-export const CreativeLeapAnalysisSchema = z.object({
-  first_principles: z.array(FirstPrincipleRethinkSchema).min(4).max(8),
-  analogies:        z.array(AnalogyTransferSchema).min(4).max(8),
-  constraint_flips: z.array(ConstraintFlipSchema).min(6).max(12),
-  recommendation:   LeapRecommendationSchema,
-  critiques: z
-    .array(
-      z.object({
-        kind: z.enum(['check', 'critique', 'ask']),
-        title: z.string(),
-        body: z.string(),
-      }),
-    )
-    .max(5),
-});
-export type CreativeLeapAnalysis = z.infer<typeof CreativeLeapAnalysisSchema>;
-
-// --- JSON schema ---
-
-function feasibilityEnum() {
-  return { type: 'string', enum: ['low', 'medium', 'high'] };
-}
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: ['first_principles', 'analogies', 'constraint_flips', 'recommendation', 'critiques'],
-  properties: {
-    first_principles: {
-      type: 'array', minItems: 4, maxItems: 8,
-      items: {
-        type: 'object',
-        required: ['id', 'industry_assumption', 'physical_floor', 'opportunity', 'feasibility'],
-        properties: {
-          id: { type: 'string' },
-          industry_assumption: { type: 'string' },
-          physical_floor: { type: 'string' },
-          opportunity: { type: 'string' },
-          feasibility: feasibilityEnum(),
-        },
-      },
-    },
-    analogies: {
-      type: 'array', minItems: 4, maxItems: 8,
-      items: {
-        type: 'object',
-        required: ['id', 'core_essence', 'source_domain', 'source_mechanism', 'transferred_mechanism', 'adaptation_notes', 'feasibility'],
-        properties: {
-          id: { type: 'string' },
-          core_essence: { type: 'string' },
-          source_domain: { type: 'string' },
-          source_mechanism: { type: 'string' },
-          transferred_mechanism: { type: 'string' },
-          adaptation_notes: { type: 'string' },
-          feasibility: feasibilityEnum(),
-        },
-      },
-    },
-    constraint_flips: {
-      type: 'array', minItems: 6, maxItems: 12,
-      items: {
-        type: 'object',
-        required: ['id', 'flip_type', 'original', 'flipped', 'surprise', 'impact_on_features', 'feasibility'],
-        properties: {
-          id: { type: 'string' },
-          flip_type: { type: 'string', enum: ['remove_constraint', 'add_constraint', 'reverse_goal'] },
-          original: { type: 'string' },
-          flipped: { type: 'string' },
-          surprise: { type: 'string' },
-          impact_on_features: { type: 'string' },
-          feasibility: feasibilityEnum(),
-        },
-      },
-    },
-    recommendation: {
-      type: 'object',
-      required: ['timing_verdict', 'timing_reason', 'top_picks'],
-      properties: {
-        timing_verdict: { type: 'string', enum: ['bold', 'selective', 'minimal'] },
-        timing_reason: { type: 'string' },
-        top_picks: {
-          type: 'array',
-          minItems: 1,
-          maxItems: 3,
-          items: {
-            type: 'object',
-            required: ['source_method', 'source_id', 'why', 'required_changes'],
-            properties: {
-              source_method: { type: 'string', enum: ['first_principles', 'analogy', 'constraint_flip'] },
-              source_id: { type: 'string' },
-              why: { type: 'string' },
-              required_changes: { type: 'array', items: { type: 'string' } },
-            },
-          },
-        },
-      },
-    },
-    critiques: {
-      type: 'array', maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 07 创造性跃迁节点的 AI 副驾驶。
 
@@ -275,10 +102,10 @@ top_picks：至少 1 条，最多 3 条。每条带 required_changes（若采纳
 严格 JSON，不含前后文。`;
 
 function formatContext(
-  brief: BriefExtraction,
+  brief: BriefContext,
   personas: Persona[],
   jobs: Job[],
-  features: Feature[],
+  features: FeatureDigest[],
   diff_hypothesis?: string,
   alt_threats?: string[],
   rawText?: string,
@@ -317,21 +144,12 @@ function formatContext(
 // 增量生成单类候选
 // =============================================================
 
-export type LeapCategory = 'first_principles' | 'analogies' | 'constraint_flips';
-
-export const MoreItemsResultSchema = z.object({
-  first_principles: z.array(FirstPrincipleRethinkSchema).optional(),
-  analogies: z.array(AnalogyTransferSchema).optional(),
-  constraint_flips: z.array(ConstraintFlipSchema).optional(),
-});
-export type MoreItemsResult = z.infer<typeof MoreItemsResultSchema>;
-
 const MORE_PROMPT = `你是「思考工作台」第 07 创造性跃迁节点的 AI 副驾驶。
 用户已经看过上一轮候选，现在<em>要你针对某一类方法再补 3 条新的</em>。
 
 # 硬性要求
-1. 必须**和用户锁定的候选互补**（互补 = 不同方向，不是微调变种）
-2. 必须**绕开用户已废弃的方向**（rejected 代表那条路走不通 / 不感兴趣，别再提类似的）
+1. 必须**和用户已采纳的候选互补**（互补 = 不同方向，不是微调变种）
+2. 必须**绕开用户已否决的方向**（否决代表那条路走不通 / 不感兴趣，别再提类似的）
 3. 如果 existing 列表已经有 id，新生成的 id 必须是全新字符串，避免冲突
 4. 每条候选要自带可行度（feasibility）评估
 
@@ -342,150 +160,79 @@ const MORE_PROMPT = `你是「思考工作台」第 07 创造性跃迁节点的 
 - 请求 constraint_flips → { "constraint_flips": [ 3 条 ] }
 不含前后文、不用 Markdown。`;
 
-function buildMoreJsonSchema(category: LeapCategory) {
-  const itemByCat = {
-    first_principles: {
-      type: 'object',
-      required: ['id', 'industry_assumption', 'physical_floor', 'opportunity', 'feasibility'],
-      properties: {
-        id: { type: 'string' },
-        industry_assumption: { type: 'string' },
-        physical_floor: { type: 'string' },
-        opportunity: { type: 'string' },
-        feasibility: feasibilityEnum(),
-      },
-    },
-    analogies: {
-      type: 'object',
-      required: ['id', 'core_essence', 'source_domain', 'source_mechanism', 'transferred_mechanism', 'adaptation_notes', 'feasibility'],
-      properties: {
-        id: { type: 'string' },
-        core_essence: { type: 'string' },
-        source_domain: { type: 'string' },
-        source_mechanism: { type: 'string' },
-        transferred_mechanism: { type: 'string' },
-        adaptation_notes: { type: 'string' },
-        feasibility: feasibilityEnum(),
-      },
-    },
-    constraint_flips: {
-      type: 'object',
-      required: ['id', 'flip_type', 'original', 'flipped', 'surprise', 'impact_on_features', 'feasibility'],
-      properties: {
-        id: { type: 'string' },
-        flip_type: { type: 'string', enum: ['remove_constraint', 'add_constraint', 'reverse_goal'] },
-        original: { type: 'string' },
-        flipped: { type: 'string' },
-        surprise: { type: 'string' },
-        impact_on_features: { type: 'string' },
-        feasibility: feasibilityEnum(),
-      },
-    },
-  } as const;
-  return {
-    type: 'object',
-    required: [category],
-    properties: {
-      [category]: {
-        type: 'array',
-        minItems: 2,
-        maxItems: 4,
-        items: itemByCat[category],
-      },
-    },
-  };
-}
-
 function formatItemsForMore(existing: unknown[]): string {
   if (existing.length === 0) return '（没有已有候选 · 这是第一批）';
   return JSON.stringify(existing, null, 2);
 }
 
-export async function generateMoreLeapItems(args: {
-  brief: BriefExtraction;
+const LEAP_TASKS: Record<LeapCategory, AiTask> = {
+  first_principles: 'LEAP_FIRST_PRINCIPLES',
+  analogies: 'LEAP_ANALOGY',
+  constraint_flips: 'LEAP_CONSTRAINT_FLIP',
+};
+
+export interface LeapContextArgs {
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
-  features: Feature[];
+  features: FeatureDigest[];
   differentiation_hypothesis?: string;
   alt_threats?: string[];
+  /** Accepted / rejected candidates in scope (replaces the old locked_ids / rejected_ids blocks). */
+  feedback?: RegenerationFeedback;
+}
+
+export interface MoreLeapArgs extends LeapContextArgs {
   category: LeapCategory;
   existing: unknown[];
-  locked_ids: string[];
-  rejected_ids: string[];
-  override?: string;
-}): Promise<MoreItemsResult> {
-  const context = formatContext(
+}
+
+function leapContext(args: LeapContextArgs): string {
+  return formatContext(
     args.brief, args.personas, args.lockedJobs, args.features,
     args.differentiation_hypothesis, args.alt_threats,
     args.rawText, args.answers,
   );
-  const existingBlock = formatItemsForMore(args.existing);
-  const lockedBlock =
-    args.locked_ids.length > 0
-      ? `已锁定（与这些互补）：${args.locked_ids.join(', ')}`
-      : '无锁定';
-  const rejectedBlock =
-    args.rejected_ids.length > 0
-      ? `已废弃（绕开这些方向）：${args.rejected_ids.join(', ')}`
-      : '无已废弃';
-
-  const res = await runAi({
-    task:
-      args.category === 'first_principles'
-        ? 'LEAP_FIRST_PRINCIPLES'
-        : args.category === 'analogies'
-          ? 'LEAP_ANALOGY'
-          : 'LEAP_CONSTRAINT_FLIP',
-    messages: [
-      { role: 'system', content: MORE_PROMPT },
-      {
-        role: 'user',
-        content:
-          `${context}\n\n` +
-          `## 已有候选（${args.category}）\n\`\`\`json\n${existingBlock}\n\`\`\`\n\n` +
-          `${lockedBlock}\n${rejectedBlock}\n\n` +
-          `请为 "${args.category}" 类别补 3 条新的 · 与已锁定互补 · 绕开已废弃方向。`,
-      },
-    ],
-    schema: buildMoreJsonSchema(args.category),
-    maxTokens: 6000,
-    temperature: 0.75,
-    override: args.override,
-  });
-  return MoreItemsResultSchema.parse(res.data);
 }
 
-export async function analyzeCreativeLeap(args: {
-  brief: BriefExtraction;
-  rawText?: string;
-  answers?: ClarificationAnswer[];
-  personas: Persona[];
-  lockedJobs: Job[];
-  features: Feature[];
-  differentiation_hypothesis?: string;
-  alt_threats?: string[];
-  override?: string;
-}): Promise<CreativeLeapAnalysis> {
-  const context = formatContext(
-    args.brief,
-    args.personas,
-    args.lockedJobs,
-    args.features,
-    args.differentiation_hypothesis,
-    args.alt_threats,
-    args.rawText,
-    args.answers,
+function moreItemsMessage(args: MoreLeapArgs): string {
+  return (
+    `${dataBlock('project_context', leapContext(args))}\n\n` +
+    `## 已有候选（${args.category}）\n${dataBlock('existing_candidates', formatItemsForMore(args.existing))}\n\n` +
+    `请为 "${args.category}" 类别补 3 条新的 · 与已采纳的互补 · 绕开已否决的方向。` +
+    feedbackBlock(args.feedback)
   );
-  const res = await runAi({
+}
+
+export async function generateMoreLeapItems(
+  args: MoreLeapArgs,
+  opts?: TaskOptions,
+): Promise<RunTaskResult<MoreItemsResult>> {
+  return runTask({
+    task: LEAP_TASKS[args.category],
+    system: MORE_PROMPT,
+    messages: [{ role: 'user', content: moreItemsMessage(args) }],
+    schema: MORE_ITEMS_SCHEMAS[args.category],
+    maxTokens: 6000,
+    temperature: 0.75,
+    options: opts,
+  });
+}
+
+export async function analyzeCreativeLeap(
+  args: LeapContextArgs,
+  opts?: TaskOptions,
+): Promise<RunTaskResult<CreativeLeapAnalysis>> {
+  return runTask({
     task: 'LEAP_FIRST_PRINCIPLES',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `请基于以下上下文做完整的创造性跃迁分析：\n\n${context}\n\n` +
+          `请基于以下上下文做完整的创造性跃迁分析：\n\n${dataBlock('project_context', leapContext(args))}\n\n` +
           `要求：\n` +
           `1. §10.1 第一性原理至少 2 条 · 每条要能引用到具体的"行业共识"\n` +
           `2. §10.2 类比迁移至少 2 条 · source_domain 要跨学科多样\n` +
@@ -493,13 +240,13 @@ export async function analyzeCreativeLeap(args: {
           `4. recommendation：\n` +
           `   - timing_verdict 是跃迁的胆量级别（bold / selective / minimal）\n` +
           `   - top_picks **至少 1 条**（即使最保守的项目也必须有 1 个跃迁点，不然就不是设计）\n` +
-          `   - 每条 top_pick 必须带 required_changes（功能列表要怎么改）`,
+          `   - 每条 top_pick 必须带 required_changes（功能列表要怎么改）` +
+          feedbackBlock(args.feedback),
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: CreativeLeapAnalysisSchema,
     maxTokens: 16000,
     temperature: 0.88, // 创意密度高于默认 · 允许野路子
-    override: args.override,
+    options: opts,
   });
-  return CreativeLeapAnalysisSchema.parse(res.data);
 }

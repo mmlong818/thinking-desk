@@ -3,51 +3,62 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addLocalProject, generateLocalSlug } from '@/lib/client-projects';
-import { forkCache } from '@/lib/client-cache';
+import { completedNodes } from '@/lib/model/completion';
+import { LocalRepository, localProjectId } from '@/lib/model/local-repository';
+import { forkLocalProject } from '@/lib/model/local-transfer';
+import { writeCompletionCookie } from '@/lib/store/completion-cookie';
+import type { StoreRef } from '@/lib/store/store-ref';
+import { copyUi } from '@/lib/store/ui-cache';
 
 interface Props {
-  fromSlug: string;
   fromName: string;
   currentNode: string;
+  store: StoreRef;
+}
+
+/** Postgres: the server copies the project row and all its runs, items, links and events. */
+async function forkInDb(store: StoreRef, name: string, summary: string): Promise<string> {
+  const res = await fetch(`/api/projects/${encodeURIComponent(store.projectId)}/fork`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, summary }),
+  });
+  const json = (await res.json().catch(() => ({}))) as { ok?: boolean; project?: { slug: string }; detail?: string; error?: string };
+  if (!res.ok || !json.ok || !json.project) throw new Error(json.detail ?? json.error ?? `HTTP ${res.status}`);
+  return json.project.slug;
+}
+
+/** Pure-local: copy the project document (and UI cache) under the new slug, then seed its completion cookie. */
+async function forkLocally(store: StoreRef, name: string, summary: string): Promise<string> {
+  const slug = generateLocalSlug(name);
+  const toId = localProjectId(slug);
+  forkLocalProject(window.localStorage, store.projectId, toId);
+  copyUi(store.projectId, toId);
+  const { items } = await new LocalRepository().getGraph(toId);
+  writeCompletionCookie(slug, completedNodes(items));
+  addLocalProject({ slug, name, summary });
+  return slug;
 }
 
 /**
  * 分支当前项目 —— 并行探索另一条方向。
- * 复制本地 cache 的所有节点数据到新 slug，然后跳到新项目的当前节点。
+ * 复制当前项目的全部条目、链接、运行记录与裁决历史到新项目，然后跳到新项目的当前节点。
  */
-export function ForkButton({ fromSlug, fromName, currentNode }: Props) {
+export function ForkButton({ fromName, currentNode, store }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   const onFork = async () => {
     if (busy) return;
-    const suggested = `${fromName} · 分支`;
-    const name = window.prompt('给分支起个名字', suggested)?.trim();
+    const name = window.prompt('给分支起个名字', `${fromName} · 分支`)?.trim();
     if (!name) return;
-
     setBusy(true);
     try {
-      const newSlug = generateLocalSlug(name);
-
-      // 1) 复制所有节点 sessionStorage cache 到新 slug
-      forkCache(fromSlug, newSlug);
-
-      // 2) 本地登记
-      addLocalProject({ slug: newSlug, name, summary: `分支自「${fromName}」` });
-
-      // 3) DB 可达时也持久化条目（DB 不可达就跳过，不阻塞）
-      try {
-        await fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ name, summary: `分支自「${fromName}」` }),
-        });
-      } catch {
-        // DB 不可达 — 仅本地分支
-      }
-
-      // 4) 跳转
-      router.push(`/project/${newSlug}/${currentNode}`);
+      const summary = `分支自「${fromName}」`;
+      const slug = store.mode === 'pg' ? await forkInDb(store, name, summary) : await forkLocally(store, name, summary);
+      router.push(`/project/${slug}/${currentNode}`);
+    } catch (e) {
+      window.alert(`分支失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }

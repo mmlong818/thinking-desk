@@ -1,6 +1,6 @@
 -- Thinking Desk · core schema
--- Every table uses surrogate UUID. Node content is stored as JSONB so the
--- shape can evolve without migrations during early iterations.
+-- Data model: docs/data-model.md. Item bodies are JSONB validated in the app
+-- (src/lib/model/item-types.ts), so new item types need no migration.
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -22,59 +22,101 @@ CREATE TABLE IF NOT EXISTS projects (
   UNIQUE (owner_id, slug)
 );
 
--- Node types match the 9-node methodology. Stored as text so new node types
--- can be added without enum migrations.
-CREATE TABLE IF NOT EXISTS nodes (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  kind        TEXT NOT NULL,
-  content     JSONB NOT NULL DEFAULT '{}'::jsonb,
-  completeness SMALLINT NOT NULL DEFAULT 0,
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (project_id, kind)
-);
+-- Phase 1 replaced the per-node JSON blobs and the exchange log with
+-- items / links / runs / decision_events. No data was migrated (none existed).
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS assumptions;
+DROP TABLE IF EXISTS ai_exchanges;
+DROP TABLE IF EXISTS nodes;
 
--- Every AI exchange is persisted so export documents can embed the probe/
--- answer trail (doc §6.4).
-CREATE TABLE IF NOT EXISTS ai_exchanges (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- One row per AI call (replaces ai_exchanges). Append-only.
+CREATE TABLE IF NOT EXISTS runs (
+  project_id     UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  id             TEXT NOT NULL,
+  seq            BIGINT GENERATED ALWAYS AS IDENTITY,
+  task           TEXT NOT NULL,
+  node           TEXT NOT NULL,
+  provider       TEXT NOT NULL,
+  model          TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  inputs         JSONB NOT NULL DEFAULT '[]'::jsonb,   -- [{ itemId, version }]
+  status         TEXT NOT NULL CHECK (status IN ('ok','retried','failed')),
+  error          TEXT,
+  usage          JSONB,                                -- { inputTokens, outputTokens }
+  latency_ms     INTEGER NOT NULL CHECK (latency_ms >= 0),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (project_id, id)
+);
+CREATE INDEX IF NOT EXISTS runs_project_created_idx ON runs (project_id, created_at DESC);
+
+-- Every unit of content, AI- or human-authored, with the human's judgment.
+-- Ids are '<type prefix>_<random>' and unique per project; rows are never
+-- hard-deleted (deleted_at = soft delete) so decision_events stay valid.
+CREATE TABLE IF NOT EXISTS items (
   project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  node_kind     TEXT NOT NULL,
-  task          TEXT NOT NULL,
-  kind          TEXT NOT NULL CHECK (kind IN ('feed','ask','check','critique')),
-  prompt        TEXT NOT NULL,
-  response      JSONB NOT NULL,
-  user_reply    JSONB,
-  provider      TEXT NOT NULL,
-  model         TEXT NOT NULL,
-  latency_ms    INTEGER,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  id            TEXT NOT NULL,
+  seq           BIGINT GENERATED ALWAYS AS IDENTITY,   -- stable output order
+  node          TEXT NOT NULL,
+  type          TEXT NOT NULL,
+  body          JSONB NOT NULL,
+  origin        TEXT NOT NULL CHECK (origin IN ('ai','human','ai_edited')),
+  decision      TEXT NOT NULL DEFAULT 'pending' CHECK (decision IN ('pending','accepted','rejected')),
+  decision_note TEXT,
+  ai_stance     JSONB,                                 -- { verdict, reason }
+  evidence      JSONB,                                 -- { basis, confidence, sources[] }
+  version       INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+  run_id        TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at    TIMESTAMPTZ,
+  PRIMARY KEY (project_id, id),
+  FOREIGN KEY (project_id, run_id) REFERENCES runs (project_id, id)
 );
-CREATE INDEX IF NOT EXISTS ai_exchanges_project_node_idx
-  ON ai_exchanges (project_id, node_kind, created_at DESC);
+CREATE INDEX IF NOT EXISTS items_project_node_type_idx
+  ON items (project_id, node, type) WHERE deleted_at IS NULL;
+-- At most one live item per (project, node, type) for cardinality 'one' types.
+-- Keep the list in sync with ITEM_TYPE_DEFS (a unit test checks it).
+CREATE UNIQUE INDEX IF NOT EXISTS items_singleton_idx
+  ON items (project_id, node, type)
+  WHERE deleted_at IS NULL AND type IN ('brief','engagement_plan','diff_hypothesis');
 
--- Assumption ledger (doc §8)
-CREATE TABLE IF NOT EXISTS assumptions (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  body          TEXT NOT NULL,
-  signal        TEXT NOT NULL,
-  threshold     TEXT NOT NULL,
-  source_node   TEXT NOT NULL,
-  status        TEXT NOT NULL DEFAULT 'pending'
-                 CHECK (status IN ('pending','validated','refuted','evolved')),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+-- "from depends on to". Staleness is computed: to.version > to_version_seen.
+CREATE TABLE IF NOT EXISTS links (
+  project_id      UUID NOT NULL,
+  id              TEXT NOT NULL,
+  from_id         TEXT NOT NULL,
+  to_id           TEXT NOT NULL,
+  rel             TEXT NOT NULL CHECK (rel IN (
+                    'derived_from','serves','addresses','implements',
+                    'mitigates','conflicts_with','assumes','depends_on')),
+  to_version_seen INTEGER NOT NULL CHECK (to_version_seen >= 1),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (project_id, id),
+  UNIQUE (project_id, from_id, to_id, rel),
+  FOREIGN KEY (project_id, from_id) REFERENCES items (project_id, id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id, to_id)   REFERENCES items (project_id, id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS links_to_idx ON links (project_id, to_id);
 
-CREATE TABLE IF NOT EXISTS comments (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  node_kind   TEXT,
-  author_id   UUID NOT NULL REFERENCES users(id),
-  body        TEXT NOT NULL,
-  anchor      TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+-- Append-only audit trail of every item change.
+CREATE TABLE IF NOT EXISTS decision_events (
+  project_id   UUID NOT NULL,
+  id           TEXT NOT NULL,
+  seq          BIGINT GENERATED ALWAYS AS IDENTITY,
+  item_id      TEXT NOT NULL,
+  kind         TEXT NOT NULL CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted')),
+  from_version INTEGER NOT NULL CHECK (from_version >= 0),
+  to_version   INTEGER NOT NULL CHECK (to_version >= 1),
+  note         TEXT,
+  prev_body    JSONB,                                -- body before an AI run rewrote a singleton
+  actor        TEXT NOT NULL CHECK (actor IN ('human','ai')),
+  at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (project_id, id),
+  FOREIGN KEY (project_id, item_id) REFERENCES items (project_id, id) ON DELETE CASCADE
 );
+-- Databases initialised before prev_body existed.
+ALTER TABLE decision_events ADD COLUMN IF NOT EXISTS prev_body JSONB;
+CREATE INDEX IF NOT EXISTS decision_events_item_idx ON decision_events (project_id, item_id, seq);
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
@@ -82,10 +124,6 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS projects_touch ON projects;
 CREATE TRIGGER projects_touch BEFORE UPDATE ON projects
-  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-
-DROP TRIGGER IF EXISTS nodes_touch ON nodes;
-CREATE TRIGGER nodes_touch BEFORE UPDATE ON nodes
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
 -- Seed a demo user + project so the app is usable right after init.

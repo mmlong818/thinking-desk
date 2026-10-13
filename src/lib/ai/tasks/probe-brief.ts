@@ -1,65 +1,11 @@
-import { z } from 'zod';
-import { runAi } from '../router';
+import { dataBlock } from '../prompt';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import { ProbeResultSchema, type ProbeTurn, type ProbeResult } from '../schemas/probe-brief';
 
 /**
  * 方法论 v2 §5.3 "如何挖出真正的 Job" 的访谈引导。
  * 每次只问一个开放题，根据用户的答案动态推进 —— 是"一问一答"模式。
  */
-
-export const ProbeTurnSchema = z.object({
-  question: z.string(),
-  answer: z.string(),
-  field_tag: z.string().optional(),
-});
-export type ProbeTurn = z.infer<typeof ProbeTurnSchema>;
-
-export const ProbeResultSchema = z.union([
-  z.object({
-    action: z.literal('question'),
-    /** 当前要问用户的下一个问题 */
-    question: z.string(),
-    /** 绑定到 Brief 哪个字段（problem_statement / target_user / scenario / ...） */
-    field_tag: z.string(),
-    /** 为什么问这个，展示在问题下方 */
-    why: z.string(),
-    /** 可选的提示性选项，用户可以点击快速填入 */
-    hints: z.array(z.string()).default([]),
-    /** 大概还剩几个问题（用户看得到进度） */
-    remaining_estimate: z.number().int().min(0).max(10),
-  }),
-  z.object({
-    action: z.literal('done'),
-    /** 总结已收集到的关键信息 */
-    summary: z.string(),
-  }),
-]);
-export type ProbeResult = z.infer<typeof ProbeResultSchema>;
-
-const JSON_SCHEMA = {
-  type: 'object',
-  oneOf: [
-    {
-      type: 'object',
-      required: ['action', 'question', 'field_tag', 'why', 'hints', 'remaining_estimate'],
-      properties: {
-        action: { const: 'question' },
-        question: { type: 'string' },
-        field_tag: { type: 'string' },
-        why: { type: 'string' },
-        hints: { type: 'array', items: { type: 'string' }, maxItems: 5 },
-        remaining_estimate: { type: 'integer', minimum: 0, maximum: 10 },
-      },
-    },
-    {
-      type: 'object',
-      required: ['action', 'summary'],
-      properties: {
-        action: { const: 'done' },
-        summary: { type: 'string' },
-      },
-    },
-  ],
-};
 
 const SYSTEM_PROMPT = `你是「思考工作台」Brief 节点的 AI 副驾驶，现在运行在**对话式追问（interview）模式**。
 
@@ -98,11 +44,10 @@ const SYSTEM_PROMPT = `你是「思考工作台」Brief 节点的 AI 副驾驶�
 - 收尾：{ action: "done", summary }
 没有其他输出、没有 Markdown。`;
 
-export async function probeBrief(args: {
-  rawText: string;
-  history: ProbeTurn[];
-  override?: string;
-}): Promise<ProbeResult> {
+export async function probeBrief(
+  args: { rawText: string; history: ProbeTurn[] },
+  opts?: TaskOptions,
+): Promise<RunTaskResult<ProbeResult>> {
   const historyBlock =
     args.history.length === 0
       ? '（尚无对话 · 这是第一轮）'
@@ -110,14 +55,14 @@ export async function probeBrief(args: {
           .map((t, i) => `Q${i + 1} [${t.field_tag ?? 'general'}] ${t.question}\nA: ${t.answer}`)
           .join('\n\n');
 
-  const res = await runAi({
+  return runTask({
     task: 'BRIEF_PROBE',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `## 用户原始粘贴\n${args.rawText}\n\n## 已有对话\n${historyBlock}\n\n` +
+          `## 用户原始粘贴\n${dataBlock('raw_text', args.rawText)}\n\n## 已有对话\n${dataBlock('interview', historyBlock)}\n\n` +
           `请根据以上内容决定：再问一个问题（基于用户刚才的答案），或收尾（action: done）。` +
           (args.history.length >= 7
             ? ' 已经问过 7 轮，必须收尾（action: done）。'
@@ -126,10 +71,9 @@ export async function probeBrief(args: {
             : ' 至少还要 2-3 轮才能收尾。'),
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: ProbeResultSchema,
     maxTokens: 4000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
-  return ProbeResultSchema.parse(res.data);
 }

@@ -1,161 +1,17 @@
-import { z } from 'zod';
-import { runAi } from '../router';
-import type { BriefExtraction, ClarificationAnswer } from './extract-brief';
-import type { Persona, Job } from './analyze-users';
+import { dataBlock } from '../prompt';
+import { feedbackBlock } from '../feedback-prompt';
+import type { RegenerationFeedback } from '../../model/feedback';
+import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
+import type { ClarificationAnswer } from '../schemas/extract-brief';
+import type { BriefContext } from '../schemas/snapshots';
+import type { Persona, Job } from '../schemas/analyze-users';
+import { AlternativesAnalysisSchema, type AlternativesAnalysis } from '../schemas/analyze-alternatives';
 
 /**
  * 方法论 v2 §7 替代方案与战略分析。
  * 关键：三类替代（直接/间接/非消费）全覆盖 · 对重点替代做 §7.2 三问 ·
  * 产出"差异化假设"（一句话说清凭什么赢）。
  */
-
-export const AlternativeSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  category: z.enum(['direct', 'indirect', 'non_consumption']),
-  /** 它是什么 / 用户怎么做 */
-  description: z.string(),
-  /** 用户为什么用它 —— 解决哪个 Job */
-  why_users_use: z.string(),
-  /** 威胁级别 · 对我们要打的目标用户/Job 多大挑战 */
-  threat_level: z.enum(['high', 'medium', 'low']),
-  /** 搜索来源链接（可能多个，数组；没搜到则空数组） */
-  sources: z.array(z.string()).default([]),
-});
-export type Alternative = z.infer<typeof AlternativeSchema>;
-
-export const StrategicProfileSchema = z.object({
-  alt_id: z.string(),
-  /** §7.2 Q1：他们承诺了什么 · 不超过 15 字 */
-  promise: z.string(),
-  /** §7.2 Q2：赢利模式 */
-  revenue_model: z.string(),
-  /** §7.2 Q3：护城河 */
-  moat: z.string(),
-  moat_strength: z.enum(['strong', 'medium', 'weak']),
-});
-export type StrategicProfile = z.infer<typeof StrategicProfileSchema>;
-
-export const FeatureBreakdownSchema = z.object({
-  alt_id: z.string(),
-  /** §7.3 四个角度 */
-  menu_structure: z.array(z.string()),
-  core_flows: z.array(z.string()),
-  key_interactions: z.array(z.string()),
-  headline_features: z.array(z.string()),
-});
-export type FeatureBreakdown = z.infer<typeof FeatureBreakdownSchema>;
-
-export const AlternativesAnalysisSchema = z.object({
-  alternatives: z.array(AlternativeSchema).min(6).max(15),
-  strategic_profiles: z.array(StrategicProfileSchema).min(2).max(6),
-  feature_breakdowns: z.array(FeatureBreakdownSchema).max(4),
-  differentiation_hypothesis: z.string(),
-  key_threats: z.array(z.string()).min(1).max(5),
-  critiques: z
-    .array(
-      z.object({
-        kind: z.enum(['check', 'critique', 'ask']),
-        title: z.string(),
-        body: z.string(),
-      }),
-    )
-    .max(5),
-});
-export type AlternativesAnalysis = z.infer<typeof AlternativesAnalysisSchema>;
-
-const JSON_SCHEMA = {
-  type: 'object',
-  required: [
-    'alternatives',
-    'strategic_profiles',
-    'feature_breakdowns',
-    'differentiation_hypothesis',
-    'key_threats',
-    'critiques',
-  ],
-  properties: {
-    alternatives: {
-      type: 'array',
-      minItems: 6,
-      maxItems: 15,
-      items: altItemSchema(),
-    },
-    strategic_profiles: {
-      type: 'array',
-      minItems: 2,
-      maxItems: 6,
-      items: profileItemSchema(),
-    },
-    feature_breakdowns: {
-      type: 'array',
-      maxItems: 4,
-      items: breakdownItemSchema(),
-    },
-    differentiation_hypothesis: { type: 'string' },
-    key_threats: {
-      type: 'array',
-      minItems: 1,
-      maxItems: 5,
-      items: { type: 'string' },
-    },
-    critiques: {
-      type: 'array',
-      maxItems: 5,
-      items: {
-        type: 'object',
-        required: ['kind', 'title', 'body'],
-        properties: {
-          kind: { type: 'string', enum: ['check', 'critique', 'ask'] },
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-      },
-    },
-  },
-};
-
-function altItemSchema() {
-  return {
-    type: 'object',
-    required: ['id', 'name', 'category', 'description', 'why_users_use', 'threat_level', 'sources'],
-    properties: {
-      id: { type: 'string' },
-      name: { type: 'string' },
-      category: { type: 'string', enum: ['direct', 'indirect', 'non_consumption'] },
-      description: { type: 'string' },
-      why_users_use: { type: 'string' },
-      threat_level: { type: 'string', enum: ['high', 'medium', 'low'] },
-      sources: { type: 'array', items: { type: 'string' } },
-    },
-  };
-}
-function profileItemSchema() {
-  return {
-    type: 'object',
-    required: ['alt_id', 'promise', 'revenue_model', 'moat', 'moat_strength'],
-    properties: {
-      alt_id: { type: 'string' },
-      promise: { type: 'string', maxLength: 30 },
-      revenue_model: { type: 'string' },
-      moat: { type: 'string' },
-      moat_strength: { type: 'string', enum: ['strong', 'medium', 'weak'] },
-    },
-  };
-}
-function breakdownItemSchema() {
-  return {
-    type: 'object',
-    required: ['alt_id', 'menu_structure', 'core_flows', 'key_interactions', 'headline_features'],
-    properties: {
-      alt_id: { type: 'string' },
-      menu_structure: { type: 'array', items: { type: 'string' } },
-      core_flows: { type: 'array', items: { type: 'string' } },
-      key_interactions: { type: 'array', items: { type: 'string' } },
-      headline_features: { type: 'array', items: { type: 'string' } },
-    },
-  };
-}
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 04 节点"替代方案与战略分析"的 AI 副驾驶。
 
@@ -212,7 +68,7 @@ feature_breakdowns 每条覆盖：
 严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
 
 function formatContext(
-  brief: BriefExtraction,
+  brief: BriefContext,
   personas: Persona[],
   jobs: Job[],
   rawText?: string,
@@ -250,13 +106,13 @@ function formatContext(
 }
 
 export async function analyzeAlternatives(args: {
-  brief: BriefExtraction;
+  brief: BriefContext;
   rawText?: string;
   answers?: ClarificationAnswer[];
   personas: Persona[];
   lockedJobs: Job[];
-  override?: string;
-}): Promise<AlternativesAnalysis> {
+  feedback?: RegenerationFeedback;
+}, opts?: TaskOptions): Promise<RunTaskResult<AlternativesAnalysis>> {
   const context = formatContext(
     args.brief,
     args.personas,
@@ -264,23 +120,23 @@ export async function analyzeAlternatives(args: {
     args.rawText,
     args.answers,
   );
-  const res = await runAi({
+  return runTask({
     task: 'ALT_SCAN',
+    system: SYSTEM_PROMPT,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
         content:
-          `请基于以下上下文完成替代方案与战略分析。\n\n${context}\n\n` +
+          `请基于以下上下文完成替代方案与战略分析。\n\n${dataBlock('project_context', context)}\n\n` +
           `**请使用联网搜索** —— 查找真实的直接/间接替代产品（官网、价位、用户量、评价），` +
-          `把搜到的 URL 填入对应 alternative.sources。非消费替代不需要搜索。`,
+          `把搜到的 URL 填入对应 alternative.sources。非消费替代不需要搜索。` +
+          feedbackBlock(args.feedback),
       },
     ],
-    schema: JSON_SCHEMA,
+    schema: AlternativesAnalysisSchema,
     webSearch: true, // ← 触发 provider 的联网搜索能力
     maxTokens: 12000,
     temperature: 0.4,
-    override: args.override,
+    options: opts,
   });
-  return AlternativesAnalysisSchema.parse(res.data);
 }

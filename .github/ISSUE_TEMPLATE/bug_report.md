@@ -25,7 +25,7 @@ What actually happened. Include error messages, console output, or screenshots.
 ## Environment
 
 - OS: [e.g. macOS 14, Ubuntu 22.04, Windows 11]
-- Node version: [e.g. 20.11]
+- Node version: [e.g. 22.12]
 - pnpm version: [e.g. 9.15]
 - Browser: [e.g. Chrome 124]
 - Postgres: [yes / no — pure-local mode]

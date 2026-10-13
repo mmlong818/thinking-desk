@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AiProvider, CompleteRequest, CompleteResult } from '../types';
+import type { AiProvider, CompleteRequest, CompleteResult, FinishReason } from '../types';
+import { schemaInstruction } from '../json-schema';
+import { claudeRequestParams } from './claude-params';
 import { validateBaseUrl } from './validate-base-url';
 
 function getClient(): Anthropic {
@@ -9,14 +11,41 @@ function getClient(): Anthropic {
   return new Anthropic({ apiKey, baseURL });
 }
 
-// Static fallback list — Anthropic does expose a models endpoint, but we keep a
-// curated short list so the UI surfaces only models we've validated for the
-// nine-node prompts.
+// Static fallback when the models endpoint is unreachable. Request parameters are chosen per
+// model family (claude-params.ts), so any listed model can be driven; these are the defaults.
 const CLAUDE_FALLBACK = [
-  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-  { id: 'claude-opus-4-5', label: 'Claude Opus 4.5' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', fallback: true },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', fallback: true },
 ];
+
+/** The Messages API body for one call: only the parameters this model family accepts. */
+export function buildClaudeRequest(model: string, req: CompleteRequest): Anthropic.MessageCreateParamsNonStreaming {
+  const p = claudeRequestParams(model, req);
+  const system = [
+    ...req.messages.filter((m) => m.role === 'system').map((m) => m.content),
+    p.schemaInPrompt && req.schema ? schemaInstruction(req.schema) : null,
+  ].filter(Boolean).join('\n\n');
+  const outputConfig: Anthropic.OutputConfig = {
+    ...(p.effort ? { effort: p.effort } : {}),
+    ...(p.outputSchema ? { format: { type: 'json_schema', schema: p.outputSchema } } : {}),
+  };
+  return {
+    model,
+    max_tokens: p.maxTokens,
+    ...(system ? { system } : {}),
+    messages: req.messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    ...(p.temperature !== undefined ? { temperature: p.temperature } : {}),
+    ...(Object.keys(outputConfig).length > 0 ? { output_config: outputConfig } : {}),
+  };
+}
+
+function finishReason(stop: Anthropic.StopReason | null): FinishReason {
+  if (stop === 'max_tokens' || stop === 'model_context_window_exceeded') return 'length';
+  if (stop === 'refusal') return 'refusal';
+  return stop === 'end_turn' || stop === 'stop_sequence' ? 'stop' : 'other';
+}
 
 export const claudeProvider: AiProvider = {
   name: 'claude',
@@ -39,58 +68,37 @@ export const claudeProvider: AiProvider = {
     }
   },
   async complete(model, req): Promise<CompleteResult> {
-    const client = getClient();
-    const systemMessages = req.messages.filter((m) => m.role === 'system');
-    const turns = req.messages.filter((m) => m.role !== 'system');
     const started = Date.now();
+    // A per-request timeout also lifts the SDK's non-streaming guard for large max_tokens.
+    const res = await getClient().messages.create(buildClaudeRequest(model, req), requestOptions(req));
+    return claudeResult(res, model, started);
+  },
 
-    const systemText = [
-      ...systemMessages.map((m) => m.content),
-      req.schema
-        ? `你必须只输出 JSON，且严格符合以下 schema（不要包含 Markdown 代码块包裹）：\n${JSON.stringify(req.schema)}`
-        : null,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-
-    const res = await client.messages.create(
-      {
-        model,
-        system: systemText || undefined,
-        messages: turns.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-        max_tokens: req.maxTokens ?? 4096,
-        temperature: req.temperature ?? 0.3,
-      },
-      { signal: req.signal },
-    );
-
-    const text = res.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b.type === 'text' ? b.text : ''))
-      .join('');
-
-    const data = req.schema ? safeParseJson(text) : text;
-    return {
-      data,
-      text,
-      provider: 'claude',
-      model,
-      latencyMs: Date.now() - started,
-      usage: {
-        inputTokens: res.usage.input_tokens,
-        outputTokens: res.usage.output_tokens,
-      },
-    };
+  /**
+   * messages.stream() (claude-api skill, typescript/claude-api/streaming.md): `text` events carry
+   * the deltas; finalMessage() resolves with the full Message (or rejects on error / abort).
+   * output_config.format is a plain JSON schema here, so the SDK does not parse the answer.
+   */
+  async stream(model, req, onDelta): Promise<CompleteResult> {
+    const started = Date.now();
+    const stream = getClient().messages.stream(buildClaudeRequest(model, req), requestOptions(req));
+    stream.on('text', (delta) => onDelta(delta));
+    return claudeResult(await stream.finalMessage(), model, started);
   },
 };
 
-function safeParseJson(raw: string): unknown {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('Claude response is not valid JSON');
-  }
+function requestOptions(req: CompleteRequest): Anthropic.RequestOptions {
+  return { signal: req.signal, ...(req.timeoutMs ? { timeout: req.timeoutMs } : {}) };
+}
+
+function claudeResult(res: Anthropic.Message, model: string, started: number): CompleteResult {
+  return {
+    // Read blocks by type: adaptive thinking can put `thinking` blocks first.
+    text: res.content.map((b) => (b.type === 'text' ? b.text : '')).join(''),
+    provider: 'claude',
+    model,
+    latencyMs: Date.now() - started,
+    usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
+    finishReason: finishReason(res.stop_reason),
+  };
 }
