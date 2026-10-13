@@ -32,7 +32,7 @@ const RUNNING_LABEL: Record<string, string> = {
   revise: '应用跃迁中 · 产出 08 最终功能列表',
 };
 
-const leapsOf =(data: NodeData) => LEAP_TYPES.flatMap((t) => data.of(t)) as LeapItem[];
+const leapsOf = (data: NodeData) => LEAP_TYPES.flatMap((t) => data.of(t)) as LeapItem[];
 
 function revisionOf(data: NodeData): RevisionView | null {
   const revisions = data.of('revision', 'final');
