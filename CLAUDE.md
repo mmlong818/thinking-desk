@@ -36,7 +36,7 @@ src/
 └── lib/
     ├── ai/
     │   ├── router.ts        # env-var task→provider:model resolution
-    │   ├── providers/       # claude.ts, openai.ts, gemini.ts, zhipu.ts (complete() returns one full response)
+    │   ├── providers/       # claude.ts, openai.ts, gemini.ts, zhipu.ts (complete(); stream() on all but Gemini)
     │   ├── schemas/         # client-safe Zod output schemas, types, UI constants (no router/provider imports)
     │   ├── tasks/           # server-only prompt builders that call the AI (import their schema from schemas/)
     │   └── types.ts         # AI_TASKS / AiTask — add new tasks here first
@@ -83,7 +83,7 @@ final → split
 
 1. Add the literal to `AI_TASKS` in `src/lib/ai/types.ts`.
 2. Create `src/lib/ai/schemas/your-task.ts` (Zod output schema + types, client-safe) and `src/lib/ai/tasks/your-task.ts` (prompt builder). Components import from `schemas/` only — `schemas/client-safety.test.ts` fails if client code reaches the router or a provider SDK.
-3. Create `src/app/api/ai/your-task/route.ts` — `export const POST = aiRoute({ name, body, handle })` from `src/lib/ai/route.ts`; the task calls `runTask()` (`src/lib/ai/run-task.ts`) and wraps request data in `dataBlock()`. No streaming; providers expose a single `complete()`.
+3. Create `src/app/api/ai/your-task/route.ts` — `export const POST = aiRoute({ name, body, handle })` from `src/lib/ai/route.ts`; the task calls `runTask()` (`src/lib/ai/run-task.ts`) and wraps request data in `dataBlock()`. Routes answer JSON; `stream: true` additionally offers NDJSON progress to clients that ask (`Accept: application/x-ndjson`) — today only the scenarios route, whose node calls `useAiAction().run(key, { …, stream: true })` and shows `progress` / `cancel`.
 4. Write the output adapter in `src/lib/model/adapters/` (output → `ItemDraft[]` + replace scope; test it with the fixtures in `src/lib/ai/schemas/__fixtures__`) and call the route from the node with `useAiAction`.
 5. Document `AI_MODEL_YOUR_TASK` in `.env.example`.
 

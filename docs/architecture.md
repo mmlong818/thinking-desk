@@ -21,12 +21,13 @@ Browser
             └─ task function builds the prompt (request data inside <data> blocks)
                  └─ runTask() (src/lib/ai/run-task.ts)
                       ├─ router.ts resolves provider:model from env / override
-                      ├─ provider adapter calls the vendor API once (complete())
+                      ├─ provider adapter calls the vendor API (complete(), or stream() when progress is wanted)
                       └─ Zod-validates the answer (one retry with the errors fed back), deadline + abort
-                           └─ route returns one JSON response: { ok, data, run }
+                           └─ route returns one JSON response { ok, data, run } — or, for a streaming
+                              route asked with Accept: application/x-ndjson, progress events ending in that body
 ```
 
-There is no streaming: every provider exposes a single `complete()` that returns the full response, and route handlers reply with plain JSON. `run` is the run metadata (provider, model, promptVersion, usage, latency, status) shaped for the `Run` record of the data model. AI routes stay stateless (they work from the snapshots in the request body); the browser persists the run and its output through the project's repository (`runAiAction()` in `src/lib/store/ai-action.ts`), so pure-local and Postgres mode share one code path.
+Most routes answer plain JSON from a single `complete()` call. The scenarios route is the streaming pilot (`aiRoute({ stream: true })`): a client that sends `Accept: application/x-ndjson` gets NDJSON events — `attempt` (provider, model, whether it streams, and on a retry why), `delta` (answer text), then exactly one `done` (the same `{ ok, data, run }` body) or `error` (the error body plus its HTTP status). Validation and the one retry stay in `runTask()`, so a retry is a new `attempt` whose text starts over. Wire format: `src/lib/ai/stream-protocol.ts`; server side `stream-route.ts`; browser side `src/lib/store/ai-stream.ts`. Closing the page or pressing 取消 cancels the body, which aborts the task's signal and the provider call. `run` is the run metadata (provider, model, promptVersion, usage, latency, status) shaped for the `Run` record of the data model. AI routes stay stateless (they work from the snapshots in the request body); the browser persists the run and its output through the project's repository (`runAiAction()` in `src/lib/store/ai-action.ts`), so pure-local and Postgres mode share one code path.
 
 `src/middleware.ts` sits in front of `/api/*`: optional bearer-token auth (`REQUIRE_AUTH`) and a per-IP in-memory rate limit on `/api/ai/*`.
 
