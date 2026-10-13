@@ -61,7 +61,7 @@ function AiSection({ node }: { node: NodeKind }) {
         </span>
       </div>
       {check.error ? <div className="idc-error">{check.error}</div> : null}
-      <div className="dim cons-ai-note">重跑会替换还没裁决的发现；你采纳 / 否决过的会保留，并告诉 AI 不要重复。</div>
+      <div className="dim cons-ai-note">重跑会替换还没裁决的发现；你采纳 / 否决过的会保留，并告诉 AI 不要重复。每次检查找到的不一定相同，一次没报不代表没有矛盾，改动较大后可以再跑一次。</div>
       {c.findings.length === 0 && last ? <div className="dim">上次检查没有发现矛盾。</div> : null}
       {sortFindings(c.findings).map((f) => <FindingCard key={f.id} finding={f} />)}
     </section>
