@@ -9,8 +9,9 @@ import { FollowUpsPanel } from '@/components/shared/FollowUpsPanel';
 import { JudgeBar } from '@/components/shared/JudgeBar';
 import { ContinueButton, MissingUpstream, NodeLink } from '@/components/shared/Navigation';
 import {
-  CenteredAction, ErrorCard, LoadingCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
+  CenteredAction, ErrorCard, NodeFrame, NodeHat, ParaHead, StoreStatus,
 } from '@/components/shared/NodeKit';
+import { StreamProgressCard } from '@/components/shared/StreamProgress';
 import { briefRequestContext } from '@/lib/model/context';
 import { DeepResults } from './scen/DeepResults';
 import { scenCopilotCards } from './scen/scen-copilot';
@@ -19,6 +20,12 @@ import { DimensionsGrid, ScenariosGrid } from './scen/ScenPickers';
 import { useScenActions } from './scen/useScenActions';
 
 type Actions = ReturnType<typeof useScenActions>;
+
+const RUNNING_LABEL: Record<string, string> = {
+  exhaust: '穷举中 · 每维 8-12 个候选',
+  combine: '组合情景中 · 5-8 个',
+  deep: '深度分析中 · 矩阵 / 极值 / 敌意 / 痛点 / 设计启发',
+};
 
 export function ScenariosNode() {
   const { slug } = useProject();
@@ -48,7 +55,9 @@ export function ScenariosNode() {
       <Progress stage={stage} />
       <StoreStatus data={data} />
       {stage === 'idle' && brief ? <CenteredAction label="第一步：穷举 7 维要素 →" onClick={actions.exhaust} /> : null}
-      {stage === 'exhausting' ? <LoadingCard>穷举中 · 每维 8-12 个候选</LoadingCard> : null}
+      {actions.running ? (
+        <StreamProgressCard label={RUNNING_LABEL[actions.running] ?? 'AI 生成中'} progress={actions.progress} onCancel={actions.cancel} />
+      ) : null}
       <StageSections stage={stage} data={data} actions={actions} onBack={() => setView('dimensions')} />
       <ErrorCard title="提示" message={actions.error} mono={false} />
       {stage === 'done' ? (

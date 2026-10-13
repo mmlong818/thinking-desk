@@ -1,14 +1,18 @@
 import type { NodeKind } from '../../data/nodes';
+import { NDJSON_TYPE, type TaskProgress } from '../ai/stream-protocol';
 import type { ProjectRepository } from '../api/project-api';
 import type { AdaptedOutput } from '../model/adapters/common';
 import type { SaveRunResult } from '../model/repository';
 import { RunMetaSchema, toRunInput, type RunMetaRecord } from '../model/run-meta';
 import type { ItemRef } from '../model/types';
+import { isNdjson, readStreamedReply } from './ai-stream';
 
 // One AI action as the UI performs it: POST the /api/ai route, turn the task output into item
 // drafts with the task's adapter, and record the run (with its output) in the repository. A
 // failed AI call is recorded too (status failed, nothing else changes). Pure: fetch and the
-// repository are injected, so this runs in tests without a browser.
+// repository are injected, so this runs in tests without a browser. A streaming action (route
+// with `stream: true`) asks for NDJSON and reports progress while it waits; its final event is
+// the same answer, so validation, adapting and saving are shared.
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -22,6 +26,8 @@ export interface AiActionSpec<T> {
   inputs: ItemRef[];
   /** Task output → drafts; omitted for process steps (clarify / probe / follow-ups) that only record the run. */
   adapt?: (data: T) => AdaptedOutput;
+  /** Ask the route for NDJSON progress (routes declared with `stream: true`). */
+  stream?: boolean;
 }
 
 export interface AiActionDeps {
@@ -29,6 +35,8 @@ export interface AiActionDeps {
   repo: ProjectRepository;
   projectId: string;
   signal?: AbortSignal;
+  /** Progress of a streaming action (attempts, text deltas). */
+  onProgress?: (event: TaskProgress) => void;
 }
 
 export type AiActionOutcome<T> =
@@ -62,14 +70,24 @@ function isAbort(e: unknown): boolean {
   return e instanceof DOMException ? e.name === 'AbortError' : (e as { name?: string })?.name === 'AbortError';
 }
 
-async function post(deps: AiActionDeps, spec: AiActionSpec<unknown>): Promise<{ res: Response; json: RouteAnswer }> {
+interface Answer {
+  status: number;
+  json: RouteAnswer;
+}
+
+async function post(deps: AiActionDeps, spec: AiActionSpec<unknown>): Promise<Answer> {
+  const onProgress = spec.stream ? deps.onProgress : undefined;
   const res = await deps.fetch(spec.route, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(onProgress ? { accept: NDJSON_TYPE } : {}) },
     body: JSON.stringify(spec.body),
     signal: deps.signal,
   });
-  return { res, json: (await res.json().catch(() => ({}))) as RouteAnswer };
+  if (onProgress && isNdjson(res)) {
+    const reply = await readStreamedReply(res, onProgress);
+    return { status: reply.status, json: reply.body as RouteAnswer };
+  }
+  return { status: res.status, json: (await res.json().catch(() => ({}))) as RouteAnswer };
 }
 
 /** Production answers strip the run's error text; the error code still says what went wrong. */
@@ -91,18 +109,18 @@ function failureMessage(json: RouteAnswer, status: number): string {
 
 export async function runAiAction<T>(deps: AiActionDeps, spec: AiActionSpec<T>): Promise<AiActionOutcome<T>> {
   const s = spec as AiActionSpec<unknown>;
-  let answer: { res: Response; json: RouteAnswer };
+  let answer: Answer;
   try {
     answer = await post(deps, s);
   } catch (e) {
     if (isAbort(e)) return { ok: false, aborted: true, message: '已取消' };
     return { ok: false, aborted: false, message: e instanceof Error ? e.message : String(e) };
   }
-  const { res, json } = answer;
+  const { status, json } = answer;
   const run = parseRun(json.run);
-  if (!res.ok || !json.ok || json.data === undefined || !run) {
+  if (status < 200 || status >= 300 || !json.ok || json.data === undefined || !run) {
     await recordFailure(deps, s, run, json);
-    return { ok: false, aborted: false, message: failureMessage(json, res.status) };
+    return { ok: false, aborted: false, message: failureMessage(json, status) };
   }
   const data = json.data as T;
   const adapted = spec.adapt ? spec.adapt(data) : { drafts: [], replace: [] };

@@ -51,7 +51,7 @@ function combine(ctx: Ctx, setError: (m: string) => void) {
       action: 'combine', ...body, dimensions: dimensionsPayload(elements), selectedElementIds: picked.map((e) => e.id),
       feedback: buildFeedback(ctx.data.all, [{ node: 'scen', type: 'scenario' }]),
     },
-    node: 'scen', inputs: [...inputs, ...inputsOf(picked)], adapt: adaptScenarioDrafts,
+    node: 'scen', inputs: [...inputs, ...inputsOf(picked)], adapt: adaptScenarioDrafts, stream: true,
   });
 }
 
@@ -71,11 +71,14 @@ function deep(ctx: Ctx, setError: (m: string) => void) {
       pickedScenarioIds: picked.map((s) => s.id),
       feedback: buildFeedback(ctx.data.all, scope),
     },
-    node: 'scen', inputs: [...inputs, ...inputsOf(picked)], adapt: adaptDeepAnalysis,
+    node: 'scen', inputs: [...inputs, ...inputsOf(picked)], adapt: adaptDeepAnalysis, stream: true,
   });
 }
 
-/** Exhaust the 7 dimensions → combine accepted elements into scenarios → deep-analyse accepted scenarios. */
+/**
+ * Exhaust the 7 dimensions → combine accepted elements into scenarios → deep-analyse accepted
+ * scenarios. All three stream their progress (the scenarios route is the streaming pilot).
+ */
 export function useScenActions(data: NodeData, brief: BriefRequestContext | null, onDone: () => void) {
   const { slug } = useProject();
   const ai = useAiAction();
@@ -88,11 +91,16 @@ export function useScenActions(data: NodeData, brief: BriefRequestContext | null
     running: ai.running,
     error: ai.error,
     setError: ai.setError,
+    /** Live progress of the streamed call in flight, and its cancel. */
+    progress: ai.progress,
+    cancel: ai.cancel,
     exhaust: () => {
       if (!ctx) return;
       const { body, inputs } = common(ctx);
       const feedback = buildFeedback(data.all, [{ node: 'scen', type: 'scenario_element' }]);
-      void finish(ai.run('exhaust', { route: '/api/ai/scenarios', body: { action: 'exhaust', ...body, feedback }, node: 'scen', inputs, adapt: adaptDimensions }));
+      void finish(ai.run('exhaust', {
+        route: '/api/ai/scenarios', body: { action: 'exhaust', ...body, feedback }, node: 'scen', inputs, adapt: adaptDimensions, stream: true,
+      }));
     },
     combine: () => ctx && void finish(combine(ctx, ai.setError)),
     deep: () => ctx && void finish(deep(ctx, ai.setError)),

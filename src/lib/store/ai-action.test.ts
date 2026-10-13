@@ -5,6 +5,7 @@ import { memoryStorage } from '../model/__fixtures__/storage';
 import { seqIdSource, T1 } from '../model/__fixtures__/model';
 import { UsersAnalysisSchema, type UsersAnalysis } from '../ai/schemas/analyze-users';
 import { validUsers } from '../ai/schemas/__fixtures__/users';
+import { byteStream } from '../ai/__fixtures__/streams';
 import { runAiAction } from './ai-action';
 
 const PID = 'proj-ai';
@@ -62,5 +63,56 @@ describe('runAiAction', () => {
     expect(await runAiAction(down.d, spec)).toEqual({ ok: false, aborted: false, message: 'fetch failed' });
     const aborted = deps(new DOMException('aborted', 'AbortError'));
     expect(await runAiAction(aborted.d, spec)).toMatchObject({ ok: false, aborted: true });
+  });
+});
+
+describe('runAiAction · streamed answers', () => {
+  const ndjson = (...events: unknown[]) => events.map((e) => `${JSON.stringify(e)}\n`);
+  const attempt = { type: 'attempt', attempt: 1, provider: 'claude', model: 'm', streaming: true };
+
+  function streaming(chunks: ReadonlyArray<string | Error>, hangUntil?: AbortSignal) {
+    const repo = new LocalRepository({ storage: memoryStorage(), now: () => T1, idSource: seqIdSource() });
+    const accepts: (string | null)[] = [];
+    const progress: unknown[] = [];
+    const fetch = async (_url: string, init?: RequestInit) => {
+      accepts.push(new Headers(init?.headers).get('accept'));
+      return new Response(byteStream(chunks, { hangUntil }), { headers: { 'content-type': 'application/x-ndjson; charset=utf-8' } });
+    };
+    return { repo, accepts, progress, d: { fetch, repo, projectId: PID, onProgress: (e: unknown) => progress.push(e) } };
+  }
+
+  it('asks for NDJSON, reports progress, then saves the final answer like a JSON one', async () => {
+    const delta = { type: 'delta', attempt: 1, text: '{"personas":' };
+    const t = streaming(ndjson(attempt, delta, { type: 'done', ok: true, data: validUsers, run }));
+    const out = await runAiAction(t.d, { ...spec, stream: true });
+    expect(out.ok).toBe(true);
+    expect(t.accepts).toEqual(['application/x-ndjson']);
+    expect(t.progress).toEqual([attempt, delta]);
+    expect((await t.repo.getGraph(PID)).items.map((i) => i.type)).toEqual(['persona', 'job', 'job', 'summary']);
+  });
+
+  it('turns an error event into the same failure (recorded run, code message)', async () => {
+    const t = streaming(ndjson(attempt, { type: 'error', status: 502, error: 'ai_failed', code: 'invalid_output', run: { ...run, status: 'failed', attempts: 2 } }));
+    const out = await runAiAction(t.d, { ...spec, stream: true });
+    expect(out).toEqual({ ok: false, aborted: false, message: 'AI 输出格式不合规（已自动重试一次）' });
+    expect((await t.repo.listRuns(PID)).map((r) => r.status)).toEqual(['failed']);
+  });
+
+  it('reports a stream that breaks off without a final event, and an abort mid-stream', async () => {
+    const cut = streaming([...ndjson(attempt), new TypeError('network error')]);
+    expect(await runAiAction(cut.d, { ...spec, stream: true })).toEqual({ ok: false, aborted: false, message: 'network error' });
+    const ended = streaming(ndjson(attempt));
+    expect(await runAiAction(ended.d, { ...spec, stream: true })).toMatchObject({ ok: false, message: expect.stringContaining('流中断') });
+    const ctrl = new AbortController();
+    const aborted = streaming(ndjson(attempt), ctrl.signal);
+    const p = runAiAction({ ...aborted.d, signal: ctrl.signal, onProgress: () => ctrl.abort() }, { ...spec, stream: true });
+    expect(await p).toMatchObject({ ok: false, aborted: true });
+    expect(await aborted.repo.listRuns(PID)).toEqual([]);
+  });
+
+  it('does not ask for NDJSON unless the action streams', async () => {
+    const t = streaming(ndjson({ type: 'done', ok: true, data: validUsers, run }));
+    await runAiAction(t.d, spec);
+    expect(t.accepts).toEqual([null]);
   });
 });
