@@ -5,14 +5,17 @@ import type { Item } from '../model/item-types';
 import {
   RepositoryError,
   type CreateItemInput,
+  type EventFilter,
   type EventMeta,
   type ItemPatch,
+  type LinkEdit,
+  type LinkEditResult,
   type RepositoryErrorCode,
   type RunFilter,
   type RunOutputInput,
   type SaveRunResult,
 } from '../model/repository';
-import type { Run } from '../model/types';
+import type { DecisionEvent, Link, Run } from '../model/types';
 
 // Browser-side Repository for Postgres mode: the same calls LocalRepository answers, sent to
 // /api/projects/[id]/*. Errors come back as RepositoryError with the server's code.
@@ -72,5 +75,21 @@ export class HttpRepository implements ProjectRepository {
   async acceptRecommended(projectId: string, node: NodeKind, meta: { note?: string } = {}): Promise<Item[]> {
     const body = { node, ...(meta.note ? { note: meta.note } : {}) };
     return (await this.call<{ items: Item[] }>(projectId, 'accept-recommended', { method: 'POST', body })).items;
+  }
+
+  /** Always attributed to the human by the server; only `event.note` travels. */
+  async refreshLinks(projectId: string, linkIds: readonly string[], event?: EventMeta): Promise<Link[]> {
+    const body = { linkIds, ...(event?.note ? { note: event.note } : {}) };
+    return (await this.call<{ links: Link[] }>(projectId, 'links/refresh', { method: 'POST', body })).links;
+  }
+
+  async editLinks(projectId: string, edit: LinkEdit, event: EventMeta): Promise<LinkEditResult> {
+    const body = { add: edit.add ?? [], remove: edit.remove ?? [], ...(event.note ? { note: event.note } : {}) };
+    return (await this.call<{ result: LinkEditResult }>(projectId, 'links', { method: 'POST', body })).result;
+  }
+
+  async listEvents(projectId: string, filter: EventFilter = {}): Promise<DecisionEvent[]> {
+    const q = filter.itemId ? `?itemId=${encodeURIComponent(filter.itemId)}` : '';
+    return (await this.call<{ events: DecisionEvent[] }>(projectId, `events${q}`)).events;
   }
 }
