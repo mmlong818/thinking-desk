@@ -163,4 +163,19 @@ describe.skipIf(!url)('PgRepository against Postgres', () => {
       await client.query('DELETE FROM projects WHERE id = $1', [fork.id]);
     }
   });
+
+  it('deletes a project with all its rows in one transaction; a second delete is not_found', async () => {
+    const { forkProject } = await import('./fork-project');
+    const { deleteProject } = await import('./delete-project');
+    const doomed = await forkProject(pid, { name: 'it delete' });
+    const rows = async () => Promise.all(['runs', 'items', 'links', 'decision_events'].map(async (t) =>
+      (await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${t} WHERE project_id = $1`, [doomed.id]))[0].n));
+    const [runs, items, links, events] = await rows();
+    expect(await deleteProject(doomed.id)).toEqual({ runs, items, links, events });
+    expect(items).toBeGreaterThan(0);
+    expect(await rows()).toEqual([0, 0, 0, 0]);
+    expect(await client.query('SELECT 1 FROM projects WHERE id = $1', [doomed.id])).toEqual([]);
+    await expect(deleteProject(doomed.id)).rejects.toMatchObject({ code: 'not_found' });
+    expect((await snapshot(new (await import('./pg-repository')).PgRepository(), pid)).all.length).toBeGreaterThan(5);
+  });
 });

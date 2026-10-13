@@ -24,7 +24,7 @@ docker compose up -d db # optional Postgres (auto-runs schema.sql)
 src/
 ├── app/
 │   ├── api/ai/              # AI route handlers (one dir per task, JSON responses)
-│   ├── api/projects/        # project list/create; [id]/{graph,runs,items,accept-recommended,fork} = PgRepository over HTTP
+│   ├── api/projects/        # project list/create; DELETE [id]; [id]/{graph,runs,items,accept-recommended,fork} = PgRepository over HTTP
 │   ├── api/providers/       # configured providers + models (structured-task support per model)
 │   └── project/[id]/[node]/ # SSR node page: picks the store (Postgres row found → pg, else local), lock state
 ├── components/
@@ -99,6 +99,7 @@ final → split
 
 - **`formatNodeNum(kind)`** in `data/nodes.ts` generates the `NODE · 08 / 09` header. Do not hardcode node numbers in components.
 - **Branching a project** (`ForkButton`): Postgres → `POST /api/projects/[id]/fork` (copies runs, items, links, events); pure-local → `forkLocalProject()` copies `td:v2:<id>` with the projectId rewritten, plus the UI cache.
+- **Deleting a project** (home page): Postgres → `DELETE /api/projects/<project id>` (one transaction; the card and browser caches go only after it succeeds or answers 404); pure-local → `purgeProjectClientData(slug)`.
 - **Route params are percent-encoded** for non-ASCII slugs — decode (`localProjectId(slug)`) before looking a project up.
 - **Turbopack** (`pnpm dev --turbopack`) is the default dev server. If you hit a Turbopack-specific build error, try `pnpm dev` without `--turbopack` to isolate.
 - **`src/lib/db/`** — `query()` throws when `DATABASE_URL` is unset or the DB is unreachable (the pool is created lazily on first query, 3 s connect timeout). Every caller must wrap DB calls in try/catch and degrade, so pure-local mode works.

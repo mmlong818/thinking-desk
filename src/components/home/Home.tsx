@@ -30,6 +30,8 @@ interface Props {
 }
 
 type UnifiedProject = {
+  /** Database id of a server project (DELETE /api/projects/<id>); local projects have none. */
+  id?: string;
   slug: string;
   name: string;
   summary: string | null;
@@ -45,6 +47,7 @@ function unify(server: ServerProject[], local: LocalProject[]): UnifiedProject[]
   for (const p of server) {
     slugs.add(p.slug);
     out.push({
+      id: p.id,
       slug: p.slug,
       name: p.name,
       summary: p.summary,
@@ -80,6 +83,28 @@ function formatWhen(iso: string): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days} 天前`;
   return d.toLocaleDateString('zh-CN');
+}
+
+/** Deletes a Postgres project; null when it is gone (also when it already was), else why not. */
+async function deleteServerProject(id: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (res.ok || res.status === 404) return null;
+    const json = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
+    return json.detail ?? json.error ?? `HTTP ${res.status}`;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+/** Two confirmations: a confirm dialog, then typing the project name. */
+function confirmDelete(p: UnifiedProject): boolean {
+  const what = p.source === 'server'
+    ? '这会从数据库删除该项目的全部条目、运行记录与裁决历史，并清空本浏览器里的缓存，无法恢复。'
+    : '这会清空该项目所有节点的本地缓存，无法恢复。';
+  if (!window.confirm(`确定要删除「${p.name}」？\n\n${what}`)) return false;
+  const typed = window.prompt(`再次确认：请输入项目名「${p.name}」以删除，或留空取消。`, '');
+  return !!typed && typed.trim() === p.name.trim();
 }
 
 export function Home({ initialProjects, dbError }: Props) {
@@ -256,24 +281,12 @@ export function Home({ initialProjects, dbError }: Props) {
                 key={p.slug}
                 project={p}
                 onDelete={async () => {
-                  // 二次确认：一次浏览器 confirm + 一次输入项目名
-                  const ok1 = window.confirm(
-                    `确定要删除「${p.name}」？\n\n这会清空该项目所有节点的本地缓存，无法恢复。`,
-                  );
-                  if (!ok1) return;
-                  const typed = window.prompt(
-                    `再次确认：请输入项目名「${p.name}」以删除，或留空取消。`,
-                    '',
-                  );
-                  if (!typed || typed.trim() !== p.name.trim()) return;
-
-                  // 服务端项目（DB 在跑时）—— 试着调一次 delete API；失败也继续清本地
-                  if (p.source === 'server') {
-                    try {
-                      await fetch(`/api/projects/${encodeURIComponent(p.slug)}`, { method: 'DELETE' });
-                    } catch {
-                      /* network down / DB down — local purge anyway */
-                    }
+                  if (!confirmDelete(p)) return;
+                  // A server project must really be gone before its card and caches go.
+                  const failed = p.source === 'server' && p.id ? await deleteServerProject(p.id) : null;
+                  if (failed) {
+                    window.alert(`删除失败，项目未改动：${failed}`);
+                    return;
                   }
                   purgeProjectClientData(p.slug);
                   // 本地状态立即移除并刷新

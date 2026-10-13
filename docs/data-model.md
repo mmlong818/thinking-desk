@@ -234,6 +234,7 @@ Both implementations delegate every decision to the same pure planners (`planRun
 | `PATCH /api/projects/[id]/items/[itemId]` `{ patch, note? }` | `updateItem` (actor human) |
 | `POST /api/projects/[id]/accept-recommended` `{ node }` | `acceptRecommended` |
 | `POST /api/projects/[id]/fork` `{ name, summary? }` | new project + copies of runs, items, links, events (`forkProject`) |
+| `DELETE /api/projects/[id]` | deletes the project's decision events, links, items, runs and the project row in one transaction (`deleteProject`, `src/lib/db/delete-project.ts`); 400 for a non-UUID id, 404 when missing |
 
 `RepositoryError` maps to 404 / 400 / 409 / 503; a database failure answers `503 db_unavailable`.
 

@@ -13,6 +13,7 @@ Browser
   │       cookie). Renders the node or the lock screen inside a ProjectStoreProvider
   │
   ├─ GET|POST|PATCH /api/projects/[id]/{graph,runs,items,items/[itemId],accept-recommended,fork}
+  ├─ DELETE /api/projects/[id]  (whole project, one transaction)
   │    └─ Postgres mode only: PgRepository behind Zod-validated handlers (src/lib/api/project-api.ts)
   │
   └─ POST /api/ai/<task>
