@@ -13,12 +13,16 @@ export function RedLineList({ items, onAdd }: { items: ItemOfType<'red_line'>[];
     <ul className="editable-list">
       {items.map((r) => (
         <li key={r.id} className={`editable-list-item ${r.decision === 'rejected' ? 'is-rejected' : ''}`}>
-          <span className="judged-text" style={{ flex: 1 }}>
+          <span className="judged-text red-line-text" style={{ flex: 1 }}>
             <EditableText
               value={r.body.text}
               placeholder="一条红线…"
               onChange={(v) => (v.trim() ? void actions.editBody(r, { text: v.trim() }) : void actions.reject(r))}
             />
+            {/* Stated red lines are recommended; anything else is the AI's inference, judged on its reason. */}
+            {r.aiStance && r.aiStance.verdict !== 'recommend' && r.aiStance.reason ? (
+              <span className="red-line-reason">AI 推断 · {r.aiStance.reason}</span>
+            ) : null}
           </span>
           <StanceBadge stance={r.aiStance} />
           <ItemDecision item={r} />
