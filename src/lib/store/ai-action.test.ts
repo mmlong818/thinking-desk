@@ -49,6 +49,13 @@ describe('runAiAction', () => {
     expect((await t.repo.getGraph(PID)).items).toEqual([]);
   });
 
+  it('leads with what the error code means and keeps the provider detail after it', async () => {
+    const t = deps({ status: 502, body: { error: 'ai_failed', code: 'provider', detail: 'fetch failed', run: { ...run, status: 'failed' } } });
+    expect(await runAiAction(t.d, spec)).toEqual({
+      ok: false, aborted: false, message: 'AI 服务调用失败（检查网络 / 代理 / API key）：fetch failed',
+    });
+  });
+
   it('reports output without usable items as a failure (the run is recorded failed)', async () => {
     const t = deps({ body: { ok: true, data: validUsers, run } });
     const out = await runAiAction(t.d, { ...spec, adapt: () => ({ drafts: [], replace: [{ node: 'users', type: 'persona' }] }) });

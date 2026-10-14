@@ -20,7 +20,8 @@ export default async function HomePage() {
       last_node_at: r.last_node_at ? r.last_node_at.toISOString() : null,
     }));
   } catch (e) {
-    dbError = e instanceof Error ? e.message : String(e);
+    // An unreachable server rejects with an AggregateError whose message is empty.
+    dbError = (e instanceof Error ? e.message : String(e)) || 'Postgres 不可用';
   }
   return <Home initialProjects={initialProjects} dbError={dbError} />;
 }

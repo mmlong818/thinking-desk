@@ -46,7 +46,7 @@ function askCards(stage: Extract<Stage, { kind: 'ask' }>): CopilotCard[] {
         </>
       ),
     },
-    { tag: 'check', title: '不想答可以跳过', body: '直接点"跳过问卷"就好，我会仅凭原文做最佳努力抽取，但通常完整度会低 15-25 个百分点。' },
+    { tag: 'check', title: '不想答可以跳过', body: '直接点"放弃问卷 · 直接分析"就好，我会仅凭原文做最佳努力抽取，但通常完整度会低 15-25 个百分点。' },
   ];
 }
 
@@ -65,7 +65,7 @@ function interviewCards(stage: Extract<Stage, { kind: 'interview' }>): CopilotCa
         </>
       ),
     },
-    { tag: 'check', title: '答够了随时结束', body: '下面有"结束追问"按钮，任何时候都可以提前收尾。最多 7 轮我会自动收尾。' },
+    { tag: 'check', title: '答够了随时结束', body: '下面有"结束追问 · 直接生成"按钮，任何时候都可以提前收尾。最多 7 轮我会自动收尾。' },
   ];
 }
 

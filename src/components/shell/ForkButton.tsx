@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { addLocalProject, generateLocalSlug } from '@/lib/client-projects';
+import { addLocalProject, generateLocalSlug, listLocalProjects } from '@/lib/client-projects';
 import { completedNodes } from '@/lib/model/completion';
 import { LocalRepository, localProjectId } from '@/lib/model/local-repository';
 import { forkLocalProject } from '@/lib/model/local-transfer';
@@ -54,7 +54,9 @@ export function ForkButton({ fromName, currentNode, store }: Props) {
     if (!name) return;
     setBusy(true);
     try {
-      const summary = `分支自「${fromName}」`;
+      // fromName is derived from the slug for local projects; the local index keeps the real name.
+      const source = listLocalProjects().find((p) => localProjectId(p.slug) === store.projectId)?.name ?? fromName;
+      const summary = `分支自「${source}」`;
       const slug = store.mode === 'pg' ? await forkInDb(store, name, summary) : await forkLocally(store, name, summary);
       router.push(`/project/${slug}/${currentNode}`);
     } catch (e) {

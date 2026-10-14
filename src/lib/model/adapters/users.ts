@@ -1,21 +1,17 @@
 import type { Job, JobsRefinement, Persona, PersonaBatch, UsersAnalysis } from '../../ai/schemas/analyze-users';
+import type { ItemStance } from '../../ai/schemas/stance';
 import type { ItemDraft } from '../repository';
-import { critiqueDrafts, neutral, recommend, scopes, summaryDraft, type AdaptedOutput } from './common';
+import { critiqueDrafts, modelStance, recommend, scopes, summaryDraft, type AdaptedOutput } from './common';
 
 export const JOB_DIMENSIONS = ['functional', 'emotional', 'social'] as const;
 
-// The primary persona and the AI's priority jobs are recommendations; candidate personas stay
-// neutral so "accept all recommended" does not simply select every persona.
-export const PERSONA_REASON = {
-  primary: 'AI 认为这是最典型的主用户',
-  candidate: '与主用户互补的典型用户 · 产品通常要同时服务多个典型用户',
-} as const;
+// Every persona (primary or candidate) carries the model's own verdict as aiStance; the AI's
+// priority jobs are recommendations.
 export const JOB_PRIORITY_REASON = 'AI 建议锁定为优先 · 每类 Job 最多 1 个';
 
-export function personaDrafts(personas: readonly Persona[]): ItemDraft[] {
-  return personas.map((p) => ({
-    ref: p.id, type: 'persona', body: p, aiStance: p.role === 'primary' ? recommend(PERSONA_REASON.primary) : neutral(PERSONA_REASON.candidate),
-  }));
+/** The stance becomes aiStance (missing → neutral), not part of the body. */
+export function personaDrafts(personas: ReadonlyArray<Persona & { stance: ItemStance }>): ItemDraft[] {
+  return personas.map(({ stance, ...body }): ItemDraft => ({ ref: body.id, type: 'persona', body, aiStance: modelStance(stance) }));
 }
 
 /** `persona_ids` stays on the raw body: the type registry turns it into derived_from Links. */

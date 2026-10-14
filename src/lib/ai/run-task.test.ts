@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { RunSchema } from '../model/types';
-import { DATA_GUARD } from './prompt';
+import { DATA_GUARD, READER_RULE } from './prompt';
 import { promptVersionOf, runTask, RunTaskError, toRunInput, type RunTaskDeps, type RunTaskSpec } from './run-task';
 import type { AiProvider, CompleteRequest, CompleteResult } from './types';
 
@@ -60,7 +60,7 @@ describe('runTask · success and retry', () => {
     const { $schema: _dialect, ...expected } = z.toJSONSchema(Out, { io: 'output' });
     expect(req.schema).toEqual(expected);
     expect(req.schema).toMatchObject({ type: 'object', required: ['title', 'tags'], additionalProperties: false });
-    expect(req.messages[0]).toEqual({ role: 'system', content: `SYSTEM\n\n${DATA_GUARD}` });
+    expect(req.messages[0]).toEqual({ role: 'system', content: `SYSTEM\n\n${READER_RULE}\n\n${DATA_GUARD}` });
     expect(req.messages[1]).toEqual({ role: 'user', content: 'hi' });
     expect(req.maxTokens).toBe(1000);
     expect(req.signal).toBeInstanceOf(AbortSignal);

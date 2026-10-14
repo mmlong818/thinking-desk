@@ -1,6 +1,7 @@
 // Client-safe task contract: Zod schemas, types and UI constants only. Never import the router,
 // providers or tasks here (enforced by client-safety.test.ts).
 import { z } from 'zod';
+import { StanceField } from './stance';
 
 export const PersonaSchema = z.object({
   id: z.string(),
@@ -13,6 +14,9 @@ export const PersonaSchema = z.object({
   pain: z.string(),
 });
 export type Persona = z.infer<typeof PersonaSchema>;
+
+/** A persona as the model outputs it: the body plus its own verdict (adapters move it to aiStance). */
+const StancedPersonaSchema = PersonaSchema.extend({ stance: StanceField });
 
 export const JobSchema = z.object({
   id: z.string(),
@@ -41,7 +45,7 @@ export const JobsRefinementSchema = z.object({
 export type JobsRefinement = z.infer<typeof JobsRefinementSchema>;
 
 export const UsersAnalysisSchema = z.object({
-  personas: z.array(PersonaSchema).min(1).max(10),
+  personas: z.array(StancedPersonaSchema).min(1).max(10),
   jobs: z.object({
     functional: z.array(JobSchema).min(1),
     emotional: z.array(JobSchema).min(1),
@@ -55,6 +59,6 @@ export const UsersAnalysisSchema = z.object({
 export type UsersAnalysis = z.infer<typeof UsersAnalysisSchema>;
 
 export const PersonaBatchSchema = z.object({
-  personas: z.array(PersonaSchema).min(1).max(3),
+  personas: z.array(StancedPersonaSchema).min(1).max(3),
 });
 export type PersonaBatch = z.infer<typeof PersonaBatchSchema>;

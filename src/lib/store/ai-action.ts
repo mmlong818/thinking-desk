@@ -49,7 +49,7 @@ const CODE_MESSAGE: Record<string, string> = {
   invalid_output: 'AI 输出格式不合规（已自动重试一次）',
   truncated: 'AI 输出超出长度上限被截断',
   refused: 'AI 拒绝回答（安全策略）',
-  provider: 'AI 服务调用失败',
+  provider: 'AI 服务调用失败（检查网络 / 代理 / API key）',
 };
 
 interface RouteAnswer {
@@ -104,7 +104,9 @@ async function recordFailure(deps: AiActionDeps, spec: AiActionSpec<unknown>, ru
 }
 
 function failureMessage(json: RouteAnswer, status: number): string {
-  return json.detail ?? (json.code ? CODE_MESSAGE[json.code] : undefined) ?? json.error ?? `HTTP ${status}`;
+  const meaning = json.code ? CODE_MESSAGE[json.code] : undefined;
+  if (meaning && json.detail) return `${meaning}：${json.detail}`;
+  return meaning ?? json.detail ?? json.error ?? `HTTP ${status}`;
 }
 
 export async function runAiAction<T>(deps: AiActionDeps, spec: AiActionSpec<T>): Promise<AiActionOutcome<T>> {

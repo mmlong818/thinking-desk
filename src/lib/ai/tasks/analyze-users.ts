@@ -1,4 +1,5 @@
 import { dataBlock } from '../prompt';
+import { stancePromptFragment } from '../stance-prompt';
 import { feedbackBlock } from '../feedback-prompt';
 import type { RegenerationFeedback } from '../../model/feedback';
 import { runTask, type RunTaskResult, type TaskOptions } from '../run-task';
@@ -14,6 +15,11 @@ import {
   type UsersAnalysis,
   type PersonaBatch,
 } from '../schemas/analyze-users';
+
+const PERSONA_STANCE = stancePromptFragment(
+  '每个 persona（personas 的每一条，primary 也要给）',
+  '对 persona 而言：recommend = Brief 原文或用户的澄清回答里能找到这类人（直接点名，或描述了他的处境），且与其他画像在关键维度上明显不同；neutral = 合理的延伸人群，但输入里没有直接依据，值不值得服务取决于团队取舍；caution = 主要靠想象补出来的，或与另一个画像（包括已有画像）只是微调。primary 也按同样标准判断，不因为是 primary 就给 recommend。',
+);
 
 const SYSTEM_PROMPT = `你是「思考工作台」第 02 节点"用户与任务 (JTBD)"的 AI 副驾驶。
 
@@ -48,7 +54,9 @@ const SYSTEM_PROMPT = `你是「思考工作台」第 02 节点"用户与任务 
 可选 kind：check / critique / ask
 
 # 输出
-严格 JSON，不含任何前后文、不用 Markdown 代码块。`;
+严格 JSON，不含任何前后文、不用 Markdown 代码块。
+
+${PERSONA_STANCE}`;
 
 const REFINE_JOBS_PROMPT = `你是「思考工作台」第 02 节点"用户与任务 (JTBD)"的 AI 副驾驶。
 用户已经从画像库里选定了一批 persona 作为产品聚焦对象。现在要你**基于这批 persona 重新整理 Jobs 清单**。
@@ -97,7 +105,9 @@ const ADD_PERSONAS_PROMPT = `你是「思考工作台」第 02 节点的 AI 副�
 与初始分析一致：name 带真实感、one_liner 1-2 句定位、meta 标签、story 2-3 句场景 + 矛盾、pain 是"最烦的一刻"。
 
 # 输出
-严格 JSON：{"personas": [ ... 3 个 ...]}，不含任何前后文。`;
+严格 JSON：{"personas": [ ... 3 个 ...]}，不含任何前后文。
+
+${PERSONA_STANCE}`;
 
 interface BriefArgs {
   brief: BriefContext;
