@@ -66,10 +66,32 @@ html, body {
 .main { flex: 1; display: flex; min-height: 0; min-width: 0; }
 
 /* ---- left nav ---- */
-.nav { width: 272px; flex-shrink: 0; background: var(--paper); border-right: 1px solid var(--rule); overflow-y: auto; padding: 22px 0; }
+.nav { width: 272px; flex-shrink: 0; background: var(--paper); border-right: 1px solid var(--rule); overflow-y: auto; padding: 22px 0; position: relative; }
+/* Folded rail: node numbers only (done = green). Below 1280 px unless the person opened it; always when they closed it. */
+.nav-toggle { position: absolute; top: 14px; right: 10px; width: 24px; height: 24px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-3); cursor: pointer; font-size: 13px; line-height: 1; display: grid; place-items: center; }
+.nav-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.nav-toggle-unfold, .nav-mini-progress { display: none; }
+.nav-mini-progress { text-align: center; font-family: var(--mono); font-size: 10px; color: var(--ink-4); margin-bottom: 6px; }
+.node-row.done .node-num { color: var(--ok); }
+.nav[data-pref="closed"] { width: 56px; }
+.nav[data-pref="closed"] .nav-project, .nav[data-pref="closed"] .nav-title, .nav[data-pref="closed"] .nav-section-label,
+.nav[data-pref="closed"] .node-label, .nav[data-pref="closed"] .node-state, .nav[data-pref="closed"] .nav-toggle-fold { display: none; }
+.nav[data-pref="closed"] .nav-toggle-unfold, .nav[data-pref="closed"] .nav-mini-progress { display: block; }
+.nav[data-pref="closed"] .nav-toggle { position: static; margin: 0 auto 10px; }
+.nav[data-pref="closed"] .node-row { grid-template-columns: 1fr; padding: 10px 0; }
+.nav[data-pref="closed"] .node-num { justify-content: center; }
+@media (max-width: 1279px) {
+  .nav[data-pref="auto"] { width: 56px; }
+  .nav[data-pref="auto"] .nav-project, .nav[data-pref="auto"] .nav-title, .nav[data-pref="auto"] .nav-section-label,
+  .nav[data-pref="auto"] .node-label, .nav[data-pref="auto"] .node-state, .nav[data-pref="auto"] .nav-toggle-fold { display: none; }
+  .nav[data-pref="auto"] .nav-toggle-unfold, .nav[data-pref="auto"] .nav-mini-progress { display: block; }
+  .nav[data-pref="auto"] .nav-toggle { position: static; margin: 0 auto 10px; }
+  .nav[data-pref="auto"] .node-row { grid-template-columns: 1fr; padding: 10px 0; }
+  .nav[data-pref="auto"] .node-num { justify-content: center; }
+}
 .nav-title { padding: 0 22px; font-family: var(--serif); font-size: 11px; letter-spacing: .25em; color: var(--ink-4); text-transform: uppercase; font-weight: 500; margin-bottom: 14px; }
 .nav-project { padding: 0 22px 16px; border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
-.nav-project-name { font-family: var(--serif); font-size: 16px; font-weight: 700; line-height: 1.4; }
+.nav-project-name { font-family: var(--serif); font-size: 16px; font-weight: 700; line-height: 1.4; padding-right: 22px; }
 .nav-project-sub { font-size: 11px; color: var(--ink-4); margin-top: 6px; font-family: var(--mono); display: flex; align-items: center; gap: 6px; }
 .progress-bar { margin-top: 10px; height: 3px; border-radius: 2px; background: var(--rule); overflow: hidden; position: relative; }
 .progress-bar > div { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 2px; transition: width 200ms ease-out; }
