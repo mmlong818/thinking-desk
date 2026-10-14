@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 import { NODES, type NodeDef, type NodeKind } from '@/data/nodes';
 import type { StoreRef } from '@/lib/store/store-ref';
 import { ClientProjectName } from './ClientProjectName';
@@ -14,7 +17,39 @@ interface Props {
   store: StoreRef;
 }
 
+// Below 1280 px the rail folds to node numbers (CSS, so the first paint is already right);
+// the toggle overrides that per browser. pref: auto = follow the width, open / closed = the person's choice.
+type NavPref = 'auto' | 'open' | 'closed';
+const PREF_KEY = 'td:nav-pref';
+
+function useNavPref() {
+  const [pref, setPref] = useState<NavPref>('auto');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PREF_KEY);
+      if (saved === 'open' || saved === 'closed') setPref(saved);
+    } catch {
+      // storage unavailable: keep following the width
+    }
+  }, []);
+  const choose = (next: NavPref) => {
+    setPref(next);
+    try {
+      localStorage.setItem(PREF_KEY, next);
+    } catch {
+      // the choice just won't survive a reload
+    }
+  };
+  return { pref, choose };
+}
+
 export function NavRail({ projectSlug, projectName, active, completed, lockedKinds = [], store }: Props) {
+  const { pref, choose } = useNavPref();
+  const navRef = useRef<HTMLElement>(null);
+  const toggle = () => {
+    const folded = (navRef.current?.getBoundingClientRect().width ?? 0) < 100;
+    choose(folded ? 'open' : 'closed');
+  };
   const lockedSet = new Set(lockedKinds);
   const sections = [...new Set(NODES.map((n) => n.section))];
   const completedSet = new Set(completed);
@@ -22,7 +57,12 @@ export function NavRail({ projectSlug, projectName, active, completed, lockedKin
   const pct = Math.round((doneCount / NODES.length) * 100);
 
   return (
-    <aside className="nav">
+    <aside className="nav" data-pref={pref} ref={navRef}>
+      <button type="button" className="nav-toggle" onClick={toggle} title="收起 / 展开项目地图" aria-label="收起或展开项目地图">
+        <span className="nav-toggle-fold">«</span>
+        <span className="nav-toggle-unfold">»</span>
+      </button>
+      <div className="nav-mini-progress" title={`总进度 ${pct}%`}>{doneCount}/{NODES.length}</div>
       <div className="nav-project">
         <div className="nav-project-name"><ClientProjectName slug={projectSlug} fallback={projectName} /></div>
         <div className="nav-project-sub">
@@ -60,7 +100,7 @@ export function NavRail({ projectSlug, projectName, active, completed, lockedKin
 type RowState = 'doing' | 'done' | 'locked' | 'todo';
 
 function NavNodeRow({ node: n, href, state }: { node: NodeDef; href: string; state: RowState }) {
-  const className = `node-row ${state === 'doing' ? 'active' : ''} ${state === 'locked' ? 'locked' : ''}`;
+  const className = `node-row ${state === 'doing' ? 'active' : ''} ${state === 'locked' ? 'locked' : ''} ${state === 'done' ? 'done' : ''}`;
   const inner = (
     <>
       <div className="node-num">{n.num}</div>
@@ -79,7 +119,7 @@ function NavNodeRow({ node: n, href, state }: { node: NodeDef; href: string; sta
     </>
   );
   if (state === 'locked') {
-    return <span className={className} aria-disabled="true" title="上游节点未完成">{inner}</span>;
+    return <span className={className} aria-disabled="true" title={`${n.num} ${n.label} · 上游节点未完成`}>{inner}</span>;
   }
-  return <Link href={href} className={className}>{inner}</Link>;
+  return <Link href={href} className={className} title={`${n.num} ${n.label}`}>{inner}</Link>;
 }
