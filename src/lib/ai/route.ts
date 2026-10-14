@@ -91,6 +91,6 @@ function errorAnswer(name: string, e: unknown): ErrorAnswer {
   const dev = process.env.NODE_ENV !== 'production';
   const detail = dev ? { detail: message || 'unknown error' } : {};
   if (!(e instanceof RunTaskError)) return { status: 502, body: { error: 'ai_failed', ...detail } };
-  const run = dev ? e.run : { ...e.run, error: undefined };
+  const run = dev ? e.run : { ...e.run, error: undefined, retry: undefined };
   return { status: STATUS[e.code] ?? 502, body: { error: 'ai_failed', code: e.code, run, ...detail } };
 }

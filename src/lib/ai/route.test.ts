@@ -61,12 +61,16 @@ describe('aiRoute', () => {
   it('hides provider error text in production', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.stubEnv('NODE_ENV', 'production');
-    const failed = { ...run, status: 'failed' as const, error: 'provider: OpenAI 401: key sk-…' };
+    const failed = {
+      ...run, status: 'failed' as const, error: 'provider: OpenAI 401: key sk-…',
+      retry: { code: 'invalid_output', issues: ['title: Too small'] },
+    };
     const res = await route(async () => { throw new RunTaskError('provider', 'OpenAI 401: key sk-…', failed); })(post({ q: 'a' }));
     const json = await res.json();
     expect(res.status).toBe(502);
     expect(json).not.toHaveProperty('detail');
     expect(json.run).not.toHaveProperty('error');
+    expect(json.run).not.toHaveProperty('retry');
     expect(JSON.stringify(json)).not.toContain('sk-');
   });
 });

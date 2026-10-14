@@ -14,8 +14,8 @@ export const FORK_SQL = {
   insertProject: `INSERT INTO projects (owner_id, name, slug, summary)
     SELECT owner_id, $2, $3, $4 FROM projects WHERE id = $1 RETURNING *`,
   copyRuns: `INSERT INTO runs (project_id, id, task, node, provider, model, prompt_version, inputs, status, error,
-                    usage, latency_ms, created_at)
-    SELECT $2, id, task, node, provider, model, prompt_version, inputs, status, error, usage, latency_ms, created_at
+                    usage, retry, latency_ms, created_at)
+    SELECT $2, id, task, node, provider, model, prompt_version, inputs, status, error, usage, retry, latency_ms, created_at
     FROM runs WHERE project_id = $1 ORDER BY seq`,
   copyItems: `INSERT INTO items (project_id, id, node, type, body, origin, decision, decision_note, ai_stance, evidence,
                      version, run_id, created_at, updated_at, deleted_at)

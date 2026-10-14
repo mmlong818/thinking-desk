@@ -53,8 +53,14 @@ describe('rowToLink / rowToRun / rowToEvent', () => {
     expect(rowToRun({
       project_id: PID, id: 'run_1', task: 'USERS_JTBD', node: 'users', provider: 'claude', model: 'm',
       prompt_version: 'h', inputs: [{ itemId: 'brf_1', version: 2 }], status: 'ok', error: null, usage: null,
-      latency_ms: 10, created_at: new Date('2026-10-13T00:00:00Z'),
+      retry: null, latency_ms: 10, created_at: new Date('2026-10-13T00:00:00Z'),
     })).toMatchObject({ promptVersion: 'h', latencyMs: 10, inputs: [{ itemId: 'brf_1', version: 2 }] });
+    expect(rowToRun({
+      project_id: PID, id: 'run_2', task: 'USERS_JTBD', node: 'users', provider: 'claude', model: 'm',
+      prompt_version: 'h', inputs: [], status: 'retried', error: null, usage: null,
+      retry: { code: 'invalid_output', issues: ['personas.0.name: Too small'] },
+      latency_ms: 10, created_at: new Date('2026-10-13T00:00:00Z'),
+    })).toMatchObject({ status: 'retried', retry: { code: 'invalid_output', issues: ['personas.0.name: Too small'] } });
     expect(rowToEvent({
       project_id: PID, id: 'evt_1', item_id: 'per_1', kind: 'accepted', from_version: 1, to_version: 1,
       note: null, prev_body: null, link: null, actor: 'human', at: new Date('2026-10-13T00:00:00Z'),

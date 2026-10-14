@@ -66,6 +66,7 @@ One record per AI call; replaces the `ai_exchanges` log. Append-only.
 | `inputs` | `{ itemId, version }[]` — the items fed into the prompt. |
 | `status` | `ok` \| `retried` \| `failed`; `error?` |
 | `usage?` | `{ inputTokens, outputTokens }` |
+| `retry?` | `{ code, issues[] }` — why the first answer was thrown away (validation code + up to 3 issues); set on `retried` runs and on runs that failed after the retry. Stripped from production error answers like `error`. |
 | `latencyMs`, `createdAt` | |
 
 ### DecisionEvent
@@ -286,7 +287,7 @@ CREATE TABLE runs (
   id TEXT NOT NULL, seq BIGINT GENERATED ALWAYS AS IDENTITY,
   task TEXT NOT NULL, node TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
   prompt_version TEXT NOT NULL, inputs JSONB NOT NULL DEFAULT '[]',
-  status TEXT NOT NULL CHECK (status IN ('ok','retried','failed')), error TEXT, usage JSONB,
+  status TEXT NOT NULL CHECK (status IN ('ok','retried','failed')), error TEXT, usage JSONB, retry JSONB,
   latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0), created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (project_id, id)
 );

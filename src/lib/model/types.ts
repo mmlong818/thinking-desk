@@ -125,6 +125,10 @@ export const UsageSchema = z.object({
 });
 export type Usage = z.infer<typeof UsageSchema>;
 
+/** Why the first answer was thrown away and the call retried (code + the first validation issues). */
+export const RunRetrySchema = z.object({ code: z.string(), issues: z.array(z.string()) });
+export type RunRetry = z.infer<typeof RunRetrySchema>;
+
 /**
  * Stored runs keep `task` as a plain string so that runs recorded under an
  * AiTask literal that was later pruned still load. New runs are typed AiTask
@@ -142,6 +146,7 @@ export const RunSchema = z.object({
   status: z.enum(RUN_STATUSES),
   error: z.string().optional(),
   usage: UsageSchema.optional(),
+  retry: RunRetrySchema.optional(),
   latencyMs: z.number().int().min(0),
   createdAt: Timestamp,
 });
