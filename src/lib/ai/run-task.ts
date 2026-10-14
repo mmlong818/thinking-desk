@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { z } from 'zod';
-import type { RunStatus, Usage } from '../model/types';
+import type { RunRetry, RunStatus, Usage } from '../model/types';
 import { Deadline, DeadlineError } from './deadline';
 import { parseJsonLoose } from './json';
 import { taskJsonSchema } from './json-schema';
@@ -60,6 +60,8 @@ export interface RunMeta {
   latencyMs: number;
   usage?: Usage;
   error?: string;
+  /** Set once the first answer failed validation and the call was retried. */
+  retry?: RunRetry;
 }
 
 export interface RunTaskResult<T> {
@@ -177,6 +179,7 @@ async function attempt(
       throw new RunTaskError(outcome.code, outcome.message, meta, outcome.issues);
     }
     retry = { code: outcome.code, issues: outcome.issues.slice(0, 3) };
+    meta.retry = retry;
     messages = [...messages, { role: 'assistant', content: res.text || '（空输出）' }, { role: 'user', content: retryPrompt(outcome.issues) }];
   }
 }

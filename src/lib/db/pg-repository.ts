@@ -42,8 +42,8 @@ export const SQL = {
   selectItem: 'SELECT * FROM items WHERE project_id = $1 AND id = $2',
   selectLinks: 'SELECT * FROM links WHERE project_id = $1',
   insertRun: `INSERT INTO runs (project_id, id, task, node, provider, model, prompt_version,
-                      inputs, status, error, usage, latency_ms, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12, $13)`,
+                      inputs, status, error, usage, retry, latency_ms, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12::jsonb, $13, $14)`,
   insertItems: `INSERT INTO items (project_id, id, node, type, body, origin, decision, decision_note,
                        ai_stance, evidence, version, run_id, created_at, updated_at, deleted_at)
     SELECT $1::uuid, e.v->>'id', e.v->>'node', e.v->>'type', e.v->'body', e.v->>'origin', e.v->>'decision',
@@ -104,7 +104,7 @@ async function writeRun(tx: SqlExecutor, run: Run) {
   await tx.query(SQL.insertRun, [
     run.projectId, run.id, run.task, run.node, run.provider, run.model, run.promptVersion,
     JSON.stringify(run.inputs), run.status, run.error ?? null, run.usage ? JSON.stringify(run.usage) : null,
-    run.latencyMs, run.createdAt,
+    run.retry ? JSON.stringify(run.retry) : null, run.latencyMs, run.createdAt,
   ]);
 }
 

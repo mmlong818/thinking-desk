@@ -54,6 +54,7 @@ export interface RunRow {
   status: string;
   error: string | null;
   usage: unknown;
+  retry: unknown;
   latency_ms: number;
   created_at: Timestamp;
 }
@@ -104,7 +105,7 @@ export function rowToRun(row: RunRow): Run | null {
   const r = RunSchema.safeParse(compact({
     id: row.id, projectId: row.project_id, task: row.task, node: row.node, provider: row.provider,
     model: row.model, promptVersion: row.prompt_version, inputs: row.inputs, status: row.status,
-    error: row.error, usage: row.usage, latencyMs: row.latency_ms, createdAt: iso(row.created_at),
+    error: row.error, usage: row.usage, retry: row.retry, latencyMs: row.latency_ms, createdAt: iso(row.created_at),
   }));
   return r.success ? r.data : null;
 }

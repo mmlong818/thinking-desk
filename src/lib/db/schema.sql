@@ -43,11 +43,14 @@ CREATE TABLE IF NOT EXISTS runs (
   status         TEXT NOT NULL CHECK (status IN ('ok','retried','failed')),
   error          TEXT,
   usage          JSONB,                                -- { inputTokens, outputTokens }
+  retry          JSONB,                                -- { code, issues[] } when the first answer failed validation
   latency_ms     INTEGER NOT NULL CHECK (latency_ms >= 0),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (project_id, id)
 );
 CREATE INDEX IF NOT EXISTS runs_project_created_idx ON runs (project_id, created_at DESC);
+-- Databases initialised before runs.retry existed.
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS retry JSONB;
 
 -- Every unit of content, AI- or human-authored, with the human's judgment.
 -- Ids are '<type prefix>_<random>' and unique per project; rows are never

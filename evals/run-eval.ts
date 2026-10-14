@@ -52,6 +52,7 @@ async function runBrief(t: Target, brief: GoldenBrief, dir: string): Promise<Bri
     saveStep(briefDir, r);
     const secs = r.run ? `${(r.run.latencyMs / 1000).toFixed(1)}s` : '';
     console.log(`  ${r.step.padEnd(13)} ${r.status.padEnd(8)} ${secs}${r.error ? ` · ${r.error.slice(0, 160)}` : ''}`);
+    if (r.run?.retry) console.log(`  ${''.padEnd(13)} retry: ${r.run.retry.issues.join(' | ').slice(0, 160)}`);
   });
   return { brief: brief.id, records };
 }

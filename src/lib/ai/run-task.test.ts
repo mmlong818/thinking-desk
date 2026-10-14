@@ -50,6 +50,7 @@ describe('runTask · success and retry', () => {
       usage: { inputTokens: 10, outputTokens: 4 }, latencyMs: 50,
     });
     expect(res.run.promptVersion).toMatch(/^sha256:[0-9a-f]{16}$/);
+    expect(res.run.retry).toBeUndefined();
   });
 
   it('sends the JSON Schema built from the Zod schema and appends the data guard to the system prompt', async () => {
@@ -74,6 +75,9 @@ describe('runTask · success and retry', () => {
     expect(retry.at(-1)?.role).toBe('user');
     expect(retry.at(-1)?.content).toContain('title:');
     expect(retry.at(-1)?.content).toContain('tags:');
+    expect(res.run.retry?.code).toBe('invalid_output');
+    expect(res.run.retry?.issues.some((x) => x.startsWith('title:'))).toBe(true);
+    expect(res.run.retry?.issues.some((x) => x.startsWith('tags:'))).toBe(true);
   });
 
   it('treats non-JSON text as invalid output and retries', async () => {
@@ -99,6 +103,7 @@ describe('runTask · failures', () => {
     expect(e.issues.length).toBeGreaterThan(0);
     expect(e.run).toMatchObject({ status: 'failed', attempts: 2 });
     expect(e.run.error).toMatch(/^invalid_output: /);
+    expect(e.run.retry).toMatchObject({ code: 'invalid_output', issues: expect.arrayContaining([expect.stringMatching(/^title:/)]) });
     expect(f.requests).toHaveLength(2);
   });
 
@@ -196,5 +201,14 @@ describe('promptVersion / toRunInput', () => {
       expect(run.success).toBe(true);
     }
     expect(toRunInput(failed.run, { node: 'brief' })).toMatchObject({ status: 'failed', error: expect.stringMatching(/^invalid_output/) });
+  });
+
+  it('keeps why a run was retried on the Run record', async () => {
+    const retried = await runTask(spec(), fake({ text: INVALID }, {}).deps);
+    const input = toRunInput(retried.run, { node: 'brief' });
+    expect(input).toMatchObject({ status: 'retried', retry: { code: 'invalid_output' } });
+    expect(input.retry?.issues.length).toBeGreaterThan(0);
+    expect(RunSchema.safeParse({ ...input, id: 'run_1', projectId: 'p', createdAt: '2026-10-13T00:00:00.000Z' }).success).toBe(true);
+    expect(toRunInput((await runTask(spec(), fake({}).deps)).run, { node: 'brief' })).not.toHaveProperty('retry');
   });
 });
