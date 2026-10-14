@@ -34,6 +34,19 @@ describe('ruleFindings', () => {
     ]);
   });
 
+  it('counts a final-list feature as serving the jobs of the 06 feature it was revised from', () => {
+    const items = [
+      feature('ftr_06', { node: 'feat' }), feature('ftr_rev'), feature('ftr_new'), feature('ftr_06_nojob', { node: 'feat' }),
+      feature('ftr_rev_nojob'), job('job_a'),
+    ];
+    const links = [
+      link('ftr_06', 'job_a', 'serves'), link('ftr_rev', 'ftr_06', 'derived_from'),
+      link('ftr_rev_nojob', 'ftr_06_nojob', 'derived_from'),
+    ];
+    expect(codes(items, links).filter(([c]) => c === 'feature.no_job').map(([, ids]) => (ids as string[])[0]).sort())
+      .toEqual(['ftr_06_nojob', 'ftr_new', 'ftr_rev_nojob']);
+  });
+
   it('flags modules without an accepted feature and subtasks without an accepted feature or module', () => {
     const items = [
       feature('ftr_a'), job('job_a'), moduleItem('mod_ok'), moduleItem('mod_none'),

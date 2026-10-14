@@ -368,3 +368,24 @@ describe('planRunOutput · exhaustive scopes (an empty answer is valid)', () => 
     expect(plan.run).toMatchObject({ status: 'failed', error: 'run produced no items' });
   });
 });
+
+describe('planRunOutput · ids in prose', () => {
+  it('names existing items and sibling drafts that the AI cited by id in body text', () => {
+    const existing = makeItem({ id: 'per_x1', body: personaBody('小宇 · 初二男生') });
+    const plan = planRunOutput(
+      { items: [existing], links: [] },
+      output({
+        drafts: [
+          { ref: 'p9', type: 'persona', body: { ...rawPersona('p9', '思齐'), story: '和 per_x1 一样卡住时想有人带（p9）' } },
+          { ref: 'j1', type: 'job', body: { ...rawJob('j1', ['p9']), title: 'p9 卡住时获得引导' } },
+        ],
+        replace: [],
+      }),
+      ctx(),
+    );
+    const [p, j] = plan.created;
+    expect((p.body as { story: string }).story).toBe('和「小宇」一样卡住时想有人带');
+    expect((j.body as { title: string }).title).toBe('「思齐」卡住时获得引导');
+    expect(plan.linksAdded).toEqual([expect.objectContaining({ from: j.id, to: p.id })]);
+  });
+});

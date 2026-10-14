@@ -162,6 +162,12 @@ export function EditableList({
   placeholder?: string;
   addLabel?: string;
 }) {
+  // A new line is typed in place and appended only when it has text (an empty one would be filtered or saved blank).
+  const [adding, setAdding] = useState(false);
+  const commitNew = (text: string) => {
+    setAdding(false);
+    if (text.trim()) onChange([...items, text.trim()]);
+  };
   return (
     <ul className="editable-list">
       {items.map((it, i) => (
@@ -192,9 +198,22 @@ export function EditableList({
         </li>
       ))}
       <li className="editable-list-add">
-        <button type="button" className="editable-add" onClick={() => onChange([...items, ''])}>
-          {addLabel ?? '+ 添加一条'}
-        </button>
+        {adding ? (
+          <input
+            autoFocus
+            className="editable editable-input"
+            placeholder={placeholder}
+            onBlur={(e) => commitNew(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.blur();
+              if (e.key === 'Escape') setAdding(false);
+            }}
+          />
+        ) : (
+          <button type="button" className="editable-add" onClick={() => setAdding(true)}>
+            {addLabel ?? '+ 添加一条'}
+          </button>
+        )}
       </li>
     </ul>
   );

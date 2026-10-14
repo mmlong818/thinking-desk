@@ -3,6 +3,8 @@ import { createIdAllocator, type IdAllocator, type IdSource } from './ids';
 import { buildLinks, classifyDrafts, type Classification, type ResolvedDraft } from './ingest';
 import { asItem, isSingletonType, type Item } from './item-types';
 import { keptPrevBody, makeEvent, type EventSpec } from './events';
+import { bodySummary, shortName } from './feedback';
+import { humanizeIds } from './humanize-ids';
 import { retireCandidates } from './regenerate';
 import {
   RepositoryError, type IngestIssue, type ReplaceScope, type RunOutputInput, type SaveRunResult,
@@ -112,6 +114,18 @@ function versionSeenFn(run: Run, liveById: ReadonlyMap<string, Item>, written: r
   };
 }
 
+/** Names for the ids the AI may cite in prose: live items by id, this run's drafts by their temp ref. */
+function idNames(live: readonly Item[], resolved: readonly ResolvedDraft[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const i of live) names.set(i.id, shortName(bodySummary(i.type, i.body)));
+  for (const r of resolved) {
+    const ref = r.draft.ref;
+    // Temp refs like "alt_07" / "p9"; a bare word without a digit could be ordinary prose.
+    if (ref && ref.length >= 2 && /\d/.test(ref)) names.set(ref, shortName(bodySummary(r.draft.type, r.body)));
+  }
+  return names;
+}
+
 function emptyPlan(run: Run, issues: IngestIssue[] = []): RunPlan {
   return {
     run, created: [], updated: [], retired: [], linksAdded: [], linksRemoved: [], events: [], idMap: {}, issues,
@@ -150,6 +164,8 @@ export function planRunOutput(state: PlanState, input: RunOutputInput, ctx: Plan
   const live = state.items.filter((i) => !i.deletedAt);
   const liveById = indexById(live);
   const c = classifyDrafts(input.drafts, liveById, run.node, alloc);
+  const names = idNames(live, c.resolved);
+  c.resolved = c.resolved.map((r) => ({ ...r, body: humanizeIds(r.body, names) }));
   const error = noOutputError(input, c);
   if (error) return emptyPlan({ ...run, status: 'failed', error }, c.issues);
   const scopes = filledScopes(input.replace, c);

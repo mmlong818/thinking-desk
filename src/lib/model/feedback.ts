@@ -83,8 +83,21 @@ function clip(text: string): string {
 
 /** One-line, per-type summary of an item (prompt feedback, exports, compact UI). */
 export function itemSummary(item: Item): string {
-  const fn = SUMMARY[item.type] as (b: unknown) => string;
-  return clip(fn(item.body));
+  return bodySummary(item.type, item.body);
+}
+
+const SHORT_NAME_MAX = 24;
+
+/** The name part of a summary ("名称 · 描述" → "名称"), for citing an item inside a sentence. */
+export function shortName(summary: string): string {
+  const head = summary.split(/ · | → /)[0].trim();
+  return head.length > SHORT_NAME_MAX ? `${head.slice(0, SHORT_NAME_MAX - 1)}…` : head;
+}
+
+/** itemSummary for a body that is not an Item yet (a draft being planned). */
+export function bodySummary(type: ItemType, body: unknown): string {
+  const fn = SUMMARY[type] as (b: unknown) => string;
+  return clip(fn(body));
 }
 
 /** "<type> <summary>" of each upstream item whose change made `item` stale, or '' when it is not stale. */

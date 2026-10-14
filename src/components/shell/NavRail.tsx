@@ -26,7 +26,7 @@ export function NavRail({ projectSlug, projectName, active, completed, lockedKin
       <div className="nav-project">
         <div className="nav-project-name"><ClientProjectName slug={projectSlug} fallback={projectName} /></div>
         <div className="nav-project-sub">
-          <span>本地演示项目</span>
+          <span>{store.mode === 'pg' ? 'Postgres 项目' : '本地项目 · 存在本浏览器'}</span>
         </div>
         <div className="progress-bar"><div style={{ width: `${pct}%` }} /></div>
         <div className="progress-label">

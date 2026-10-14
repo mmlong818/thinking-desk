@@ -1,6 +1,6 @@
 import { NODES, type NodeKind } from '../../data/nodes';
 import { indexById, type Graph } from './graph';
-import { itemSummary } from './feedback';
+import { itemSummary, shortName } from './feedback';
 import type { Item } from './item-types';
 import type { Link, LinkRel } from './types';
 
@@ -36,7 +36,7 @@ interface Ctx {
   accepted: readonly Item[];
 }
 
-const name = (i: Item) => `「${itemSummary(i)}」`;
+const name = (i: Item) => `「${shortName(itemSummary(i))}」`;
 
 function targets(ctx: Ctx, from: string, rel: LinkRel): Item[] {
   return ctx.links
@@ -69,9 +69,15 @@ function noSubtaskRule(ctx: Ctx): RuleFinding[] {
     .map((i) => finding('feature.no_subtask', i, `功能${name(i)}还没有任何已采纳的子任务`, 'info'));
 }
 
+const servesAcceptedJob = (ctx: Ctx, id: string) => targets(ctx, id, 'serves').some((t) => t.type === 'job' && isAccepted(t));
+
+/** A final-list feature revised from a 06 feature serves that feature's jobs (it carries no serves links of its own). */
+const servesJob = (ctx: Ctx, feature: Item) => servesAcceptedJob(ctx, feature.id)
+  || targets(ctx, feature.id, 'derived_from').some((t) => t.type === 'feature' && servesAcceptedJob(ctx, t.id));
+
 const RULES: ReadonlyArray<(ctx: Ctx) => RuleFinding[]> = [
   (ctx) => ctx.accepted
-    .filter((i) => i.type === 'feature' && !targets(ctx, i.id, 'serves').some((t) => t.type === 'job' && isAccepted(t)))
+    .filter((i) => i.type === 'feature' && !servesJob(ctx, i))
     .map((i) => finding('feature.no_job', i, `功能${name(i)}没有服务任何已采纳的 Job`, 'info')),
   (ctx) => ctx.accepted
     .filter((i) => i.type === 'module' && !targets(ctx, i.id, 'implements').some((t) => t.type === 'feature' && isAccepted(t)))

@@ -4,7 +4,7 @@ import type { RunRetry, RunStatus, Usage } from '../model/types';
 import { Deadline, DeadlineError } from './deadline';
 import { parseJsonLoose } from './json';
 import { taskJsonSchema } from './json-schema';
-import { DATA_GUARD } from './prompt';
+import { DATA_GUARD, READER_RULE } from './prompt';
 import { resolveProvider } from './router';
 import type { AttemptEvent, TaskProgress } from './stream-protocol';
 import type {
@@ -115,7 +115,7 @@ export async function runTask(spec: RunTaskSpec, explicitDeps?: RunTaskDeps): Pr
   const deps = explicitDeps ?? spec.options?.deps ?? DEFAULT_DEPS;
   const started = deps.now();
   const schema = spec.schema ? taskJsonSchema(spec.schema) : undefined;
-  const system = `${spec.system}\n\n${DATA_GUARD}`;
+  const system = `${spec.system}\n\n${READER_RULE}\n\n${DATA_GUARD}`;
   const meta: RunMeta = {
     task: spec.task, provider: '', model: '', promptVersion: promptVersionOf(system, schema),
     status: 'failed', attempts: 0, latencyMs: 0,
