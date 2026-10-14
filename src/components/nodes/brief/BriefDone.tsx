@@ -119,7 +119,7 @@ function CompletenessSection({ completeness }: { completeness: number }) {
           <div className="completeness-note" style={{ marginTop: 8 }}>
             {reached
               ? <><b>已达阈值</b> —— 可以进入下一节点，剩余项可稍后补充。</>
-              : <><b>还差 {BRIEF_COMPLETENESS_THRESHOLD - completeness} 个百分点</b> —— 右侧的追问逐个回答即可。</>}
+              : <><b>还差 {BRIEF_COMPLETENESS_THRESHOLD - completeness} 个百分点</b> —— 这是抽取时的估计，编辑后不会自动更新。可回答右侧追问补全字段，也可直接采纳 Brief 继续。</>}
           </div>
         </div>
         <ContinueButton node="brief" label="继续 → 02 用户与任务" />
