@@ -10,6 +10,8 @@ import {
   purgeProjectClientData,
   type LocalProject,
 } from '@/lib/client-projects';
+import { completedNodes } from '@/lib/model/completion';
+import { LocalRepository, localProjectId } from '@/lib/model/local-repository';
 import { ImportButton } from './ImportButton';
 
 export interface ServerProject {
@@ -38,10 +40,34 @@ type UnifiedProject = {
   updated_at: string;
   node_count: number;
   last_node_kind: NodeKind | null;
+  /** Completed nodes when known exactly (local projects); server projects only report a count. */
+  done?: NodeKind[];
   source: 'server' | 'local';
 };
 
-function unify(server: ServerProject[], local: LocalProject[]): UnifiedProject[] {
+interface LocalProgress {
+  done: NodeKind[];
+  last: NodeKind | null;
+}
+
+/** Completed nodes and the most recently edited node of each local project, read from its localStorage document. */
+async function localProgress(local: readonly LocalProject[]): Promise<Map<string, LocalProgress>> {
+  const repo = new LocalRepository();
+  const out = new Map<string, LocalProgress>();
+  for (const p of local) {
+    try {
+      const { items } = await repo.getGraph(localProjectId(p.slug));
+      const latest = items.reduce<(typeof items)[number] | null>((a, i) => (!a || i.updatedAt > a.updatedAt ? i : a), null);
+      const completed = completedNodes(items);
+      out.set(p.slug, { done: NODES.filter((n) => completed.has(n.kind)).map((n) => n.kind), last: latest?.node ?? null });
+    } catch {
+      // Unreadable document: the card shows no progress.
+    }
+  }
+  return out;
+}
+
+function unify(server: ServerProject[], local: LocalProject[], progress: ReadonlyMap<string, LocalProgress> = new Map()): UnifiedProject[] {
   const slugs = new Set<string>();
   const out: UnifiedProject[] = [];
   for (const p of server) {
@@ -64,8 +90,9 @@ function unify(server: ServerProject[], local: LocalProject[]): UnifiedProject[]
       name: p.name,
       summary: p.summary,
       updated_at: p.updated_at,
-      node_count: 0,
-      last_node_kind: null,
+      node_count: progress.get(p.slug)?.done.length ?? 0,
+      last_node_kind: progress.get(p.slug)?.last ?? null,
+      done: progress.get(p.slug)?.done,
       source: 'local',
     });
   }
@@ -119,6 +146,7 @@ export function Home({ initialProjects, dbError }: Props) {
   useEffect(() => {
     const local = listLocalProjects();
     setProjects(unify(initialProjects, local));
+    void localProgress(local).then((progress) => setProjects(unify(initialProjects, local, progress)));
   }, [initialProjects]);
 
   const create = () => {
@@ -315,7 +343,7 @@ function ProjectCard({ project: p, onDelete }: { project: UnifiedProject; onDele
         {p.summary ? <div className="home-card-summary">{p.summary}</div> : null}
         <div className="home-card-dots">
           {NODES.map((n, i) => {
-            const done = i < p.node_count;
+            const done = p.done ? p.done.includes(n.kind) : i < p.node_count;
             const isLast = lastKind?.kind === n.kind;
             return (
               <span

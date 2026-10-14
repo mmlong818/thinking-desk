@@ -20,6 +20,8 @@ interface Props {
   leaps: LeapItem[];
   revision: RevisionView | null;
   revising: boolean;
+  /** Any AI call of the node is running: starting another one would abort it. */
+  busy: boolean;
   hasOriginalFeat: boolean;
   links: Link[];
   slug: string;
@@ -28,13 +30,13 @@ interface Props {
   progress?: ReactNode;
 }
 
-export function ApplyLeapsSection({ leaps, revision, revising, hasOriginalFeat, links, slug, onApply, progress }: Props) {
+export function ApplyLeapsSection({ leaps, revision, revising, busy, hasOriginalFeat, links, slug, onApply, progress }: Props) {
   const selected = leaps.filter((l) => l.decision === 'accepted').length;
   return (
     <div className="para-section apply-leaps-section">
       <ParaHead title="应用跃迁 · 产出最终功能列表" hint="§十 → §九 回流 · 方法论的闭环" />
       {revision ? (
-        <RevisionResult revision={revision} leaps={leaps} links={links} slug={slug} onReapply={onApply} revising={revising} />
+        <RevisionResult revision={revision} leaps={leaps} links={links} slug={slug} onReapply={onApply} revising={revising} busy={busy} />
       ) : (
         <div className="apply-leaps-invite">
           <div className="apply-leaps-lead">
@@ -48,7 +50,7 @@ export function ApplyLeapsSection({ leaps, revision, revising, hasOriginalFeat, 
               {revising ? <><span className="ai-spinner" />&nbsp; 修订中 · 通常 90-150 秒</> : <>★ 先在上方采纳 ≥1 条跃迁，才会出现<em>修订按钮</em></>}
             </div>
           ) : (
-            <button type="button" className="btn-revise" onClick={onApply} disabled={!hasOriginalFeat}>
+            <button type="button" className="btn-revise" onClick={onApply} disabled={!hasOriginalFeat || busy}>
               ✦ 应用 <b>{selected}</b> 条跃迁 · 产出 08 最终功能列表
             </button>
           )}
@@ -59,13 +61,14 @@ export function ApplyLeapsSection({ leaps, revision, revising, hasOriginalFeat, 
   );
 }
 
-function RevisionResult({ revision, leaps, links, slug, onReapply, revising }: {
+function RevisionResult({ revision, leaps, links, slug, onReapply, revising, busy }: {
   revision: RevisionView;
   leaps: LeapItem[];
   links: Link[];
   slug: string;
   onReapply: () => void;
   revising: boolean;
+  busy: boolean;
 }) {
   const count = (a: RevisionNote['action']) => revision.revisions.filter((r) => r.body.action === a).length;
   return (
@@ -93,7 +96,7 @@ function RevisionResult({ revision, leaps, links, slug, onReapply, revising }: {
       </div>
       <div className="revision-actions">
         <a href={`/project/${slug}/final`} className="btn btn-accent">启动 · 08 设计案 →</a>
-        <button type="button" className="btn btn-ghost" onClick={onReapply} disabled={revising}>
+        <button type="button" className="btn btn-ghost" onClick={onReapply} disabled={busy}>
           {revising ? <><span className="ai-spinner" />&nbsp; 重新修订</> : '重新应用（改了选择后）'}
         </button>
       </div>

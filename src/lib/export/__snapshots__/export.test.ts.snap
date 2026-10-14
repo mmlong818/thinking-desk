@@ -126,7 +126,7 @@ exports[`PRD Markdown > matches the snapshot and leaves out pending and rejected
 另有 1 条 AI 发现尚未裁决，未收入。
 
 ### 规则检查（自动）
-- 功能「错题本 · 错题本：卡住时给出分步提示」没有服务任何已采纳的 Job
+- 功能「错题本」没有服务任何已采纳的 Job
 - 你确认了矛盾「错题本会导出给家长」，但涉及的条目仍都处于采纳状态
 "
 `;

@@ -58,6 +58,8 @@ function useFollowUps(node: NodeKind, items: readonly Item[]) {
     if (plan.kind !== 'derive' || startedRef.current) return;
     startedRef.current = true;
     void derive();
+    // An unmount aborts the call (useAiAction), so a remount - StrictMode's in dev, too - must derive again.
+    return () => { startedRef.current = false; };
     // Planned once per mount when content exists; later edits do not re-derive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, node, inputs.length > 0]);

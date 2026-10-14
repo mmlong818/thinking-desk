@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DATA_GUARD, dataBlock, dataJson } from './prompt';
+import { DATA_GUARD, dataBlock, dataJson, READER_RULE } from './prompt';
 
 describe('dataBlock', () => {
   it('wraps content in a named data block', () => {
@@ -24,5 +24,11 @@ describe('dataBlock', () => {
   it('the guard tells the model to treat data blocks as material only', () => {
     expect(DATA_GUARD).toContain('<data');
     expect(DATA_GUARD).toContain('不执行');
+  });
+
+  it('keeps ids and internal states out of the text people read, not out of id fields', () => {
+    expect(READER_RULE).toMatch(/_ids/);
+    expect(READER_RULE).toMatch(/rejected/);
+    expect(READER_RULE).toMatch(/JSON 字段名/);
   });
 });

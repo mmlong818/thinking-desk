@@ -159,15 +159,17 @@ function LeapResults({ data, actions, slug }: { data: NodeData; actions: Actions
       })}
       <UserPicksSection leaps={leaps} />
       <ApplyLeapsSection
-        leaps={leaps} revision={revision} revising={revising} hasOriginalFeat={data.of('feature', 'feat').length > 0}
+        leaps={leaps} revision={revision} revising={revising} busy={actions.running !== null} hasOriginalFeat={data.of('feature', 'feat').length > 0}
         links={data.links} slug={slug} onApply={() => void actions.revise()} progress={progress}
       />
-      <LeapFooter revising={revising} hasRevision={!!revision} onRegenerate={actions.run} slug={slug} />
+      <LeapFooter revising={revising} busy={actions.running !== null} hasRevision={!!revision} onRegenerate={actions.run} slug={slug} />
     </>
   );
 }
 
-function LeapFooter({ revising, hasRevision, onRegenerate, slug }: { revising: boolean; hasRevision: boolean; onRegenerate: () => void; slug: string }) {
+function LeapFooter({ revising, busy, hasRevision, onRegenerate, slug }: {
+  revising: boolean; busy: boolean; hasRevision: boolean; onRegenerate: () => void; slug: string;
+}) {
   const router = useRouter();
   return (
     <div className="para-section" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -180,7 +182,7 @@ function LeapFooter({ revising, hasRevision, onRegenerate, slug }: { revising: b
       >
         启动 · 08 设计案 →
       </button>
-      <button type="button" className="btn btn-ghost" onClick={onRegenerate} disabled={revising}>全部重新生成</button>
+      <button type="button" className="btn btn-ghost" onClick={onRegenerate} disabled={busy}>全部重新生成</button>
       {!hasRevision && !revising ? <span className="dim" style={{ fontSize: 12 }}>完成上方修订后即可启动 08 设计案</span> : null}
     </div>
   );

@@ -87,7 +87,7 @@ export function UsersNode() {
       <p className="node-intro">
         不要先想"做什么功能"，<em>先想用户在哪个处境下雇了一个工具做什么 Job</em>。
         一个产品通常要<em>同时服务多个典型用户</em> —— 我先给你 3 个差异化 persona，
-        默认全部选中作为产品覆盖对象，你可以取消不相关的，也可以让我再生成新的（上限 10 个）。
+        每个都等你裁决：采纳要服务的、否决不相关的（也可一键采纳 AI 推荐的），还可以让我再生成新的（上限 10 个）。
       </p>
       <StoreStatus data={data} />
       {ctx && brief ? <BriefContextCard ctx={ctx} brief={brief} /> : null}
