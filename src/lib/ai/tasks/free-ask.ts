@@ -44,5 +44,5 @@ export async function freeAsk(req: FreeAskRequest, opts?: TaskOptions): Promise<
     ...req.history.map((h): ChatMessage => ({ role: h.role, content: h.content })),
     { role: 'user', content: req.question },
   ];
-  return runTask({ task: 'FREE_ASK', system: SYSTEM, messages, maxTokens: 600, temperature: 0.7, options: opts });
+  return runTask({ task: 'FREE_ASK', system: SYSTEM, messages, maxTokens: 4000, temperature: 0.7, options: opts });
 }

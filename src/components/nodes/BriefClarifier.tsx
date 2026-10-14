@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import type { BriefQuestion } from '@/lib/ai/schemas/clarify-brief';
-
-const OTHER_VALUE = '__other__';
+import { answerText, needsNote } from './brief/clarifier-answer';
 
 export interface ClarifierAnswer {
   question: string;
@@ -41,16 +40,19 @@ function useClarifierAnswers(questions: BriefQuestion[]) {
       const current = Array.isArray(s[id]) ? (s[id] as string[]) : [];
       return { ...s, [id]: current.includes(val) ? current.filter((x) => x !== val) : [...current, val] };
     });
-  const setOther = (id: string, text: string) => setOthers((o) => ({ ...o, [id]: text }));
+  // Notes are kept per option: a question may offer more than one "（请补充）" option.
+  const noteKey = (id: string, option: string) => `${id}::${option}`;
+  const setOther = (id: string, option: string, text: string) => setOthers((o) => ({ ...o, [noteKey(id, option)]: text }));
+  const noteOf = (id: string, option: string) => others[noteKey(id, option)] ?? '';
   const payload = (): ClarifierAnswer[] =>
     questions
       .filter((q) => selections[q.id] !== undefined)
       .map((q) => {
         const raw = selections[q.id];
-        const resolve = (v: string) => (v === OTHER_VALUE && others[q.id]?.trim() ? `其他：${others[q.id].trim()}` : v);
+        const resolve = (v: string) => answerText(v, needsNote(v) ? noteOf(q.id, v) : '');
         return { question: q.title, answer: Array.isArray(raw) ? raw.map(resolve) : resolve(raw) };
       });
-  return { selections, others, isAnswered, setSingle, toggleMulti, setOther, payload, answered: questions.filter(isAnswered).length };
+  return { selections, noteOf, isAnswered, setSingle, toggleMulti, setOther, payload, answered: questions.filter(isAnswered).length };
 }
 
 type Answers = ReturnType<typeof useClarifierAnswers>;
@@ -111,18 +113,17 @@ function ClarifierQuestion({ question: q, index, answers }: { question: BriefQue
 
 function ClarifierOption({ question: q, option, answers }: { question: BriefQuestion; option: string; answers: Answers }) {
   const isMulti = q.type === 'multi';
-  const isOther = /其他/.test(option);
-  const value = isOther ? OTHER_VALUE : option;
+  const isOther = needsNote(option);
   const cur = answers.selections[q.id];
-  const checked = isMulti ? Array.isArray(cur) && cur.includes(value) : cur === value;
+  const checked = isMulti ? Array.isArray(cur) && cur.includes(option) : cur === option;
   return (
     <label className={`clarifier-opt ${checked ? 'checked' : ''} ${isOther ? 'is-other' : ''}`}>
       <input
         type={isMulti ? 'checkbox' : 'radio'}
         name={q.id}
-        value={value}
+        value={option}
         checked={checked}
-        onChange={() => (isMulti ? answers.toggleMulti(q.id, value) : answers.setSingle(q.id, value))}
+        onChange={() => (isMulti ? answers.toggleMulti(q.id, option) : answers.setSingle(q.id, option))}
       />
       <span>{option}</span>
       {isOther && checked ? (
@@ -130,8 +131,8 @@ function ClarifierOption({ question: q, option, answers }: { question: BriefQues
           type="text"
           className="clarifier-other-input"
           placeholder="请补充……"
-          value={answers.others[q.id] ?? ''}
-          onChange={(e) => answers.setOther(q.id, e.target.value)}
+          value={answers.noteOf(q.id, option)}
+          onChange={(e) => answers.setOther(q.id, option, e.target.value)}
           onClick={(e) => e.stopPropagation()}
         />
       ) : null}

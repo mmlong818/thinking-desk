@@ -61,7 +61,7 @@ const RULES: Partial<Record<NodeKind, readonly Rule[]>> = {
         .filter(([category]) => !covered.has(category as keyof typeof BASELINE_STAKEHOLDERS))
         .map(([category, label]) => ({
           code: 'stake.missing_baseline' as const,
-          message: `缺少基线干系人：${label}`,
+          message: `还没有采纳基线干系人：${label}`,
           params: { category },
         }));
     },
