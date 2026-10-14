@@ -118,17 +118,24 @@ describe('users adapters', () => {
   it('maps personas and jobs, links jobs to personas, turns priority into recommend', () => {
     const data = UsersAnalysisSchema.parse({
       ...validUsers,
-      personas: [...validUsers.personas, { ...validUsers.personas[0], id: 'p-2', role: 'candidate' }],
+      personas: [
+        { ...validUsers.personas[0], stance: { verdict: 'caution', reason: '主用户与 Brief 的目标用户对不上' } },
+        { ...validUsers.personas[0], id: 'p-2', role: 'candidate', stance: { verdict: 'recommend', reason: '付费方，Brief 点名' } },
+        { ...validUsers.personas[0], id: 'p-3', role: 'candidate' },
+      ],
       jobs: { ...validUsers.jobs, functional: [{ ...validUsers.jobs.functional[0], persona_ids: ['p-1'], suggested_priority: true }] },
       critiques: [{ kind: 'ask', title: 't', body: 'b' }],
     });
     const plan = ingest(adaptUsersAnalysis(data), 'users', 'USERS_JTBD');
     expect(blocking(plan)).toEqual([]);
-    const [persona] = ofType(plan, 'persona');
-    expect(persona.aiStance).toMatchObject({ verdict: 'recommend', reason: expect.stringContaining('主用户') });
-    const candidates = ofType(plan, 'persona').filter((p) => p.type === 'persona' && p.body.role === 'candidate');
-    expect(candidates.length).toBeGreaterThan(0);
-    expect(candidates.every((p) => p.aiStance?.verdict === 'neutral')).toBe(true);
+    const personas = ofType(plan, 'persona');
+    const [persona] = personas;
+    expect(personas.map((p) => p.aiStance)).toEqual([
+      { verdict: 'caution', reason: '主用户与 Brief 的目标用户对不上' },
+      { verdict: 'recommend', reason: '付费方，Brief 点名' },
+      { verdict: 'neutral', reason: NO_STANCE_REASON },
+    ]);
+    expect(personas.every((p) => !('stance' in (p.body as object)))).toBe(true);
     const jobs = ofType(plan, 'job');
     expect(jobs.map((j) => j.type === 'job' && j.body.dimension)).toEqual(['functional', 'emotional']);
     expect(jobs[0].aiStance?.verdict).toBe('recommend');
@@ -159,8 +166,11 @@ describe('users adapters', () => {
 
   it('adds personas without retiring anything', () => {
     const existing = makeItem({ id: 'per_x' });
-    const out = adaptPersonaBatch(PersonaBatchSchema.parse(validPersonaBatch));
+    const out = adaptPersonaBatch(PersonaBatchSchema.parse({
+      personas: validPersonaBatch.personas.map((p, i) => (i === 0 ? { ...p, stance: { verdict: 'caution', reason: '和已有画像重叠' } } : p)),
+    }));
     expect(out.replace).toEqual([]);
+    expect(out.drafts.map((d) => d.aiStance?.verdict)).toEqual(['caution', 'neutral']);
     const plan = ingest(out, 'users', 'USERS_JTBD', [existing]);
     expect(ofType(plan, 'persona')).toHaveLength(2);
     expect(plan.retired).toEqual([]);

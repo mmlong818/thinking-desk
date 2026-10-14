@@ -269,7 +269,7 @@ ${stancePromptFragment(
   '各类的读法：\n' +
   '- 极值情景：recommend = 这个极值真会发生，当前方案确实会在这里崩，值得纳入设计；caution = 极值牵强、与本项目关系不大，或 robustness_gap 是凭空推演。\n' +
   '- 敌意情景：recommend = 攻击路径现实，mitigation 具体、团队做得出来；caution = mitigation 只是口号或依赖没人力的人工审核，或 severity 你没把握、涉及未成年人等高危人群，需要人重点审查。\n' +
-  '- 痛点：recommend = 三层 why 逐层有依据，root_cause 确实挖到了心理层而不是换个说法复述表层；caution = 追问链有跳跃，root_cause 靠猜。\n' +
+  '- 痛点：看输入里有没有支撑，不看追问链写得是否通顺。recommend = moment 和 feeling 能在 Brief、画像的 story / pain 或用户的澄清回答里找到原文依据，追问只是把它推到心理层；neutral = 场景合理，但是你的推断，输入里没有直接依据；caution = root_cause 靠猜，或与输入里的信息对不上。\n' +
   '- 设计启发：recommend = 严格从情景、Job、痛点推出，动作具体可落地；caution = 动作和痛点的因果牵强、太宽泛，或可能碰到 Brief 的边界 / 红线。\n' +
   '各类的 neutral = 合理，但值不值得做取决于团队取舍，或现有信息不足以判断。',
 )}`;

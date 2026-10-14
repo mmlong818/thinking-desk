@@ -2,18 +2,18 @@
 
 exports[`promptVersion > is the same for every brief (it hashes the template, not the data) and matches the snapshot 1`] = `
 {
-  "chain:alt": "ALT_SCAN sha256:085fd0fdd4740aff",
+  "chain:alt": "ALT_SCAN sha256:12f748fd3fe7ed3b",
   "chain:brief": "BRIEF_EXTRACT sha256:d3364eb1b63793d6",
   "chain:design": "DESIGN_PROPOSAL sha256:d6749eace3f65cc1",
   "chain:features": "FEAT_DRAFT sha256:a124bef9e068822e",
   "chain:leap": "LEAP_FIRST_PRINCIPLES sha256:f7716b31962aa870",
   "chain:revise": "FEAT_DRAFT sha256:234b4e94455c1b39",
   "chain:scen_combine": "SCEN_FEED sha256:02a97fc6ad500d0d",
-  "chain:scen_deep": "SCEN_PAIN sha256:e25d83cb247010d4",
+  "chain:scen_deep": "SCEN_PAIN sha256:c9f628464fa35794",
   "chain:scen_exhaust": "SCEN_FEED sha256:bc78c34be1560052",
   "chain:split": "SPLIT_SUBFEATURES sha256:4728b1b09025707c",
   "chain:stake": "STAKE_MATRIX sha256:02643cc7f9bcf204",
-  "chain:users": "USERS_JTBD sha256:afc6b492d5b3ecae",
+  "chain:users": "USERS_JTBD sha256:baa078f27c2acba1",
   "extra:clarify": "BRIEF_CLARIFY sha256:d0b6eb5d473fe84b",
   "extra:consistency": "CONSISTENCY_CHECK sha256:ee7a0bdd71f66db4",
   "extra:follow_ups": "FOLLOW_UPS sha256:5f01b8bd9a6c8a86",
@@ -21,7 +21,7 @@ exports[`promptVersion > is the same for every brief (it hashes the template, no
   "extra:more_analogies": "LEAP_ANALOGY sha256:a10378751407fb69",
   "extra:more_constraint_flips": "LEAP_CONSTRAINT_FLIP sha256:5abc424e463cb5d1",
   "extra:more_first_principles": "LEAP_FIRST_PRINCIPLES sha256:d608048e51acfe48",
-  "extra:more_personas": "USERS_JTBD sha256:3f41fdea69375a2f",
+  "extra:more_personas": "USERS_JTBD sha256:22306d78d17cb789",
   "extra:probe": "BRIEF_PROBE sha256:b85440a7322b1543",
   "extra:refine_jobs": "USERS_JTBD sha256:7e22e19d387d34d2",
 }

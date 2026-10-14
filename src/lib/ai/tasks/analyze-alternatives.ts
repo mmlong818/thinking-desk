@@ -56,6 +56,7 @@ feature_breakdowns 每条覆盖：
 最后给 differentiation_hypothesis —— 一句话说清"我们凭什么赢"。
 必须基于以上分析推出，**不能是空口号**。
 格式参考："我们凭 [某个具体优势 / 结构] 解决 [某个对手没解决的 Job]，用户会因为 [某个情感或功能理由] 选我们。"
+**必须正面回应 key_threats 里排第一的威胁**（尤其当它是非消费替代时）：说清用户凭什么放弃它转向我们，而不是绕开它只和较弱的对手比。
 同时给 differentiation_stance —— 你对这条假设本身的判断（见下方 stance 规则）。
 
 # key_threats 前 3
