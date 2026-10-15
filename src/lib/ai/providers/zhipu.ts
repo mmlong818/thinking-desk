@@ -8,6 +8,7 @@ import { validateBaseUrl } from './validate-base-url';
 // Zhipu doesn't always expose /models reliably. We probe and fall back to a
 // curated list of currently-usable models if the endpoint is unreachable.
 const ZHIPU_FALLBACK = [
+  { id: 'glm-5.3',       label: 'GLM-5.3 · 旗舰（思考常开）' },
   { id: 'glm-5.2',       label: 'GLM-5.2 · 旗舰' },
   { id: 'glm-5.1',       label: 'GLM-5.1 · 推理 / Agent' },
   { id: 'glm-5-turbo',   label: 'GLM-5 Turbo · 快速' },
@@ -18,6 +19,14 @@ const ZHIPU_FALLBACK = [
 function offlineList(): ModelInfo[] {
   return ZHIPU_FALLBACK.map((m) => ({ ...m, fallback: true }));
 }
+
+// GLM-5.3 family: thinking is always on (`thinking: disabled` is an error) and the reasoning
+// tokens count against max_tokens, so a JSON task needs a far larger budget to reach the answer.
+const ALWAYS_THINKS = /^glm-5\.3/i;
+export const ALWAYS_THINKS_MIN_TOKENS = 64_000;
+// Its API default is 'max', which measured 3–15 min per node task (2026-10-15); a task's own
+// effort maps onto low / high / max, and without one it thinks 'low'.
+const REASONING_EFFORT = { low: 'low', medium: 'high', high: 'max' } as const;
 
 /** OpenAI-compatible chat body (JSON mode + schema in a trailing system message). */
 export function buildZhipuRequest(model: string, req: CompleteRequest): Record<string, unknown> {
@@ -36,6 +45,11 @@ export function buildZhipuRequest(model: string, req: CompleteRequest): Record<s
     // always want the JSON, not the thinking trace — disable reasoning.
     thinking: req.schema ? { type: 'disabled' } : undefined,
   };
+  if (ALWAYS_THINKS.test(model)) {
+    body.thinking = undefined;
+    body.max_tokens = Math.max(Number(body.max_tokens), ALWAYS_THINKS_MIN_TOKENS);
+    body.reasoning_effort = REASONING_EFFORT[req.effort ?? 'low'];
+  }
   // When web search is enabled, override tools with the Zhipu-specific shape
   // that also returns citations so the UI can attribute sources.
   if (req.webSearch) {
@@ -54,8 +68,6 @@ export function buildZhipuRequest(model: string, req: CompleteRequest): Record<s
 export const zhipuProvider: AiProvider = {
   name: 'zhipu',
   isConfigured: () => !!process.env.ZHIPU_API_KEY,
-  // glm-5.3 family: thinking is always on and `thinking: disabled` (sent for JSON tasks) is an error.
-  canDrive: (id) => !/^glm-5\.3/i.test(id),
   async listModels() {
     if (!process.env.ZHIPU_API_KEY) return [];
     const base = validateBaseUrl('zhipu', process.env.ZHIPU_BASE_URL) || 'https://open.bigmodel.cn/api/paas/v4';

@@ -1,28 +1,28 @@
-import { RunTaskError, type RunMeta, type RunTaskResult, type TaskOptions } from '../../src/lib/ai/run-task';
-import type { AlternativesAnalysis } from '../../src/lib/ai/schemas/analyze-alternatives';
+import { RunTaskError, type RunMeta, type RunTaskResult, type TaskOptions } from '../ai/run-task';
+import type { AlternativesAnalysis } from '../ai/schemas/analyze-alternatives';
 import {
   DIMENSION_KEYS, type DimensionsResult, type ScenarioDeepAnalysis, type ScenarioDrafts,
-} from '../../src/lib/ai/schemas/analyze-scenarios';
-import type { StakeholdersAnalysis } from '../../src/lib/ai/schemas/analyze-stakeholders';
-import type { Job, UsersAnalysis } from '../../src/lib/ai/schemas/analyze-users';
-import type { CreativeLeapAnalysis } from '../../src/lib/ai/schemas/creative-leap';
-import type { Feature, FeatureList } from '../../src/lib/ai/schemas/draft-features';
-import type { BriefExtraction } from '../../src/lib/ai/schemas/extract-brief';
-import type { DesignProposal } from '../../src/lib/ai/schemas/generate-design';
-import type { FeatureRevision } from '../../src/lib/ai/schemas/revise-features';
-import type { BriefContext, DesignSnapshot, FeatureDigest } from '../../src/lib/ai/schemas/snapshots';
-import type { SubfeatureBreakdown } from '../../src/lib/ai/schemas/split-subfeatures';
-import { analyzeAlternatives } from '../../src/lib/ai/tasks/analyze-alternatives';
-import { combineScenarios, deepAnalyzeScenarios, exhaustScenarioDimensions } from '../../src/lib/ai/tasks/analyze-scenarios';
-import { analyzeStakeholders } from '../../src/lib/ai/tasks/analyze-stakeholders';
-import { analyzeUsers } from '../../src/lib/ai/tasks/analyze-users';
-import { analyzeCreativeLeap } from '../../src/lib/ai/tasks/creative-leap';
-import { draftFeatures } from '../../src/lib/ai/tasks/draft-features';
-import { extractBrief } from '../../src/lib/ai/tasks/extract-brief';
-import { generateDesignProposal } from '../../src/lib/ai/tasks/generate-design';
-import { reviseFeaturesWithLeaps } from '../../src/lib/ai/tasks/revise-features';
-import { splitSubfeatures } from '../../src/lib/ai/tasks/split-subfeatures';
-import type { AiTask } from '../../src/lib/ai/types';
+} from '../ai/schemas/analyze-scenarios';
+import type { StakeholdersAnalysis } from '../ai/schemas/analyze-stakeholders';
+import type { Job, UsersAnalysis } from '../ai/schemas/analyze-users';
+import type { CreativeLeapAnalysis } from '../ai/schemas/creative-leap';
+import type { Feature, FeatureList } from '../ai/schemas/draft-features';
+import type { BriefExtraction } from '../ai/schemas/extract-brief';
+import type { DesignProposal } from '../ai/schemas/generate-design';
+import type { FeatureRevision } from '../ai/schemas/revise-features';
+import type { BriefContext, DesignSnapshot, FeatureDigest } from '../ai/schemas/snapshots';
+import type { SubfeatureBreakdown } from '../ai/schemas/split-subfeatures';
+import { analyzeAlternatives } from '../ai/tasks/analyze-alternatives';
+import { combineScenarios, deepAnalyzeScenarios, exhaustScenarioDimensions } from '../ai/tasks/analyze-scenarios';
+import { analyzeStakeholders } from '../ai/tasks/analyze-stakeholders';
+import { analyzeUsers } from '../ai/tasks/analyze-users';
+import { analyzeCreativeLeap } from '../ai/tasks/creative-leap';
+import { draftFeatures } from '../ai/tasks/draft-features';
+import { extractBrief } from '../ai/tasks/extract-brief';
+import { generateDesignProposal } from '../ai/tasks/generate-design';
+import { reviseFeaturesWithLeaps } from '../ai/tasks/revise-features';
+import { splitSubfeatures } from '../ai/tasks/split-subfeatures';
+import type { AiTask } from '../ai/types';
 
 // The brief → users → … → split chain for one golden brief, calling the task functions the
 // routes call. Between steps the person's judgment is simulated as the AI-led default: accept
@@ -50,7 +50,7 @@ export const CHAIN_STEPS: readonly StepName[] = [
   'brief', 'users', 'stake', 'alt', 'scen_exhaust', 'scen_combine', 'scen_deep', 'features', 'leap', 'revise', 'design', 'split',
 ];
 
-interface Ctx {
+export interface Ctx {
   rawText: string;
   out: Partial<Outputs>;
 }
@@ -76,9 +76,9 @@ export function pickElements(d: DimensionsResult): string[] {
   return (chosen.length >= 3 ? chosen : all).map((e) => e.id);
 }
 
-const MAX_DEEP = 3;
+export const MAX_DEEP = 3;
 
-function acceptedFeatures(features: readonly Feature[]): Feature[] {
+export function acceptedFeatures(features: readonly Feature[]): Feature[] {
   const recommended = features.filter((f) => f.suggested_priority && !f.red_line_risk);
   return recommended.length > 0 ? recommended : [...features];
 }
@@ -95,6 +95,13 @@ export function designSnapshot(d: DesignProposal): DesignSnapshot {
     user_flows: d.user_flows.map((f) => ({ name: f.name, goal: f.goal })),
     data_model: d.data_model.map((e) => ({ name: e.name })),
   };
+}
+
+/** The AI's top picks; without any, the first of each kind. */
+export function selectedLeapIds(leap: CreativeLeapAnalysis): string[] {
+  const picks = leap.recommendation.top_picks.map((p) => p.source_id);
+  const fallback = [leap.first_principles[0], leap.analogies[0], leap.constraint_flips[0]].flatMap((x) => (x ? [x.id] : []));
+  return picks.length > 0 ? picks : fallback;
 }
 
 // ---- request arguments shared by several steps ------------------------------------------------
@@ -138,13 +145,11 @@ function leapContext(ctx: Ctx) {
 function reviseArgs(ctx: Ctx) {
   const list = need(ctx, 'features');
   const leap = need(ctx, 'leap');
-  const picks = leap.recommendation.top_picks.map((p) => p.source_id);
-  const fallback = [leap.first_principles[0], leap.analogies[0], leap.constraint_flips[0]].flatMap((x) => (x ? [x.id] : []));
   return {
     ...briefArgs(ctx),
     original: { features: acceptedFeatures(list.features).map(digest), pillars: list.pillars, differentiation_echo: list.differentiation_echo },
     leaps: { first_principles: leap.first_principles, analogies: leap.analogies, constraint_flips: leap.constraint_flips },
-    selectedLeapIds: picks.length > 0 ? picks : fallback,
+    selectedLeapIds: selectedLeapIds(leap),
   };
 }
 
@@ -207,7 +212,7 @@ export interface StepRecord {
   data?: unknown;
 }
 
-async function runStep<K extends StepName>(step: K, ctx: Ctx, opts: TaskOptions): Promise<StepRecord> {
+export async function runStep<K extends StepName>(step: K, ctx: Ctx, opts: TaskOptions): Promise<StepRecord> {
   const def: StepDef<K> = STEPS[step];
   if (!def.needs.every((n) => ctx.out[n] !== undefined)) return { step, task: def.task, status: 'skipped' };
   try {

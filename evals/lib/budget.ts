@@ -4,7 +4,7 @@ import { buildOpenAIRequest, openaiProvider } from '../../src/lib/ai/providers/o
 import { buildZhipuRequest, zhipuProvider } from '../../src/lib/ai/providers/zhipu';
 import type { AiProvider, AiProviderName, AiTask, CompleteRequest } from '../../src/lib/ai/types';
 import type { GoldenBrief } from './briefs';
-import { runChain, STEPS, type StepName, type StepRecord } from './chain';
+import { runChain, STEPS, type StepName, type StepRecord } from '../../src/lib/autorun/chain';
 import { STEP_FIXTURES } from './fixtures';
 import { fixtureDeps } from './offline';
 

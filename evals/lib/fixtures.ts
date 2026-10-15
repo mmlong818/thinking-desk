@@ -27,7 +27,7 @@ import { validBreakdown } from '../../src/lib/ai/schemas/__fixtures__/split-subf
 import { validStakeholders } from '../../src/lib/ai/schemas/__fixtures__/stakeholders';
 import { validJobsRefinement, validPersonaBatch, validUsers } from '../../src/lib/ai/schemas/__fixtures__/users';
 import type { AiTask } from '../../src/lib/ai/types';
-import type { StepName } from './chain';
+import type { StepName } from '../../src/lib/autorun/chain';
 
 // Canned task outputs for the offline evals: what the fake provider answers at each chain step
 // (so every prompt renders without an API call) and, per task, the schema each fixture must pass.

@@ -1,6 +1,6 @@
 import type { GoldenBrief } from './briefs';
 import { callBudget, REASONING_FILL, VISIBLE_FILL, type Plan, type Target } from './budget';
-import { CHAIN_STEPS, type StepRecord } from './chain';
+import { CHAIN_STEPS, type StepRecord } from '../../src/lib/autorun/chain';
 import { cost, formatUsd, type Price } from './pricing';
 
 // Plain-text tables for the eval CLI (ASCII columns so they line up in any terminal).

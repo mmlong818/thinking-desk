@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DATA_GUARD } from '../src/lib/ai/prompt';
 import { AI_TASKS } from '../src/lib/ai/types';
 import { loadBriefs, selectBriefs } from './lib/briefs';
-import { CHAIN_STEPS, runChain, type Outputs, type StepName, type StepRecord } from './lib/chain';
+import { CHAIN_STEPS, runChain, type Outputs, type StepName, type StepRecord } from '../src/lib/autorun/chain';
 import { SCHEMA_FIXTURES, STEP_FIXTURES } from './lib/fixtures';
 import { EXTRA_PROMPTS, fixtureDeps, type Captured } from './lib/offline';
 

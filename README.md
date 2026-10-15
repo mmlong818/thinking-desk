@@ -122,10 +122,10 @@ The `ALT_SCAN` task needs real-time competitive intelligence. The Gemini adapter
 `ALT_SCAN` 任务需要实时竞品情报。Gemini 适配器会为它启用 Google 搜索接地，因此 Gemini 是这个任务的最佳选择。`gemini-3.8-flash` 是当前 GA 的快速模型。其他任务仍推荐 Claude 或 OpenAI。
 
 **Zhipu GLM (智谱) — Chinese-language alternative**
-GLM models are optimized for Chinese and are cost-effective. Use `glm-5.2` (not `glm-5.3`: its thinking cannot be disabled, while the Zhipu adapter sends `thinking: disabled` for JSON tasks). The adapter also supports web search for `ALT_SCAN`.
+GLM models are optimized for Chinese and are cost-effective. Use `glm-5.2` for the interactive nodes. `glm-5.3` works too, but its thinking cannot be turned off: the adapter gives it at least 64k output tokens and each step takes minutes, which suits headless runs (`/api/autorun`) better than the UI. The adapter also supports web search for `ALT_SCAN`.
 
 **智谱 GLM —— 中文场景备选**
-GLM 系列针对中文优化，性价比高。推荐 `glm-5.2`（不要用 `glm-5.3`：它的思考不可关闭，而智谱适配器在 JSON 任务里会传 `thinking: disabled`）。适配器同样支持 `ALT_SCAN` 的联网搜索。
+GLM 系列针对中文优化，性价比高。交互式节点推荐 `glm-5.2`。`glm-5.3` 也能用，但它的思考不可关闭：适配器给它至少 64k 输出 token，每步要几分钟，更适合无头运行（`/api/autorun`），不适合在界面里等。适配器同样支持 `ALT_SCAN` 的联网搜索。
 
 ### OpenAI as an alternative · OpenAI 作为替代
 
@@ -239,6 +239,9 @@ RATE_LIMIT_WINDOW_MS=60000
 With Docker, set these in `.env` next to `docker-compose.yml`; the `app` service forwards them, along with every `AI_MODEL_<TASK>` override and `ALLOW_CUSTOM_AI_BASE_URL`.
 
 使用 Docker 时，在 `docker-compose.yml` 同目录的 `.env` 里设置即可；`app` 服务会透传这些变量，以及全部 `AI_MODEL_<TASK>` 覆盖项和 `ALLOW_CUSTOM_AI_BASE_URL`。
+
+**Headless runs · 无头运行**: `POST /api/autorun` runs all nine nodes for one idea and returns the PRD and design — see [docs/autorun.md](docs/autorun.md). It needs Postgres; keep `REQUIRE_AUTH` on when the port is reachable from other machines.
+`POST /api/autorun` 对一条想法无头跑完九个节点，取回 PRD 和设计案，详见 [docs/autorun.md](docs/autorun.md)。需要 Postgres；端口能被其他机器访问时请开启 `REQUIRE_AUTH`。
 
 **Source checks (`/api/sources/verify`) fetch URLs from the server.** Private, loopback and reserved addresses are refused after DNS resolution and again on every redirect, but a DNS-rebinding window remains between that lookup and the fetch's own, and behind an HTTP(S) proxy the proxy makes the request. On a public deployment, also block the server's outbound access to internal networks (firewall or an egress proxy), and keep `REQUIRE_AUTH` on.
 

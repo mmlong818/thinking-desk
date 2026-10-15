@@ -12,12 +12,12 @@ import { validConsistencyCheck } from '../../src/lib/ai/schemas/__fixtures__/con
 import type { ConsistencyItem } from '../../src/lib/ai/schemas/consistency-check';
 import { validProbeDone } from '../../src/lib/ai/schemas/__fixtures__/probe-brief';
 import { validJobsRefinement, validPersonaBatch } from '../../src/lib/ai/schemas/__fixtures__/users';
-import { lockedJobs, type Outputs } from './chain';
+import { lockedJobs, type Outputs } from '../../src/lib/autorun/chain';
 import { FOLLOW_UPS_FIXTURE, MORE_LEAP_FIXTURES } from './fixtures';
 
 // Running prompts without an API: a fake provider that records each request and answers with a
 // canned output. It borrows `name` / `canDrive` from a real adapter when given one, so a model
-// the real adapter refuses (e.g. GLM-5.3 on structured tasks) is refused here too.
+// the real adapter refuses (`canDrive`) is refused here too.
 
 export interface Captured {
   task: AiTask;

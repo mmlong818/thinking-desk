@@ -127,6 +127,22 @@ ALTER TABLE decision_events ADD CONSTRAINT decision_events_kind_check
   CHECK (kind IN ('created','accepted','rejected','reset','edited','deleted','link_added','link_removed','link_confirmed','evidence_updated'));
 CREATE INDEX IF NOT EXISTS decision_events_item_idx ON decision_events (project_id, item_id, seq);
 
+-- Headless runs of the whole chain (POST /api/autorun). steps / result are the API's JSON as is.
+CREATE TABLE IF NOT EXISTS autoruns (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  status        TEXT NOT NULL CHECK (status IN ('queued','running','done','failed','cancelled')),
+  current_step  TEXT,
+  steps         JSONB NOT NULL DEFAULT '[]',
+  model         TEXT,
+  error         TEXT,
+  project_url   TEXT NOT NULL,
+  result        JSONB,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS autoruns_status_idx ON autoruns (status);
+
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;

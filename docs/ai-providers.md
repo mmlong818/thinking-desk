@@ -37,11 +37,11 @@ AI_MODEL_BRIEF_EXTRACT=claude:claude-sonnet-5-5
 
 Task names are the `AiTask` string literal union in `src/lib/ai/types.ts`; `.env.example` lists every task in use.
 
-Auto-pick (`AI_MODEL_<TASK>=<provider>`) takes the first curated id the provider lists (`claude-sonnet-5-5` first for Claude), else the newest listed model the adapter can drive (`AiProvider.canDrive`; Zhipu skips `glm-5.3*`).
+Auto-pick (`AI_MODEL_<TASK>=<provider>`) takes the first curated id the provider lists (`claude-sonnet-5-5` first for Claude), else the newest listed model the adapter can drive (`AiProvider.canDrive`). Zhipu `glm-5.3*` is never auto-picked: its always-on thinking makes every task far slower.
 
 A per-call `provider:model` override is never silently replaced. It is rejected (a `config` error) only when the provider's real model list does not contain it; when the list is unavailable — empty, a listing error, or the adapter's offline fallback list (entries marked `fallback: true`) — the requested id is sent as is.
 
-`canDrive(modelId) === false` means the adapter cannot drive that model on structured (schema) tasks — today Zhipu `glm-5.3*`, whose thinking cannot be disabled. `runTask()` refuses such a model for a schema task with a `config` error before any provider call, `/api/providers` reports it as `structured: false`, and the model picker shows it as unavailable (every node task is structured).
+`canDrive(modelId) === false` means the adapter cannot drive that model on structured (schema) tasks (no adapter declares one today). `runTask()` refuses such a model for a schema task with a `config` error before any provider call, `/api/providers` reports it as `structured: false`, and the model picker shows it as unavailable (every node task is structured).
 
 ## Request Parameters
 
@@ -50,7 +50,7 @@ A per-call `provider:model` override is never silently replaced. It is rejected 
 | Claude | `output_config.format` on models that support it (Fable 5/5.1, Mythos, Opus 5.5/5/4.8/4.5, Sonnet 5.5/5, Haiku 4.5) when the schema has an object root; otherwise schema in the system prompt | per family in `providers/claude-params.ts`: no `temperature` on Sonnet 5.x / Opus 4.7+ / Fable / Mythos; `output_config.effort` `low` on Sonnet 5.x, `medium` on Opus 5.x / Fable / Mythos; `thinking` is never sent; unknown ids get the minimal request | task budget, + 16k on models that think by default (cap 64k) |
 | OpenAI | JSON mode (`response_format: json_object`) + schema in the prompt | `temperature` only on 4.x families | `max_completion_tokens` = task budget + 16k on GPT-5+/o-series (reasoning shares the cap) |
 | Gemini | `generationConfig.responseJsonSchema` (object roots) or JSON mode + schema in the prompt | task `temperature` | `maxOutputTokens` = task budget + 16k (thinking shares the cap), max 65,536 |
-| Zhipu | JSON mode + schema in a system message; `thinking: disabled` for JSON tasks | task `temperature` | task budget (≥ 12k with web search) |
+| Zhipu | JSON mode + schema in a system message; `thinking: disabled` for JSON tasks, except `glm-5.3*` (thinking cannot be turned off) | task `temperature` | task budget (≥ 12k with web search; ≥ 64k on `glm-5.3*`, whose thinking counts against it) |
 
 Every answer is validated by `runTask()` against the full Zod schema regardless of the mechanism.
 

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsistencyFinding, ConsistencyItem } from '../../src/lib/ai/schemas/consistency-check';
-import { CHAIN_STEPS, type Outputs } from './chain';
+import { CHAIN_STEPS, type Outputs } from '../../src/lib/autorun/chain';
 import { consistencyItemsOf } from './offline';
 
 // Online check of CONSISTENCY_CHECK on a finished chain run: each golden brief is checked twice,

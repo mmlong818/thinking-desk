@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadBriefs, selectBriefs, type GoldenBrief } from './lib/briefs';
 import { parseTarget, planCalls, type Target } from './lib/budget';
-import { CHAIN_STEPS, runChain, type StepRecord } from './lib/chain';
+import { CHAIN_STEPS, runChain, type StepRecord } from '../src/lib/autorun/chain';
 import { priceFor, type Price } from './lib/pricing';
 import { renderDryRun, renderRunSummary, type BriefRun } from './lib/report';
 

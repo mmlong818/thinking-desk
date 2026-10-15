@@ -99,7 +99,7 @@ async function pickModel(name: AiProviderName): Promise<string> {
   }
   // Prefer known flagship ids when present (descending capability).
   const preferred = [
-    // Zhipu (glm-5.3 excluded: thinking cannot be disabled, but the zhipu adapter sends thinking:disabled for JSON tasks)
+    // Zhipu (glm-5.3 only when named: its thinking is always on, so every task is far slower)
     'glm-5.2', 'glm-5.1', 'glm-5', 'glm-5-turbo',
     // Claude (request params are chosen per model family in providers/claude-params.ts)
     'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-opus-5-5', 'claude-sonnet-4-6',

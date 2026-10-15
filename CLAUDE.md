@@ -26,6 +26,7 @@ src/
 ├── app/
 │   ├── api/ai/              # AI route handlers (one dir per task, JSON responses)
 │   ├── api/projects/        # project list/create; DELETE [id]; [id]/{graph,runs,items,accept-recommended,fork,links,links/refresh,events} = PgRepository over HTTP
+│   ├── api/autorun/         # headless whole-chain runs: POST start, GET [runId] status + result, POST [runId]/cancel (docs/autorun.md)
 │   ├── api/sources/verify/  # server-side check of cited URLs (SSRF guard, redirects, title match); rate-limited
 │   ├── api/providers/       # configured providers + models (structured-task support per model)
 │   └── project/[id]/[node]/ # SSR node page: picks the store (Postgres row found → pg, else local), lock state
@@ -37,6 +38,7 @@ src/
 │   └── shell/               # TopBar, NavRail, Copilot, ModelPicker, ConsistencyButton, ExportButton, ForkButton
 ├── data/nodes.ts            # Source of truth: NODES array, deps, completion rules, formatNodeNum()
 └── lib/
+    ├── autorun/             # the 12-step chain (shared with evals/), per-step save + simulated judgment, runner, Postgres service
     ├── ai/
     │   ├── router.ts        # env-var task→provider:model resolution
     │   ├── providers/       # claude.ts, openai.ts, gemini.ts, zhipu.ts (complete(); stream() on all but Gemini)
@@ -129,4 +131,5 @@ final → split
 | `AI_MODEL_<TASK>` | No | Per-task override; task names from `AI_TASKS` |
 | `REQUIRE_AUTH` / `REQUIRE_AUTH_TOKEN` | No | `middleware.ts`: require `Authorization: Bearer <token>` on `/api/*` |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | No | `middleware.ts`: per-IP in-memory limit on `/api/ai/*` and, in a separate bucket, `/api/sources/*` (default 20 / 60 s) |
+| `AUTORUN_PUBLIC_URL` / `AUTORUN_CONCURRENCY` | No | `/api/autorun`: origin of the returned `projectUrl` (default: the request's) / chains run at once (default 2) |
 | `*_BASE_URL`, `ALLOW_CUSTOM_AI_BASE_URL` | No | Provider endpoints; non-vendor hosts are rejected unless `ALLOW_CUSTOM_AI_BASE_URL=true` |

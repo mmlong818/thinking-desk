@@ -145,7 +145,7 @@ async function resolveTarget(spec: RunTaskSpec, deps: RunTaskDeps, deadline: Dea
   }
 }
 
-/** A model the adapter cannot drive with a schema (e.g. GLM-5.3: thinking cannot be disabled) fails fast, unpaid. */
+/** A model the adapter cannot drive with a schema fails fast, unpaid. */
 function assertStructuredCapable(spec: RunTaskSpec, target: ResolvedTarget, meta: RunMeta): void {
   if (!spec.schema || target.provider.canDrive?.(target.model) !== false) return;
   throw new RunTaskError(
