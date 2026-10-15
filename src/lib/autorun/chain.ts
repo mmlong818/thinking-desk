@@ -26,8 +26,8 @@ import type { AiTask } from '../ai/types';
 
 // The brief → users → … → split chain for one golden brief, calling the task functions the
 // routes call. Between steps the person's judgment is simulated as the AI-led default: accept
-// what the AI recommends (priority jobs, high-relevance elements, priority features, top leap
-// picks); where the AI recommends nothing, everything it produced. Scenarios carry no AI
+// what the AI recommends (priority jobs, high-relevance elements, priority features — topped up to
+// three by RICE —, top leap picks); where the AI recommends nothing, everything it produced. Scenarios carry no AI
 // recommendation, so the first three are deepened.
 
 export interface Outputs {
@@ -78,9 +78,15 @@ export function pickElements(d: DimensionsResult): string[] {
 
 export const MAX_DEEP = 3;
 
+const MIN_FEATURES = 3;
+
+/** What the AI recommends, topped up to three by RICE (never with a red-line risk); none safe → all. */
 export function acceptedFeatures(features: readonly Feature[]): Feature[] {
-  const recommended = features.filter((f) => f.suggested_priority && !f.red_line_risk);
-  return recommended.length > 0 ? recommended : [...features];
+  const safe = features.filter((f) => !f.red_line_risk);
+  const recommended = safe.filter((f) => f.suggested_priority);
+  const topUp = safe.filter((f) => !f.suggested_priority).sort((a, b) => b.rice_score - a.rice_score);
+  const chosen = [...recommended, ...topUp.slice(0, Math.max(0, MIN_FEATURES - recommended.length))];
+  return chosen.length > 0 ? chosen : [...features];
 }
 
 const digest = (f: Feature): FeatureDigest => ({

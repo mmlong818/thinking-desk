@@ -6,7 +6,7 @@ Code: `src/lib/autorun/` (`chain.ts` is the chain the prompt evals also run), ro
 
 ## Judgment
 
-Between steps the person's judgment is simulated the way the evals do: the AI's recommended items are accepted, plus the items the chain passed on (priority jobs, high-relevance scenario elements, the first three scenarios, priority features, the top leap picks). A node whose completion rule is still unmet takes every item the run produced for it, so the next node unlocks. These acceptances are recorded with `actor: 'ai'` and the note `autorun 自动采纳` — the person's own decisions stay distinguishable in the history.
+Between steps the person's judgment is simulated the way the evals do: the AI's recommended items are accepted, plus the items the chain passed on (priority jobs, high-relevance scenario elements, the first three scenarios, priority features — topped up to three by RICE score, never with a red-line risk —, the top leap picks). A node whose completion rule is still unmet takes every item the run produced for it, so the next node unlocks. Inferred red lines, assumptions, not-doing items and open questions stay pending for a person; the PRD says how many each section left out. These acceptances are recorded with `actor: 'ai'` and the note `autorun 自动采纳` — the person's own decisions stay distinguishable in the history.
 
 Each step is saved as the node would save it (`saveRunOutput`, run inputs = the accepted upstream items), and later prompts quote stored items by their permanent ids, so the AI's references become Links.
 
