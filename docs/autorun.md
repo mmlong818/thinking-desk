@@ -50,7 +50,7 @@ Auth: with `REQUIRE_AUTH=true` every call needs `Authorization: Bearer <REQUIRE_
 
 ### Restarts
 
-Runs live in the server process. On the first autorun request after a restart, runs left `queued` / `running` become `failed` with `error: 'server_restarted'`; they are not resumed — start a new run.
+Runs live in the server process and are not resumed — start a new run. A run still `queued` / `running` that the process is no longer working on is reported `failed` when it is read: `error: 'server_restarted'` after a restart, or the real cause when the run ended while the database was unreachable (its failure could not be written then).
 
 ## Settings
 

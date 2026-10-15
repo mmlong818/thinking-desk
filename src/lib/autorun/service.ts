@@ -4,9 +4,10 @@ import { createProject } from '../db/projects';
 import { executeAutorun, pendingSteps } from './runner';
 import type { AutorunPatch, AutorunRow, AutorunSink } from './types';
 
-// Postgres-backed autoruns, executed in this server process. Live state (queue, abort handles,
-// the restart sweep) sits on globalThis so dev hot reloads keep it. Runs left queued / running
-// by an earlier process are marked failed ('server_restarted') before the first request is served.
+// Postgres-backed autoruns, executed in this server process. Live state (queue, abort handles)
+// sits on globalThis so dev hot reloads keep it. A row still queued / running that this process is
+// not working on is dead — left by an earlier process ('server_restarted'), or ended while its
+// failure could not be written (the database was down) — and is marked failed when read.
 
 const MAX_CONCURRENT = Math.max(1, Number(process.env.AUTORUN_CONCURRENCY) || 2);
 
@@ -19,16 +20,17 @@ interface Pending {
 }
 
 interface Live {
-  swept?: Promise<void>;
   running: Map<string, AbortController>;
   queue: Pending[];
+  /** Why a run ended when writing that down failed. */
+  lost: Map<string, string>;
 }
 
 declare global {
   var __autorun: Live | undefined;
 }
 
-const live = (): Live => (globalThis.__autorun ??= { running: new Map(), queue: [] });
+const live = (): Live => (globalThis.__autorun ??= { running: new Map(), queue: [], lost: new Map() });
 
 const COLUMNS: Record<keyof AutorunPatch, string> = {
   status: 'status', currentStep: 'current_step', steps: 'steps', error: 'error', result: 'result',
@@ -45,19 +47,6 @@ export const pgSink: AutorunSink = {
   },
 };
 
-/** Once per process: nothing from an earlier process is still running. */
-export function ensureSwept(): Promise<void> {
-  const state = live();
-  state.swept ??= query(
-    `UPDATE autoruns SET status = 'failed', error = 'server_restarted', current_step = NULL, updated_at = now()
-      WHERE status IN ('queued', 'running')`,
-  ).then(() => undefined, (e: unknown) => {
-    state.swept = undefined;
-    throw e;
-  });
-  return state.swept;
-}
-
 function pump(): void {
   const state = live();
   while (state.running.size < MAX_CONCURRENT && state.queue.length > 0) {
@@ -66,10 +55,13 @@ function pump(): void {
     const controller = new AbortController();
     state.running.set(job.runId, controller);
     executeAutorun({ ...job, signal: controller.signal }, { repo: new PgRepository(), sink: pgSink })
-      .catch((e: unknown) => pgSink.update(job.runId, {
-        status: 'failed', currentStep: null, error: e instanceof Error ? e.message : String(e),
-      }))
-      .catch((e: unknown) => console.error('[autorun] could not record the failure:', e))
+      .catch((e: unknown) => {
+        const error = e instanceof Error ? e.message : String(e);
+        return pgSink.update(job.runId, { status: 'failed', currentStep: null, error }).catch((recordError: unknown) => {
+          state.lost.set(job.runId, error);
+          console.error('[autorun] could not record the failure:', recordError);
+        });
+      })
       .finally(() => {
         state.running.delete(job.runId);
         pump();
@@ -86,7 +78,6 @@ export interface StartInput {
 }
 
 export async function startAutorun(input: StartInput): Promise<AutorunRow> {
-  await ensureSwept();
   const project = await createProject({ name: input.name, summary: input.rawText.slice(0, 200) });
   const projectUrl = `${input.origin}/project/${encodeURIComponent(project.slug)}/final`;
   const [row] = await query<{ id: string }>(
@@ -115,14 +106,21 @@ interface DbRow {
   updated_at: Date;
 }
 
+const isLive = (runId: string): boolean => live().running.has(runId) || live().queue.some((j) => j.runId === runId);
+
 export async function getAutorun(runId: string): Promise<AutorunRow | null> {
-  await ensureSwept();
   const rows = await query<DbRow>(
     `SELECT a.*, p.slug FROM autoruns a JOIN projects p ON p.id = a.project_id WHERE a.id = $1`,
     [runId],
   );
   const r = rows[0];
   if (!r) return null;
+  if ((r.status === 'queued' || r.status === 'running') && !isLive(r.id)) {
+    const error = live().lost.get(r.id) ?? 'server_restarted';
+    await pgSink.update(r.id, { status: 'failed', currentStep: null, error });
+    live().lost.delete(r.id);
+    Object.assign(r, { status: 'failed', current_step: null, error });
+  }
   return {
     id: r.id, projectId: r.project_id, slug: r.slug, status: r.status, currentStep: r.current_step,
     steps: r.steps, model: r.model, error: r.error, projectUrl: r.project_url, result: r.result,
