@@ -10,7 +10,10 @@ function createPool(): Pool {
   if (!connectionString) {
     throw new Error('DATABASE_URL not configured');
   }
-  return new Pool({ connectionString, max: 10, connectionTimeoutMillis: 3000 });
+  const pool = new Pool({ connectionString, max: 10, connectionTimeoutMillis: 3000 });
+  // An idle client dropped by the server (database restarted) emits here; unhandled it is an uncaughtException.
+  pool.on('error', (e) => console.warn('[db] idle client error:', e.message));
+  return pool;
 }
 
 // Created on first query, not at import time: without DATABASE_URL (pure-local

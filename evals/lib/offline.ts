@@ -17,7 +17,7 @@ import { FOLLOW_UPS_FIXTURE, MORE_LEAP_FIXTURES } from './fixtures';
 
 // Running prompts without an API: a fake provider that records each request and answers with a
 // canned output. It borrows `name` / `canDrive` from a real adapter when given one, so a model
-// the real adapter refuses (e.g. GLM-5.3 on structured tasks) is refused here too.
+// the real adapter refuses (`canDrive`) is refused here too.
 
 export interface Captured {
   task: AiTask;

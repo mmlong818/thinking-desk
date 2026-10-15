@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ALWAYS_THINKS_MIN_TOKENS } from '../src/lib/ai/providers/zhipu';
 import { loadBriefs } from './lib/briefs';
 import { callBudget, parseTarget, planCalls } from './lib/budget';
 import { CHAIN_STEPS, type StepRecord } from './lib/chain';
@@ -24,9 +25,10 @@ describe('dry run planning', () => {
     }
   });
 
-  it('refuses a model the adapter cannot drive on structured tasks, like a real run would', async () => {
+  it('budgets GLM-5.3 with its always-on thinking allowance', async () => {
     const plan = await planCalls(parseTarget('zhipu:glm-5.3'), briefs.slice(0, 1));
-    expect(plan.failures[0]).toMatchObject({ step: 'brief', status: 'failed', error: expect.stringMatching(/^config: .*cannot run structured/) });
+    expect(plan.failures).toEqual([]);
+    expect(plan.calls.every((c) => c.outputCap >= ALWAYS_THINKS_MIN_TOKENS)).toBe(true);
   });
 
   it('budgets prompt + quoted upstream context, with a retry-everything worst case', async () => {

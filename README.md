@@ -122,10 +122,10 @@ The `ALT_SCAN` task needs real-time competitive intelligence. The Gemini adapter
 `ALT_SCAN` 任务需要实时竞品情报。Gemini 适配器会为它启用 Google 搜索接地，因此 Gemini 是这个任务的最佳选择。`gemini-3.8-flash` 是当前 GA 的快速模型。其他任务仍推荐 Claude 或 OpenAI。
 
 **Zhipu GLM (智谱) — Chinese-language alternative**
-GLM models are optimized for Chinese and are cost-effective. Use `glm-5.2` (not `glm-5.3`: its thinking cannot be disabled, while the Zhipu adapter sends `thinking: disabled` for JSON tasks). The adapter also supports web search for `ALT_SCAN`.
+GLM models are optimized for Chinese and are cost-effective. Use `glm-5.2`. `glm-5.3` works too, but its thinking cannot be turned off: the adapter gives it at least 64k output tokens and asks for `reasoning_effort: low`, and each step still takes about a minute or more. The adapter also supports web search for `ALT_SCAN`.
 
 **智谱 GLM —— 中文场景备选**
-GLM 系列针对中文优化，性价比高。推荐 `glm-5.2`（不要用 `glm-5.3`：它的思考不可关闭，而智谱适配器在 JSON 任务里会传 `thinking: disabled`）。适配器同样支持 `ALT_SCAN` 的联网搜索。
+GLM 系列针对中文优化，性价比高。推荐 `glm-5.2`。`glm-5.3` 也能用，但它的思考不可关闭：适配器给它至少 64k 输出 token 并请求 `reasoning_effort: low`，每步仍要一分钟上下。适配器同样支持 `ALT_SCAN` 的联网搜索。
 
 ### OpenAI as an alternative · OpenAI 作为替代
 

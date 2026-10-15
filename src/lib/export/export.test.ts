@@ -42,6 +42,22 @@ describe('PRD Markdown', () => {
     expect(md).toContain('另有 1 条 AI 发现尚未裁决');
   });
 
+  it('says how many items still await judgment where an empty section would mislead', () => {
+    const pending = [
+      makeItem({ id: 'r1', node: 'brief', type: 'red_line', body: { text: '不收集未成年人生物信息' } }),
+      makeItem({ id: 'a1', node: 'brief', type: 'assumption', body: { statement: '家长愿意付费', status: 'untested' } }),
+      makeItem({ id: 'a2', node: 'brief', type: 'assumption', body: { statement: '学生会拍照', status: 'untested' } }),
+      makeItem({ id: 'n1', node: 'feat', type: 'not_doing', body: { name: '社区', why: '不在 MVP' } }),
+      makeItem({ id: 'q1', node: 'final', type: 'design_section', body: { kind: 'open_question', text: '谁来标知识点？' } }),
+    ];
+    const md = toPrdMarkdown('空项目', { items: pending, links: [] }, { now: NOW });
+    const after = (heading: string) => md.slice(md.indexOf(heading)).split('\n').slice(0, 5).join('\n');
+    expect(after('### 道德红线')).toContain('另有 1 条待裁决，未收入。');
+    expect(after('### 关键假设')).toContain('另有 2 条待裁决，未收入。');
+    expect(after('### 不做什么')).toContain('另有 1 条待裁决，未收入。');
+    expect(after('## 10. 待决问题')).toContain('另有 1 条待裁决，未收入。');
+  });
+
   it('is deterministic for the same graph and date', async () => {
     const graph = await exportFixtureGraph();
     expect(toPrdMarkdown(EXPORT_PROJECT, graph, { now: NOW })).toBe(toPrdMarkdown(EXPORT_PROJECT, graph, { now: NOW }));
