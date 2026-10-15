@@ -13,6 +13,7 @@ const PRICES: ReadonlyArray<{ match: RegExp; price: Price }> = [
   { match: /^openai:gpt-5\.5(-\d{4}-\d{2}-\d{2})?$/, price: { input: 5, output: 30, note: 'gpt-5.5 list price (a dated snapshot is assumed to cost the same)' } },
   { match: /^openai:gpt-6\.1-sol$/, price: { input: 2, output: 10 } },
   { match: /^openai:gpt-6-luna$/, price: { input: 0.1, output: 0.5 } },
+  { match: /^zhipu:glm-5\.3$/, price: { input: 1.4, output: 4.4, note: 'international list price; open.bigmodel.cn bills ¥8 / ¥28; thinking tokens bill as output' } },
   { match: /^zhipu:glm-5\.2$/, price: { input: 1.4, output: 4.4, note: 'international list price; open.bigmodel.cn bills ¥8 / ¥28' } },
   { match: /^claude:claude-sonnet-5-5$/, price: { input: 2, output: 10 } },
   { match: /^claude:claude-opus-5-5$/, price: { input: 4, output: 20 } },

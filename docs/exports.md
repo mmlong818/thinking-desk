@@ -13,7 +13,7 @@ Everything is built in the browser from the project's items and downloaded as a 
 
 ## PRD
 
-`toPrdMarkdown(project, graph, { now })` — only accepted items; pending and rejected ones stay out. Sections: 1 背景与问题 (brief fields, red lines) · 2 用户与 Job · 3 干系人 (+ engagement plan) · 4 替代方案与差异化 · 5 情景与洞察 (scenarios, pain points, insights) · 6 功能 (table sorted by RICE, with Kano, AI priority and core hypothesis; the revised list of node 08 when it has accepted features, else node 06; plus 不做什么) · 7 设计 (overview, principles, IA, flows, interactions, data model, tech, metrics, milestones) · 8 模块 (implemented features and dependencies from their Links) · 9 风险与假设 · 10 待决问题 · 11 一致性发现 (accepted AI findings, the number still pending, and the rule findings).
+`toPrdMarkdown(project, graph, { now })` — only accepted items; pending and rejected ones stay out (red lines, 不做什么, 关键假设 and 待决问题 say how many they left pending, so an empty section is not read as "none"). Sections: 1 背景与问题 (brief fields, red lines) · 2 用户与 Job · 3 干系人 (+ engagement plan) · 4 替代方案与差异化 · 5 情景与洞察 (scenarios, pain points, insights) · 6 功能 (table sorted by RICE, with Kano, AI priority and core hypothesis; the revised list of node 08 when it has accepted features, else node 06; plus 不做什么) · 7 设计 (overview, principles, IA, flows, interactions, data model, tech, metrics, milestones) · 8 模块 (implemented features and dependencies from their Links) · 9 风险与假设 · 10 待决问题 · 11 一致性发现 (accepted AI findings, the number still pending, and the rule findings).
 
 Every line ends with a provenance tag 〔origin·stance〕: `AI` produced by the AI, `AI·改` produced by the AI and edited by a person, `人` added by a person; `荐 / 中 / 慎` = the AI's stance (recommend / neutral / caution).
 

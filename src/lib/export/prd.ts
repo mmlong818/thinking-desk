@@ -46,6 +46,12 @@ function linkedNames(ctx: Ctx, from: string, rel: LinkRel): string[] {
 
 const bullets = (lines: string[], empty = '- （尚无已采纳内容）') => (lines.length > 0 ? lines : [empty]);
 
+/** Items left pending that a section leaves out: said, so an empty section is not read as "none". */
+function pendingNote(ctx: Ctx, keep: (i: Item) => boolean): string[] {
+  const n = ctx.items.filter((i) => i.decision === 'pending' && keep(i)).length;
+  return n > 0 ? ['', `另有 ${n} 条待裁决，未收入。`] : [];
+}
+
 function background(ctx: Ctx): string[] {
   const [brief] = accepted(ctx, 'brief');
   const f = brief?.body.fields;
@@ -57,7 +63,7 @@ function background(ctx: Ctx): string[] {
     `- **明确边界**：${f.boundaries.length > 0 ? f.boundaries.join('；') : '—'}`,
   ] : ['（Brief 尚未采纳）'];
   const redLines = accepted(ctx, 'red_line').map((r) => `- ${oneLine(r.body.text)} ${provenance(r)}`);
-  return ['## 1. 背景与问题', '', ...lines, '', '### 道德红线', ...bullets(redLines), ''];
+  return ['## 1. 背景与问题', '', ...lines, '', '### 道德红线', ...bullets(redLines), ...pendingNote(ctx, (i) => i.type === 'red_line'), ''];
 }
 
 const DIMENSION = { functional: '功能性', emotional: '情感性', social: '社交性' } as const;
@@ -124,7 +130,10 @@ function features(ctx: Ctx): string[] {
     ? ['| # | 功能 | 支柱 | Kano | RICE | 优先级 | 核心假设 | 来源 |', '|---|---|---|---|---|---|---|---|', ...rows.map((r) => `| ${r} |`)]
     : ['（尚无已采纳的功能）'];
   const notDoing = accepted(ctx, 'not_doing', node).map((n) => `- **${oneLine(n.body.name)}**：${clip(n.body.why, 120)} ${provenance(n)}`);
-  return [`## 6. 功能（按 RICE 排序 · 来自${node === 'final' ? ' 08 设计案的修订版' : ' 06 功能列表'}）`, '', ...table, '', '### 不做什么', ...bullets(notDoing), ''];
+  return [
+    `## 6. 功能（按 RICE 排序 · 来自${node === 'final' ? ' 08 设计案的修订版' : ' 06 功能列表'}）`, '', ...table, '',
+    '### 不做什么', ...bullets(notDoing), ...pendingNote(ctx, (i) => i.type === 'not_doing' && i.node === node), '',
+  ];
 }
 
 function sectionLine(s: Section): string[] {
@@ -177,12 +186,16 @@ function risks(ctx: Ctx): string[] {
   const riskLines = sectionsOf(ctx, 'risk').flatMap((r) => sectionLine(r.body).map((l) => `${l} ${provenance(r)}`));
   const assumptions = accepted(ctx, 'assumption').map((a) =>
     `- ${oneLine(a.body.statement)}（${ASSUMPTION_STATUS[a.body.status]}）${provenance(a)}`);
-  return ['## 9. 风险与假设', '', '### 风险', ...bullets(riskLines), '', '### 关键假设', ...bullets(assumptions), ''];
+  return [
+    '## 9. 风险与假设', '', '### 风险', ...bullets(riskLines), '',
+    '### 关键假设', ...bullets(assumptions), ...pendingNote(ctx, (i) => i.type === 'assumption'), '',
+  ];
 }
 
 function openQuestions(ctx: Ctx): string[] {
   const list = sectionsOf(ctx, 'open_question').flatMap((q) => sectionLine(q.body).map((l) => `${l} ${provenance(q)}`));
-  return ['## 10. 待决问题', '', ...bullets(list, '- （没有已采纳的待决问题）'), ''];
+  const isQuestion = (i: Item) => i.type === 'design_section' && i.body.kind === 'open_question';
+  return ['## 10. 待决问题', '', ...bullets(list, '- （没有已采纳的待决问题）'), ...pendingNote(ctx, isQuestion), ''];
 }
 
 function findings(ctx: Ctx): string[] {

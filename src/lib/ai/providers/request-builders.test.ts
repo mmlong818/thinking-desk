@@ -6,6 +6,7 @@ import type { CompleteRequest } from '../types';
 import { DEFAULT_VISIBLE_TOKENS, REASONING_HEADROOM_TOKENS } from './budget';
 import { buildGeminiRequest } from './gemini';
 import { buildOpenAIRequest } from './openai';
+import { ALWAYS_THINKS_MIN_TOKENS, buildZhipuRequest } from './zhipu';
 
 const req = (over: Partial<CompleteRequest> = {}): CompleteRequest => ({
   task: 'USERS_JTBD',
@@ -52,5 +53,26 @@ describe('buildGeminiRequest', () => {
     const body = buildGeminiRequest(req({ schema: taskJsonSchema(ClarifyResultSchema) }));
     expect(body.generationConfig).not.toHaveProperty('responseJsonSchema');
     expect(JSON.stringify(body.systemInstruction)).toContain('你必须只输出 JSON');
+  });
+});
+
+describe('buildZhipuRequest', () => {
+  it('turns thinking off for JSON tasks on models that allow it', () => {
+    const body = buildZhipuRequest('glm-5.2', req({ maxTokens: 8000 }));
+    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body.max_tokens).toBe(8000);
+  });
+
+  it('leaves GLM-5.3 thinking on and raises the budget its reasoning needs', () => {
+    const body = buildZhipuRequest('glm-5.3', req({ maxTokens: 8000 }));
+    expect(body.thinking).toBeUndefined();
+    expect(body.max_tokens).toBe(ALWAYS_THINKS_MIN_TOKENS);
+    expect(JSON.stringify(body)).not.toContain('disabled');
+  });
+
+  it('thinks low on GLM-5.3 unless the task asks for more', () => {
+    expect(buildZhipuRequest('glm-5.3', req()).reasoning_effort).toBe('low');
+    expect(buildZhipuRequest('glm-5.3', req({ effort: 'high' })).reasoning_effort).toBe('max');
+    expect(buildZhipuRequest('glm-5.2', req()).reasoning_effort).toBeUndefined();
   });
 });

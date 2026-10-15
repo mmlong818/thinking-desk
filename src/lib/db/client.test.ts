@@ -14,6 +14,7 @@ vi.mock('pg', () => ({
     }
     query = mocks.poolQuery;
     connect = async () => ({ query: mocks.clientQuery, release: mocks.release });
+    on = () => this;
   },
 }));
 

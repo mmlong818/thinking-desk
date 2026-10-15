@@ -27,6 +27,12 @@ async function loadRouter(listed: Partial<Record<AiProviderName, ModelInfo[]>> =
   return { router, spies };
 }
 
+/** No adapter refuses a model today; stand one in on the freshly loaded zhipu provider. */
+async function refuseGlm53() {
+  const { zhipuProvider } = await import('./providers/zhipu');
+  zhipuProvider.canDrive = (id) => !id.startsWith('glm-5.3');
+}
+
 beforeEach(() => {
   for (const k of Object.values(KEY_ENV)) vi.stubEnv(k, '');
   vi.stubEnv('AI_MODEL_DEFAULT', '');
@@ -134,6 +140,7 @@ describe('providerFor resolution order', () => {
     vi.stubEnv('ZHIPU_API_KEY', 'k');
     vi.stubEnv('AI_MODEL_FREE_ASK', 'zhipu');
     const { router } = await loadRouter({ zhipu: models('glm-5.3', 'glm-5.3-flash', 'glm-4.7') });
+    await refuseGlm53();
     await expect(router.providerFor('FREE_ASK')).resolves.toEqual({ provider: 'zhipu', model: 'glm-4.7' });
   });
 
@@ -141,6 +148,7 @@ describe('providerFor resolution order', () => {
     vi.stubEnv('ZHIPU_API_KEY', 'k');
     vi.stubEnv('AI_MODEL_FREE_ASK', 'zhipu');
     const { router } = await loadRouter({ zhipu: models('glm-5.3') });
+    await refuseGlm53();
     await expect(router.providerFor('FREE_ASK')).rejects.toThrow(/can drive/);
   });
 
